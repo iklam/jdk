@@ -49,6 +49,7 @@
 #include "oops/fieldStreams.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
+#include "runtime/init.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -199,8 +200,11 @@ oop HeapShared::archive_heap_object(oop obj, Thread* THREAD) {
 
     ArchivedObjectCache* cache = archived_object_cache();
     cache->put(obj, archived_oop);
-    log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT,
-                         p2i(obj), p2i(archived_oop));
+    if (log_is_enabled(Debug, cds, heap)) {
+      ResourceMark rm;
+      log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT " : %s",
+                           p2i(obj), p2i(archived_oop), obj->klass()->external_name());
+    }
   } else {
     log_error(cds, heap)(
       "Cannot allocate space for object " PTR_FORMAT " in archived heap region",
@@ -530,6 +534,21 @@ void HeapShared::serialize_subgraph_info_table_header(SerializeClosure* soc) {
   _run_time_subgraph_info_table.serialize_header(soc);
 }
 
+static void verify_the_heap(Klass* k, const char* which) {
+  if (VerifyArchivedFields) {
+    ResourceMark rm;
+    log_info(cds, heap)("Verify heap %s initializing static field(s) in %s%s",
+                        which, k->external_name(),
+                        is_init_completed() ? "" : " (**skipped - too early to run GC**)");
+    if (is_init_completed()) {
+      NOT_PRODUCT( FlagSetting fs1(VerifyBeforeGC, true) );
+      NOT_PRODUCT( FlagSetting fs2(VerifyDuringGC, true) );
+      NOT_PRODUCT( FlagSetting fs3(VerifyAfterGC,  true) );
+      Universe::heap()->collect(GCCause::_java_lang_system_gc);
+    }
+  }
+}
+
 void HeapShared::initialize_from_archived_subgraph(Klass* k, TRAPS) {
   if (!open_archive_heap_region_mapped()) {
     return; // nothing to do
@@ -581,6 +600,8 @@ void HeapShared::initialize_from_archived_subgraph(Klass* k, TRAPS) {
       return;
     }
 
+    verify_the_heap(k, "before");
+
     // Load the subgraph entry fields from the record and store them back to
     // the corresponding fields within the mirror.
     oop m = k->java_mirror();
@@ -618,6 +639,8 @@ void HeapShared::initialize_from_archived_subgraph(Klass* k, TRAPS) {
                             k->external_name(), p2i(k));
       }
     }
+
+    verify_the_heap(k, "after ");
   }
 }
 
