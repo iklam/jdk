@@ -68,11 +68,12 @@ public:
       oop obj = CompressedOops::decode_not_null(heap_oop);
       if (_g1h->is_obj_dead_cond(obj, _vo)) {
         Log(gc, verify) log;
-        log.error("Root location " PTR_FORMAT " points to dead obj " PTR_FORMAT, p2i(p), p2i(obj));
+        log.error("Root location " PTR_FORMAT " points to dead obj " PTR_FORMAT " vo %d", p2i(p), p2i(obj), _vo);
         ResourceMark rm;
         LogStream ls(log.error());
         obj->print_on(&ls);
         _failures = true;
+        ShouldNotReachHere();
       }
     }
   }
@@ -183,9 +184,10 @@ class VerifyCLDClosure: public CLDClosure {
 class VerifyLivenessOopClosure: public BasicOopIterateClosure {
   G1CollectedHeap* _g1h;
   VerifyOption _vo;
+  oop _o;
 public:
-  VerifyLivenessOopClosure(G1CollectedHeap* g1h, VerifyOption vo):
-    _g1h(g1h), _vo(vo)
+  VerifyLivenessOopClosure(G1CollectedHeap* g1h, VerifyOption vo, oop o):
+    _g1h(g1h), _vo(vo), _o(o)
   { }
   void do_oop(narrowOop *p) { do_oop_work(p); }
   void do_oop(      oop *p) { do_oop_work(p); }
@@ -193,7 +195,15 @@ public:
   template <class T> void do_oop_work(T *p) {
     oop obj = RawAccess<>::oop_load(p);
     guarantee(obj == NULL || !_g1h->is_obj_dead_cond(obj, _vo),
-              "Dead object referenced by a not dead object");
+              "vo %d Dead object " PTR_FORMAT " (%s) referenced by a not dead object " PTR_FORMAT " (%s) _g1h->is_obj_dead_cond(obj, _vo) %d marked %d since prev mark %d since next mark %d",
+            _vo,
+              p2i(obj), _g1h->heap_region_containing(obj)->get_short_type_str(),
+              p2i(_o), _g1h->heap_region_containing(_o)->get_short_type_str(),
+            _g1h->is_obj_dead_cond(obj, _vo),
+            _g1h->concurrent_mark()->prev_mark_bitmap()->is_marked(_o),
+            _g1h->heap_region_containing(_o)->obj_allocated_since_prev_marking(_o),
+            _g1h->heap_region_containing(_o)->obj_allocated_since_next_marking(_o)
+            );
   }
 };
 
@@ -212,7 +222,7 @@ public:
     _g1h = G1CollectedHeap::heap();
   }
   void do_object(oop o) {
-    VerifyLivenessOopClosure isLive(_g1h, _vo);
+    VerifyLivenessOopClosure isLive(_g1h, _vo, o);
     assert(o != NULL, "Huh?");
     if (!_g1h->is_obj_dead_cond(o, _vo)) {
       // If the object is alive according to the full gc mark,

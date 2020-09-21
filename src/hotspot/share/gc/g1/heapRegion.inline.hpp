@@ -167,6 +167,8 @@ inline bool HeapRegion::is_obj_dead(const oop obj, const G1CMBitMap* const prev_
   return !obj_allocated_since_prev_marking(obj) &&
          !prev_bitmap->is_marked(obj) &&
          !is_open_archive();
+
+//  return !(obj_allocated_since_prev_marking(obj) || prev_bitmap->is_marked(obj) || is_closed_archive());
 }
 
 inline size_t HeapRegion::block_size(const HeapWord *addr) const {
@@ -349,6 +351,10 @@ HeapWord* HeapRegion::oops_on_memregion_seq_iterate_careful(MemRegion mr,
     size_t size;
     bool is_dead = is_obj_dead_with_size(obj, bitmap, &size);
     bool is_precise = false;
+
+    if (is_open_archive()) {
+      log_debug(gc)("seq_iter " PTR_FORMAT " dead %d", p2i(obj), is_dead);
+    }
 
     cur += size;
     if (!is_dead) {

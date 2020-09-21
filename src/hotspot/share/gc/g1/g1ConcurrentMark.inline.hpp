@@ -72,6 +72,9 @@ inline bool G1ConcurrentMark::mark_in_next_bitmap(uint const worker_id, HeapRegi
   // Can't assert that this is a valid object at this point, since it might be in the process of being copied by another thread.
   assert(!hr->is_continues_humongous(), "Should not try to mark object " PTR_FORMAT " in Humongous continues region %u above nTAMS " PTR_FORMAT, p2i(obj), hr->hrm_index(), p2i(hr->next_top_at_mark_start()));
 
+  if (hr->is_open_archive()) {
+    log_debug(gc)("mark OA obj " PTR_FORMAT, p2i(obj));
+  }
   bool success = _next_mark_bitmap->par_mark(obj);
   if (success) {
     add_to_liveness(worker_id, obj, obj->size());
