@@ -166,7 +166,7 @@ inline bool HeapRegion::is_obj_dead(const oop obj, const G1CMBitMap* const prev_
   assert(is_in_reserved(obj), "Object " PTR_FORMAT " must be in region", p2i(obj));
   return !obj_allocated_since_prev_marking(obj) &&
          !prev_bitmap->is_marked(obj) &&
-         !is_open_archive();
+         !is_closed_archive();
 
 //  return !(obj_allocated_since_prev_marking(obj) || prev_bitmap->is_marked(obj) || is_closed_archive());
 }

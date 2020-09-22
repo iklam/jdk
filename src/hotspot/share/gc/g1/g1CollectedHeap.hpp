@@ -1337,7 +1337,7 @@ public:
     return
       !hr->obj_allocated_since_next_marking(obj) &&
       !is_marked_next(obj) &&
-      !hr->is_closed_archive();
+      !hr->is_open_archive();
   }
 
   // Determine if an object is dead, given only the object itself.

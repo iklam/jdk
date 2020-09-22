@@ -73,7 +73,6 @@ public:
         LogStream ls(log.error());
         obj->print_on(&ls);
         _failures = true;
-        ShouldNotReachHere();
       }
     }
   }
