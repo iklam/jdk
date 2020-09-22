@@ -47,7 +47,9 @@
 #include "memory/universe.hpp"
 #include "oops/compressedOops.inline.hpp"
 #include "oops/fieldStreams.inline.hpp"
+#include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/oopHandle.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/javaCalls.hpp"
@@ -165,6 +167,36 @@ oop HeapShared::find_archived_heap_object(oop obj) {
   }
 }
 
+static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots = NULL;
+static objArrayOop _dumptime_roots = NULL;
+static OopHandle _runtime_roots;
+
+int HeapShared::append_root(oop obj) {
+  assert(DumpSharedSpaces, "dump-time only");
+  assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
+
+  if (_pending_roots == NULL) {
+    _pending_roots = new GrowableArrayCHeap<oop, mtClassShared>(500);
+  }
+
+  return _pending_roots->append(obj);
+}
+
+objArrayOop HeapShared::get_roots() {
+  assert(DumpSharedSpaces, "dump-time only");
+  return _dumptime_roots;
+}
+
+void HeapShared::set_roots(narrowOop roots) {
+  assert(UseSharedSpaces, "runtime only");
+  _runtime_roots = OopHandle(Universe::vm_global(), HeapShared::decode_from_archive(roots));
+}
+
+oop HeapShared::get_root(int index) {
+  assert(UseSharedSpaces, "runtime only");
+  return NULL; // TODO -- not used yet
+}
+
 oop HeapShared::archive_heap_object(oop obj, Thread* THREAD) {
   assert(DumpSharedSpaces, "dump-time only");
 
@@ -260,6 +292,7 @@ void HeapShared::run_full_gc_in_vm_thread() {
   }
 }
 
+// Returns an objArray that contains all the roots of the archived objects
 void HeapShared::archive_java_heap_objects(GrowableArray<MemRegion> *closed,
                                            GrowableArray<MemRegion> *open) {
   if (!is_heap_object_archiving_allowed()) {
@@ -285,10 +318,6 @@ void HeapShared::archive_java_heap_objects(GrowableArray<MemRegion> *closed,
 
     log_info(cds)("Dumping objects to open archive heap region ...");
     copy_open_archive_heap_objects(open);
-
-    if (MetaspaceShared::use_full_module_graph()) {
-      ClassLoaderDataShared::init_archived_oops();
-    }
 
     destroy_archived_object_cache();
   }
@@ -338,10 +367,42 @@ void HeapShared::copy_open_archive_heap_objects(
                              false /* is_closed_archive */,
                              true /* is_full_module_graph */,
                              THREAD);
+    ClassLoaderDataShared::init_archived_oops();
   }
+
+  copy_roots();
 
   G1CollectedHeap::heap()->end_archive_alloc_range(open_archive,
                                                    os::vm_allocation_granularity());
+}
+
+// Copy _pending_archive_roots into an objArray
+void HeapShared::copy_roots() {
+  int length = _pending_roots != NULL ? _pending_roots->length() : 0;
+  int size = objArrayOopDesc::object_size(length);
+  Klass *k = Universe::objectArrayKlassObj(); // already relocated to point to archived klass
+  HeapWord* mem = G1CollectedHeap::heap()->archive_mem_allocate(size);
+
+  memset(mem, 0, size * BytesPerWord); // Is this correct??
+  {
+    // This is copied from MemAllocator::finish
+    if (UseBiasedLocking) {
+      oopDesc::set_mark_raw(mem, k->prototype_header());
+    } else {
+      oopDesc::set_mark_raw(mem, markWord::prototype());
+    }
+    oopDesc::release_set_klass(mem, k);
+  }
+  {
+    // This is copied from ObjArrayAllocator::initialize
+    arrayOopDesc::set_length(mem, length);
+  }
+
+  _dumptime_roots = (objArrayOop)mem;
+  for (int i = 0; i < length; i++) {
+    _dumptime_roots->obj_at_put(i, _pending_roots->at(i));
+  }
+  tty->print_cr("roots[%d] = %d words, klass = %p, obj = %p", length, size, k, mem);
 }
 
 void HeapShared::init_narrow_oop_decoding(address base, int shift) {
@@ -902,6 +963,9 @@ void HeapShared::archive_reachable_objects_from_static_field(InstanceKlass *k,
       // information is restored from the archive at runtime.
       subgraph_info->add_subgraph_entry_field(field_offset, af, is_closed_archive);
       log_info(cds, heap)("Archived field %s::%s => " PTR_FORMAT, klass_name, field_name, p2i(af));
+      if (UseNewCode2) {
+        HeapShared::append_root(af);
+      }
     }
   } else {
     // The field contains null, we still need to record the entry point,

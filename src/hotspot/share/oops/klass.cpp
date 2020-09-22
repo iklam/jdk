@@ -639,6 +639,9 @@ narrowOop Klass::archived_java_mirror_raw_narrow() {
 void Klass::set_archived_java_mirror_raw(oop m) {
   assert(DumpSharedSpaces, "called only during runtime");
   _archived_mirror = CompressedOops::encode(m);
+  if (UseNewCode) {
+    int archived_mirror_root_index = HeapShared::append_root(m);
+  }
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 

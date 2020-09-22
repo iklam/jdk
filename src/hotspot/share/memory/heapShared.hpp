@@ -254,6 +254,7 @@ private:
   static void set_has_been_seen_during_subgraph_recording(oop obj);
 
   static void check_module_oop(oop orig_module_obj);
+  static void copy_roots();
 
  public:
   static void reset_archived_object_states(TRAPS);
@@ -295,6 +296,11 @@ private:
 
   static ResourceBitMap calculate_oopmap(MemRegion region);
   static void add_to_dumped_interned_strings(oop string);
+
+  static int append_root(oop obj); // dump-time only: 
+  static objArrayOop get_roots(); // dump-time only:
+  static void set_roots(narrowOop roots); // run-time only:
+  static oop get_root(int index); // run-time only:
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:
