@@ -466,7 +466,7 @@ void ModuleEntry::init_archived_oops() {
   if (module_obj != NULL) {
     oop m = HeapShared::find_archived_heap_object(module_obj);
     assert(m != NULL, "sanity");
-    _archived_module_narrow_oop = CompressedOops::encode(m);
+    _archived_module_index = HeapShared::append_root(m);
   }
   assert(shared_protection_domain() == NULL, "never set during -Xshare:dump");
   // Clear handles and restore at run time. Handles cannot be archived.
@@ -481,7 +481,7 @@ void ModuleEntry::load_from_archive(ClassLoaderData* loader_data) {
 }
 
 void ModuleEntry::restore_archive_oops(ClassLoaderData* loader_data) {
-  Handle module_handle(Thread::current(), HeapShared::materialize_archived_object(_archived_module_narrow_oop));
+  Handle module_handle(Thread::current(), HeapShared::get_root(_archived_module_index));
   assert(module_handle.not_null(), "huh");
   set_module(loader_data->add_handle(module_handle));
 

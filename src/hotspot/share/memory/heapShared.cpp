@@ -106,15 +106,26 @@ const static int num_open_archive_subgraph_entry_fields =
 const static int num_fmg_open_archive_subgraph_entry_fields =
   sizeof(fmg_open_archive_subgraph_entry_fields) / sizeof(ArchivableStaticFieldInfo);
 
+static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots = NULL;
+static objArrayOop _dumptime_roots = NULL;
+static narrowOop _runtime_roots_narrow;
+static OopHandle _runtime_roots;
+
 ////////////////////////////////////////////////////////////////
 //
 // Java heap object archiving support
 //
 ////////////////////////////////////////////////////////////////
 void HeapShared::fixup_mapped_heap_regions() {
+  if (open_archive_heap_region_mapped()) {
+    // return <-- FIXME should do this
+  }
   FileMapInfo *mapinfo = FileMapInfo::current_info();
   mapinfo->fixup_mapped_heap_regions();
   set_archive_heap_region_fixed();
+  if (open_archive_heap_region_mapped()) {
+    _runtime_roots = OopHandle(Universe::vm_global(), HeapShared::materialize_archived_object(_runtime_roots_narrow));
+  }
   SystemDictionaryShared::update_archived_mirror_native_pointers();
 }
 
@@ -167,10 +178,6 @@ oop HeapShared::find_archived_heap_object(oop obj) {
   }
 }
 
-static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots = NULL;
-static objArrayOop _dumptime_roots = NULL;
-static OopHandle _runtime_roots;
-
 int HeapShared::append_root(oop obj) {
   assert(DumpSharedSpaces, "dump-time only");
   assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
@@ -189,12 +196,21 @@ objArrayOop HeapShared::get_roots() {
 
 void HeapShared::set_roots(narrowOop roots) {
   assert(UseSharedSpaces, "runtime only");
-  _runtime_roots = OopHandle(Universe::vm_global(), HeapShared::decode_from_archive(roots));
+  assert(open_archive_heap_region_mapped(), "must be");
+  _runtime_roots_narrow = roots;
 }
 
 oop HeapShared::get_root(int index) {
-  assert(UseSharedSpaces, "runtime only");
-  return NULL; // TODO -- not used yet
+  assert(index >= 0, "sanity");
+  if (DumpSharedSpaces) {
+    assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
+    assert(_pending_roots != NULL, "sanity");
+    return _pending_roots->at(index);
+  } else {
+    assert(UseSharedSpaces, "must be");
+    assert(!_runtime_roots.is_empty(), "must have loaded shared heap");
+    return ((objArrayOop)_runtime_roots.resolve())->obj_at(index);
+  }
 }
 
 oop HeapShared::archive_heap_object(oop obj, Thread* THREAD) {
@@ -402,7 +418,7 @@ void HeapShared::copy_roots() {
   for (int i = 0; i < length; i++) {
     _dumptime_roots->obj_at_put(i, _pending_roots->at(i));
   }
-  tty->print_cr("roots[%d] = %d words, klass = %p, obj = %p", length, size, k, mem);
+  log_info(cds)("archived obj roots[%d] = %d words, klass = %p, obj = %p", length, size, k, mem);
 }
 
 void HeapShared::init_narrow_oop_decoding(address base, int shift) {
@@ -444,10 +460,10 @@ void KlassSubGraphInfo::add_subgraph_entry_field(
   assert(DumpSharedSpaces, "dump time only");
   if (_subgraph_entry_fields == NULL) {
     _subgraph_entry_fields =
-      new(ResourceObj::C_HEAP, mtClass) GrowableArray<juint>(10, mtClass);
+      new(ResourceObj::C_HEAP, mtClass) GrowableArray<int>(10, mtClass);
   }
-  _subgraph_entry_fields->append((juint)static_field_offset);
-  _subgraph_entry_fields->append(CompressedOops::encode(v));
+  _subgraph_entry_fields->append(static_field_offset);
+  _subgraph_entry_fields->append(HeapShared::append_root(v));
   _subgraph_entry_fields->append(is_closed_archive ? 1 : 0);
 }
 
@@ -517,12 +533,12 @@ void ArchivedKlassSubGraphInfoRecord::init(KlassSubGraphInfo* info) {
   _is_full_module_graph = info->is_full_module_graph();
 
   // populate the entry fields
-  GrowableArray<juint>* entry_fields = info->subgraph_entry_fields();
+  GrowableArray<int>* entry_fields = info->subgraph_entry_fields();
   if (entry_fields != NULL) {
     int num_entry_fields = entry_fields->length();
     assert(num_entry_fields % 3 == 0, "sanity");
     _entry_field_records =
-      MetaspaceShared::new_ro_array<juint>(num_entry_fields);
+      MetaspaceShared::new_ro_array<int>(num_entry_fields);
     for (int i = 0 ; i < num_entry_fields; i++) {
       _entry_field_records->at_put(i, entry_fields->at(i));
     }
@@ -602,9 +618,9 @@ static void verify_the_heap(Klass* k, const char* which) {
                         which, k->external_name(),
                         is_init_completed() ? "" : " (**skipped - too early to run GC**)");
     if (is_init_completed()) {
-      NOT_PRODUCT( FlagSetting fs1(VerifyBeforeGC, true) );
-      NOT_PRODUCT( FlagSetting fs2(VerifyDuringGC, true) );
-      NOT_PRODUCT( FlagSetting fs3(VerifyAfterGC,  true) );
+      FlagSetting fs1(VerifyBeforeGC, true);
+      FlagSetting fs2(VerifyDuringGC, true);
+      FlagSetting fs3(VerifyAfterGC,  true);
       Universe::heap()->collect(GCCause::_java_lang_system_gc);
     }
   }
@@ -666,26 +682,15 @@ void HeapShared::initialize_from_archived_subgraph(Klass* k, TRAPS) {
     // Load the subgraph entry fields from the record and store them back to
     // the corresponding fields within the mirror.
     oop m = k->java_mirror();
-    Array<juint>* entry_field_records = record->entry_field_records();
+    Array<int>* entry_field_records = record->entry_field_records();
     if (entry_field_records != NULL) {
       int efr_len = entry_field_records->length();
       assert(efr_len % 3 == 0, "sanity");
       for (i = 0; i < efr_len;) {
         int field_offset = entry_field_records->at(i);
-        narrowOop nv = entry_field_records->at(i+1);
+        int root_index = entry_field_records->at(i+1);
         int is_closed_archive = entry_field_records->at(i+2);
-        oop v;
-        if (is_closed_archive == 0) {
-          // It's an archived object in the open archive heap regions, not shared.
-          // The object refereced by the field becomes 'known' by GC from this
-          // point. All objects in the subgraph reachable from the object are
-          // also 'known' by GC.
-          v = materialize_archived_object(nv);
-        } else {
-          // Shared object in the closed archive heap regions. Decode directly.
-          assert(!CompressedOops::is_null(nv), "shared object is null");
-          v = HeapShared::decode_from_archive(nv);
-        }
+        oop v = get_root(root_index);
         m->obj_field_put(field_offset, v);
         i += 3;
 
@@ -963,9 +968,6 @@ void HeapShared::archive_reachable_objects_from_static_field(InstanceKlass *k,
       // information is restored from the archive at runtime.
       subgraph_info->add_subgraph_entry_field(field_offset, af, is_closed_archive);
       log_info(cds, heap)("Archived field %s::%s => " PTR_FORMAT, klass_name, field_name, p2i(af));
-      if (UseNewCode2) {
-        HeapShared::append_root(af);
-      }
     }
   } else {
     // The field contains null, we still need to record the entry point,

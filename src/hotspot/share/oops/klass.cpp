@@ -203,8 +203,8 @@ void* Klass::operator new(size_t size, ClassLoaderData* loader_data, size_t word
 Klass::Klass(KlassID id) : _id(id),
                            _prototype_header(markWord::prototype()),
                            _shared_class_path_index(-1) {
-  CDS_ONLY(_shared_class_flags = 0;)
-  CDS_JAVA_HEAP_ONLY(_archived_mirror = 0;)
+  CDS_ONLY(_shared_class_flags = 0);
+  clear_archived_mirror_index();
   _primary_supers[0] = this;
   set_super_check_offset(in_bytes(primary_supers_offset()));
 }
@@ -597,7 +597,7 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // Obtain java.lang.Module, if available
   Handle module_handle(THREAD, ((module_entry != NULL) ? module_entry->module() : (oop)NULL));
 
-  if (this->has_raw_archived_mirror()) {
+  if (this->has_archived_mirror_index()) {
     ResourceMark rm(THREAD);
     log_debug(cds, mirror)("%s has raw archived mirror", external_name());
     if (HeapShared::open_archive_heap_region_mapped()) {
@@ -612,7 +612,7 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
     // No archived mirror data
     log_debug(cds, mirror)("No archived mirror data for %s", external_name());
     clear_java_mirror_handle();
-    this->clear_has_raw_archived_mirror();
+    this->clear_archived_mirror_index();
   }
 
   // Only recreate it if not present.  A previous attempt to restore may have
@@ -624,24 +624,15 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
-// Used at CDS dump time to access the archived mirror. No GC barrier.
-oop Klass::archived_java_mirror_raw() {
-  assert(has_raw_archived_mirror(), "must have raw archived mirror");
-  return CompressedOops::decode(_archived_mirror);
-}
-
-narrowOop Klass::archived_java_mirror_raw_narrow() {
-  assert(has_raw_archived_mirror(), "must have raw archived mirror");
-  return _archived_mirror;
+oop Klass::archived_java_mirror() {
+  assert(has_archived_mirror_index(), "must have archived mirror");
+  return HeapShared::get_root(_archived_mirror_index);
 }
 
 // No GC barrier
-void Klass::set_archived_java_mirror_raw(oop m) {
+void Klass::set_archived_java_mirror(oop m) {
   assert(DumpSharedSpaces, "called only during runtime");
-  _archived_mirror = CompressedOops::encode(m);
-  if (UseNewCode) {
-    int archived_mirror_root_index = HeapShared::append_root(m);
-  }
+  _archived_mirror_index = HeapShared::append_root(m);
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 

@@ -2139,8 +2139,8 @@ bool SystemDictionaryShared::empty_dumptime_table() {
 
 class ArchivedMirrorPatcher {
   static void update(Klass* k) {
-    if (k->has_raw_archived_mirror()) {
-      oop m = HeapShared::materialize_archived_object(k->archived_java_mirror_raw_narrow());
+    if (k->has_archived_mirror_index()) {
+      oop m = k->archived_java_mirror();
       if (m != NULL) {
         java_lang_Class::update_archived_mirror_native_pointers(m);
       }

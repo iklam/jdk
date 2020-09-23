@@ -64,7 +64,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   // A list of _k's static fields as the entry points of archived sub-graphs.
   // For each entry field, it is a tuple of field_offset, field_value and
   // is_closed_archive flag.
-  GrowableArray<juint>*  _subgraph_entry_fields;
+  GrowableArray<int>* _subgraph_entry_fields;
 
   bool _is_full_module_graph;
  public:
@@ -85,7 +85,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   GrowableArray<Klass*>* subgraph_object_klasses() {
     return _subgraph_object_klasses;
   }
-  GrowableArray<juint>*  subgraph_entry_fields() {
+  GrowableArray<int>* subgraph_entry_fields() {
     return _subgraph_entry_fields;
   }
   void add_subgraph_entry_field(int static_field_offset, oop v,
@@ -107,7 +107,7 @@ class ArchivedKlassSubGraphInfoRecord {
   bool _is_full_module_graph;
 
   // contains pairs of field offset and value for each subgraph entry field
-  Array<juint>* _entry_field_records;
+  Array<int>* _entry_field_records;
 
   // klasses of objects in archived sub-graphs referenced from the entry points
   // (static fields) in the containing class
@@ -117,7 +117,7 @@ class ArchivedKlassSubGraphInfoRecord {
     _k(NULL), _entry_field_records(NULL), _subgraph_object_klasses(NULL) {}
   void init(KlassSubGraphInfo* info);
   Klass* klass() const { return _k; }
-  Array<juint>*  entry_field_records() const { return _entry_field_records; }
+  Array<int>* entry_field_records() const { return _entry_field_records; }
   Array<Klass*>* subgraph_object_klasses() const { return _subgraph_object_klasses; }
   bool is_full_module_graph() const { return _is_full_module_graph; }
 };
@@ -300,7 +300,7 @@ private:
   static int append_root(oop obj); // dump-time only: 
   static objArrayOop get_roots(); // dump-time only:
   static void set_roots(narrowOop roots); // run-time only:
-  static oop get_root(int index); // run-time only:
+  static oop get_root(int index);
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:

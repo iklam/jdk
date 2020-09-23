@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -417,7 +417,7 @@ class ConstantPoolCache: public MetaspaceObj {
   Array<u2>*           _reference_map;
   // The narrowOop pointer to the archived resolved_references. Set at CDS dump
   // time when caching java heap object is supported.
-  CDS_JAVA_HEAP_ONLY(narrowOop _archived_references;)
+  CDS_JAVA_HEAP_ONLY(int _archived_references_index;)
 
   // Sizing
   debug_only(friend class ClassVerifier;)
@@ -442,7 +442,7 @@ class ConstantPoolCache: public MetaspaceObj {
   void metaspace_pointers_do(MetaspaceClosure* it);
   MetaspaceObj::Type type() const         { return ConstantPoolCacheType; }
 
-  oop  archived_references() NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  oop archived_references() NOT_CDS_JAVA_HEAP_RETURN_(NULL);
   void set_archived_references(oop o) NOT_CDS_JAVA_HEAP_RETURN;
 
   inline oop resolved_references();
