@@ -537,7 +537,7 @@
   product(bool, VerifyDuringGC, false, DIAGNOSTIC,                          \
           "Verify memory system during GC (between phases)")                \
                                                                             \
-  product(bool, VerifyArchivedFields, trueInDebug, DIAGNOSTIC,              \
+  product(bool, VerifyArchivedFields, false, DIAGNOSTIC,                    \
           "Verify memory when archived oop fields are loaded from CDS)")    \
                                                                             \
   product(ccstrlist, VerifyGCType, "", DIAGNOSTIC,                          \
