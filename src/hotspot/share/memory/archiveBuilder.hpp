@@ -162,6 +162,8 @@ public:
     ~OtherROAllocMark();
   };
 
+  static int alphabetical_method_comparator(Method* a, Method* b);
+
 private:
   FollowMode get_follow_mode(MetaspaceClosure::Ref *ref);
 
@@ -169,7 +171,9 @@ private:
   void sort_symbols_and_fix_hash();
   void sort_klasses();
   static int compare_symbols_by_address(Symbol** a, Symbol** b);
+  static int compare_symbols_alphabetically(Symbol** a, Symbol** b);
   static int compare_klass_by_name(Klass** a, Klass** b);
+  static int compare_klasses_alphabetically(Klass** a, Klass** b);
 
   void make_shallow_copies(DumpRegion *dump_region, const SourceObjList* src_objs);
   void make_shallow_copy(DumpRegion *dump_region, SourceObjInfo* src_info);

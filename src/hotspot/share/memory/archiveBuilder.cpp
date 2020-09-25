@@ -258,6 +258,19 @@ void ArchiveBuilder::gather_klasses_and_symbols() {
   }
 }
 
+int ArchiveBuilder::compare_symbols_alphabetically(Symbol** a, Symbol** b) {
+  Symbol* sym_a = *a;
+  Symbol* sym_b = *b;
+  int len_a = sym_a->utf8_length();
+  int len_b = sym_b->utf8_length();
+  int val = strncmp((const char*)sym_a->bytes(), (const char*)sym_b->bytes(), (size_t)MIN2(len_a, len_b));
+  if (val != 0) {
+    return val;
+  } else {
+    return len_a - len_b;
+  }
+}
+
 int ArchiveBuilder::compare_symbols_by_address(Symbol** a, Symbol** b) {
   if (a[0] < b[0]) {
     return -1;
@@ -270,7 +283,7 @@ int ArchiveBuilder::compare_symbols_by_address(Symbol** a, Symbol** b) {
 void ArchiveBuilder::sort_symbols_and_fix_hash() {
   log_info(cds)("Sorting symbols and fixing identity hash ... ");
   os::init_random(0x12345678);
-  _symbols->sort(compare_symbols_by_address);
+  _symbols->sort(compare_symbols_alphabetically);
   for (int i = 0; i < _symbols->length(); i++) {
     assert(_symbols->at(i)->is_permanent(), "archived symbols must be permanent");
     _symbols->at(i)->update_identity_hash();
@@ -281,9 +294,15 @@ int ArchiveBuilder::compare_klass_by_name(Klass** a, Klass** b) {
   return a[0]->name()->fast_compare(b[0]->name());
 }
 
+int ArchiveBuilder::compare_klasses_alphabetically(Klass** a, Klass** b) {
+  Symbol* name_a = (*a)->name();
+  Symbol* name_b = (*b)->name();
+  return compare_symbols_alphabetically(&name_a, &name_b);
+}
+
 void ArchiveBuilder::sort_klasses() {
   log_info(cds)("Sorting classes ... ");
-  _klasses->sort(compare_klass_by_name);
+  _klasses->sort(compare_klasses_alphabetically);
 }
 
 void ArchiveBuilder::iterate_sorted_roots(MetaspaceClosure* it, bool is_relocating_pointers) {
@@ -498,6 +517,19 @@ address ArchiveBuilder::get_dumped_addr(address src_obj) const {
   assert(p != NULL, "must be");
 
   return p->dumped_addr();
+}
+
+int ArchiveBuilder::alphabetical_method_comparator(Method* a, Method* b) {
+  Symbol* name_a = a->name();
+  Symbol* name_b = b->name();
+
+  if (name_a != name_b) {
+    return compare_symbols_alphabetically(&name_a, &name_b);
+  } else {
+    Symbol* signature_a = a->signature();
+    Symbol* signature_b = b->signature();
+    return compare_symbols_alphabetically(&signature_a, &signature_b);
+  }
 }
 
 void ArchiveBuilder::relocate_embedded_pointers(ArchiveBuilder::SourceObjList* src_objs) {

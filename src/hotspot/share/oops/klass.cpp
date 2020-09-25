@@ -522,10 +522,11 @@ void Klass::metaspace_pointers_do(MetaspaceClosure* it) {
     it->push(&_primary_supers[i]);
   }
   it->push(&_super);
+#if 0
   it->push((Klass**)&_subklass);
   it->push((Klass**)&_next_sibling);
   it->push(&_next_link);
-
+#endif
   vtableEntry* vt = start_of_vtable();
   for (int i=0; i<vtable_length(); i++) {
     it->push(vt[i].method_addr());

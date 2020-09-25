@@ -40,6 +40,7 @@
 #include "logging/logTag.hpp"
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/archiveBuilder.hpp"
 #include "memory/cppVtables.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/metaspaceClosure.hpp"
@@ -1752,7 +1753,11 @@ void Method::sort_methods(Array<Method*>* methods, bool set_idnums, method_compa
   int length = methods->length();
   if (length > 1) {
     if (func == NULL) {
-      func = method_comparator;
+      if (DumpSharedSpaces) {
+        func = ArchiveBuilder::alphabetical_method_comparator;
+      } else {
+        func = method_comparator;        
+      }
     }
     {
       NoSafepointVerifier nsv;
