@@ -49,6 +49,9 @@ inline void ClaimMetadataVisitingOopIterateClosure::do_cld(ClassLoaderData* cld)
 
 inline void ClaimMetadataVisitingOopIterateClosure::do_klass(Klass* k) {
   ClassLoaderData* cld = k->class_loader_data();
+  if (cld == NULL) {
+    return;
+  }
   ClaimMetadataVisitingOopIterateClosure::do_cld(cld);
 }
 

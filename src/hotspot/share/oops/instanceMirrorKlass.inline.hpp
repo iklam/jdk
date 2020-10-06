@@ -52,7 +52,7 @@ void InstanceMirrorKlass::oop_oop_iterate(oop obj, OopClosureType* closure) {
     Klass* klass = java_lang_Class::as_Klass_raw(obj);
     // We'll get NULL for primitive mirrors.
     if (klass != NULL) {
-      if (klass->is_instance_klass() && klass->class_loader_data()->has_class_mirror_holder()) {
+      if (klass->is_instance_klass() && klass->class_loader_data() != NULL && klass->class_loader_data()->has_class_mirror_holder()) {
         // A non-strong hidden class or an unsafe anonymous class doesn't have its own class loader,
         // so when handling the java mirror for the class we need to make sure its class
         // loader data is claimed, this is done by calling do_cld explicitly.

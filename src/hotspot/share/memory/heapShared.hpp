@@ -64,14 +64,18 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   // A list of _k's static fields as the entry points of archived sub-graphs.
   // For each entry field, it is a tuple of field_offset, field_value and
   // is_closed_archive flag.
-  GrowableArray<juint>*  _subgraph_entry_fields;
+  GrowableArray<int>* _subgraph_entry_fields;
 
   bool _is_full_module_graph;
+  bool _has_non_early_klasses;
+  static bool is_non_early_klass(Klass* k);
+
  public:
   KlassSubGraphInfo(Klass* k, bool is_full_module_graph) :
     _k(k),  _subgraph_object_klasses(NULL),
     _subgraph_entry_fields(NULL),
-    _is_full_module_graph(is_full_module_graph) {}
+    _is_full_module_graph(is_full_module_graph),
+    _has_non_early_klasses(false) {}
   ~KlassSubGraphInfo() {
     if (_subgraph_object_klasses != NULL) {
       delete _subgraph_object_klasses;
@@ -85,7 +89,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   GrowableArray<Klass*>* subgraph_object_klasses() {
     return _subgraph_object_klasses;
   }
-  GrowableArray<juint>*  subgraph_entry_fields() {
+  GrowableArray<int>* subgraph_entry_fields() {
     return _subgraph_entry_fields;
   }
   void add_subgraph_entry_field(int static_field_offset, oop v,
@@ -96,6 +100,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
            _subgraph_object_klasses->length();
   }
   bool is_full_module_graph() const { return _is_full_module_graph; }
+  bool has_non_early_klasses() const { return _has_non_early_klasses; }
 };
 
 // An archived record of object sub-graphs reachable from static
@@ -105,9 +110,10 @@ class ArchivedKlassSubGraphInfoRecord {
  private:
   Klass* _k;
   bool _is_full_module_graph;
+  bool _has_non_early_klasses;
 
   // contains pairs of field offset and value for each subgraph entry field
-  Array<juint>* _entry_field_records;
+  Array<int>* _entry_field_records;
 
   // klasses of objects in archived sub-graphs referenced from the entry points
   // (static fields) in the containing class
@@ -117,9 +123,10 @@ class ArchivedKlassSubGraphInfoRecord {
     _k(NULL), _entry_field_records(NULL), _subgraph_object_klasses(NULL) {}
   void init(KlassSubGraphInfo* info);
   Klass* klass() const { return _k; }
-  Array<juint>*  entry_field_records() const { return _entry_field_records; }
+  Array<int>* entry_field_records() const { return _entry_field_records; }
   Array<Klass*>* subgraph_object_klasses() const { return _subgraph_object_klasses; }
   bool is_full_module_graph() const { return _is_full_module_graph; }
+  bool has_non_early_klasses() const { return _has_non_early_klasses; }
 };
 #endif // INCLUDE_CDS_JAVA_HEAP
 
@@ -254,7 +261,16 @@ private:
   static void set_has_been_seen_during_subgraph_recording(oop obj);
 
   static void check_module_oop(oop orig_module_obj);
+  static void copy_roots();
 
+  static void resolve_classes_for_subgraphs(ArchivableStaticFieldInfo fields[],
+                                                        int num, TRAPS);
+  static void resolve_classes_for_subgraph_of(Klass* k, TRAPS);
+  static void clear_archived_roots_of(Klass* k);
+  static const ArchivedKlassSubGraphInfoRecord*
+               resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAPS);
+  static void resolve_or_init(Klass* k, bool do_init, TRAPS);
+  static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record, TRAPS);
  public:
   static void reset_archived_object_states(TRAPS);
   static void create_archived_object_cache() {
@@ -295,6 +311,14 @@ private:
 
   static ResourceBitMap calculate_oopmap(MemRegion region);
   static void add_to_dumped_interned_strings(oop string);
+
+  static int append_root(oop obj); // dump-time only:
+  static objArrayOop get_roots(); // dump-time only:
+
+  static oop get_root(int index, bool clear=false); // rump-time and runtime
+
+  static void set_roots(narrowOop roots); // run-time only:
+  static void clear_root(int index); // run-time only:
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:
@@ -327,11 +351,16 @@ private:
     CDS_JAVA_HEAP_ONLY(return _open_archive_heap_region_mapped);
     NOT_CDS_JAVA_HEAP_RETURN_(false);
   }
+  static bool is_mapped() {
+    return closed_archive_heap_region_mapped() && open_archive_heap_region_mapped();
+  }
 
   static void fixup_mapped_heap_regions() NOT_CDS_JAVA_HEAP_RETURN;
 
   inline static bool is_archived_object(oop p) NOT_CDS_JAVA_HEAP_RETURN_(false);
 
+  static void record_well_known_classes() NOT_CDS_JAVA_HEAP_RETURN;
+  static void resolve_classes(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static void initialize_from_archived_subgraph(Klass* k, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
 
   // NarrowOops stored in the CDS archive may use a different encoding scheme
