@@ -166,9 +166,11 @@ void G1FullGCMarker::drain_stack() {
 
 inline void G1FullGCMarker::follow_klass(Klass* k) {
   ClassLoaderData* cld = k->class_loader_data();
+#if 0 // IOITMP
   if (cld == NULL) {
     return;
   }
+#endif
   oop op = cld->holder_no_keepalive();
   mark_and_push(&op);
 }

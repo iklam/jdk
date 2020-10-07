@@ -112,6 +112,10 @@ static objArrayOop _dumptime_roots = NULL;
 static narrowOop _runtime_roots_narrow;
 static OopHandle _runtime_roots;
 
+static objArrayOop runtime_roots() {
+  return (objArrayOop)_runtime_roots.resolve();
+}
+
 ////////////////////////////////////////////////////////////////
 //
 // Java heap object archiving support
@@ -207,7 +211,7 @@ oop HeapShared::get_root(int index, bool clear) {
   } else {
     assert(UseSharedSpaces, "must be");
     assert(!_runtime_roots.is_empty(), "must have loaded shared heap");
-    oop result = ((objArrayOop)_runtime_roots.resolve())->obj_at(index);
+    oop result = runtime_roots()->obj_at(index);
     if (clear) {
       clear_root(index);
     }
@@ -219,7 +223,11 @@ void HeapShared::clear_root(int index) {
   assert(index >= 0, "sanity");
   assert(UseSharedSpaces, "must be");
   if (open_archive_heap_region_mapped()) {
-    ((objArrayOop)_runtime_roots.resolve())->obj_at_put(index, NULL);
+    if (log_is_enabled(Debug, cds, heap)) {
+      oop old = runtime_roots()->obj_at(index);
+      log_debug(cds, heap)("Clearing root %d: was " PTR_FORMAT, index, p2i(old));
+    }
+    runtime_roots()->obj_at_put(index, NULL);
   }
 }
 
