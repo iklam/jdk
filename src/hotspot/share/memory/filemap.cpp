@@ -245,7 +245,7 @@ void FileMapHeader::populate(FileMapInfo* mapinfo, size_t alignment) {
 
   if (!DynamicDumpSharedSpaces) {
     set_shared_path_table(mapinfo->_shared_path_table);
-    CDS_JAVA_HEAP_ONLY(_heap_obj_roots = CompressedOops::encode(HeapShared::get_roots()));
+    CDS_JAVA_HEAP_ONLY(_heap_obj_roots = CompressedOops::encode(HeapShared::roots()));
   }
 }
 

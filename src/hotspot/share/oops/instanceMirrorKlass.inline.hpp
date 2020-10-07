@@ -54,7 +54,7 @@ void InstanceMirrorKlass::oop_oop_iterate(oop obj, OopClosureType* closure) {
     if (klass != NULL) {
       if (klass->class_loader_data() == NULL) {
         // This is a mirror that belongs to a shared class that has not be loaded yet.
-        // It's only reachable via HeapShared::get_roots(). All of its fields should be zero
+        // It's only reachable via HeapShared::roots(). All of its fields should be zero
         // so there's no need to scan.
         assert(klass->is_shared(), "must be");
         return;

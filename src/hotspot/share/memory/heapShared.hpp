@@ -312,13 +312,16 @@ private:
   static ResourceBitMap calculate_oopmap(MemRegion region);
   static void add_to_dumped_interned_strings(oop string);
 
-  static int append_root(oop obj); // dump-time only:
-  static objArrayOop get_roots(); // dump-time only:
+  // dump-time only
+  static int append_root(oop obj);
 
-  static oop get_root(int index, bool clear=false); // rump-time and runtime
+  // dump-time and runtime
+  static objArrayOop roots();
+  static oop get_root(int index, bool clear=false);
 
-  static void set_roots(narrowOop roots); // run-time only:
-  static void clear_root(int index); // run-time only:
+  // run-time only
+  static void set_roots(narrowOop roots);
+  static void clear_root(int index);
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:

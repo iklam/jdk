@@ -112,10 +112,6 @@ static objArrayOop _dumptime_roots = NULL;
 static narrowOop _runtime_roots_narrow;
 static OopHandle _runtime_roots;
 
-static objArrayOop runtime_roots() {
-  return (objArrayOop)_runtime_roots.resolve();
-}
-
 ////////////////////////////////////////////////////////////////
 //
 // Java heap object archiving support
@@ -125,8 +121,12 @@ void HeapShared::fixup_mapped_heap_regions() {
   FileMapInfo *mapinfo = FileMapInfo::current_info();
   mapinfo->fixup_mapped_heap_regions();
   set_archive_heap_region_fixed();
-  if (open_archive_heap_region_mapped()) {
+  if (is_mapped()) {
     _runtime_roots = OopHandle(Universe::vm_global(), HeapShared::materialize_archived_object(_runtime_roots_narrow));
+    if (!MetaspaceShared::use_full_module_graph()) {
+      // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
+      ClassLoaderDataShared::clear_archived_oops();
+    }
   }
   SystemDictionaryShared::update_archived_mirror_native_pointers();
 }
@@ -191,9 +191,16 @@ int HeapShared::append_root(oop obj) {
   return _pending_roots->append(obj);
 }
 
-objArrayOop HeapShared::get_roots() {
-  assert(DumpSharedSpaces, "dump-time only");
-  return _dumptime_roots;
+objArrayOop HeapShared::roots() {
+  if (DumpSharedSpaces) {
+    assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
+    return _dumptime_roots;
+  } else {
+    assert(UseSharedSpaces, "must be");
+    objArrayOop roots = (objArrayOop)_runtime_roots.resolve();
+    assert(roots != NULL, "should have been initialized");
+    return roots;
+  }
 }
 
 void HeapShared::set_roots(narrowOop roots) {
@@ -211,7 +218,7 @@ oop HeapShared::get_root(int index, bool clear) {
   } else {
     assert(UseSharedSpaces, "must be");
     assert(!_runtime_roots.is_empty(), "must have loaded shared heap");
-    oop result = runtime_roots()->obj_at(index);
+    oop result = roots()->obj_at(index);
     if (clear) {
       clear_root(index);
     }
@@ -224,10 +231,10 @@ void HeapShared::clear_root(int index) {
   assert(UseSharedSpaces, "must be");
   if (open_archive_heap_region_mapped()) {
     if (log_is_enabled(Debug, cds, heap)) {
-      oop old = runtime_roots()->obj_at(index);
+      oop old = roots()->obj_at(index);
       log_debug(cds, heap)("Clearing root %d: was " PTR_FORMAT, index, p2i(old));
     }
-    runtime_roots()->obj_at_put(index, NULL);
+    roots()->obj_at_put(index, NULL);
   }
 }
 
