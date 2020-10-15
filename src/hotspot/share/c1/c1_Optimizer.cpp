@@ -1102,13 +1102,13 @@ void NullCheckEliminator::handle_Intrinsic(Intrinsic* x) {
   if (set_contains(recv)) {
     // Value is non-null => update Intrinsic
     if (PrintNullCheckElimination) {
-      tty->print_cr("Eliminated Intrinsic %d's null check for value %d", x->id(), recv->id());
+      tty->print_cr("Eliminated Intrinsic %d's null check for value %d", (int)x->id(), (int)recv->id());
     }
     x->set_needs_null_check(false);
   } else {
     set_put(recv);
     if (PrintNullCheckElimination) {
-      tty->print_cr("Intrinsic %d of value %d proves value to be non-null", x->id(), recv->id());
+      tty->print_cr("Intrinsic %d of value %d proves value to be non-null", (int)x->id(), (int)recv->id());
     }
     // Ensure previous passes do not cause wrong state
     x->set_needs_null_check(true);

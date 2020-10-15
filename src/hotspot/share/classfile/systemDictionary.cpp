@@ -2519,11 +2519,11 @@ Method* SystemDictionary::find_method_handle_intrinsic(vmIntrinsics::ID iid,
   assert(MethodHandles::is_signature_polymorphic(iid) &&
          MethodHandles::is_signature_polymorphic_intrinsic(iid) &&
          iid != vmIntrinsics::_invokeGeneric,
-         "must be a known MH intrinsic iid=%d: %s", iid, vmIntrinsics::name_at(iid));
+         "must be a known MH intrinsic iid=%d: %s", (int)iid, vmIntrinsics::name_at(iid));
 
-  unsigned int hash  = invoke_method_table()->compute_hash(signature, iid);
+  unsigned int hash  = invoke_method_table()->compute_hash(signature, (int)iid);
   int          index = invoke_method_table()->hash_to_index(hash);
-  SymbolPropertyEntry* spe = invoke_method_table()->find_entry(index, hash, signature, iid);
+  SymbolPropertyEntry* spe = invoke_method_table()->find_entry(index, hash, signature, (int)iid);
   methodHandle m;
   if (spe == NULL || spe->method() == NULL) {
     spe = NULL;
@@ -2542,9 +2542,9 @@ Method* SystemDictionary::find_method_handle_intrinsic(vmIntrinsics::ID iid,
     // if a racing thread has managed to install one at the same time.
     {
       MutexLocker ml(THREAD, SystemDictionary_lock);
-      spe = invoke_method_table()->find_entry(index, hash, signature, iid);
+      spe = invoke_method_table()->find_entry(index, hash, signature, (int)iid);
       if (spe == NULL)
-        spe = invoke_method_table()->add_entry(index, hash, signature, iid);
+        spe = invoke_method_table()->add_entry(index, hash, signature, (int)iid);
       if (spe->method() == NULL)
         spe->set_method(m());
     }
@@ -2696,9 +2696,9 @@ Handle SystemDictionary::find_method_handle_type(Symbol* signature,
                                                  TRAPS) {
   Handle empty;
   vmIntrinsics::ID null_iid = vmIntrinsics::_none;  // distinct from all method handle invoker intrinsics
-  unsigned int hash  = invoke_method_table()->compute_hash(signature, null_iid);
+  unsigned int hash  = invoke_method_table()->compute_hash(signature, (int)null_iid);
   int          index = invoke_method_table()->hash_to_index(hash);
-  SymbolPropertyEntry* spe = invoke_method_table()->find_entry(index, hash, signature, null_iid);
+  SymbolPropertyEntry* spe = invoke_method_table()->find_entry(index, hash, signature, (int)null_iid);
   if (spe != NULL && spe->method_type() != NULL) {
     assert(java_lang_invoke_MethodType::is_instance(spe->method_type()), "");
     return Handle(THREAD, spe->method_type());
@@ -2764,9 +2764,9 @@ Handle SystemDictionary::find_method_handle_type(Symbol* signature,
   if (can_be_cached) {
     // We can cache this MethodType inside the JVM.
     MutexLocker ml(THREAD, SystemDictionary_lock);
-    spe = invoke_method_table()->find_entry(index, hash, signature, null_iid);
+    spe = invoke_method_table()->find_entry(index, hash, signature, (int)null_iid);
     if (spe == NULL)
-      spe = invoke_method_table()->add_entry(index, hash, signature, null_iid);
+      spe = invoke_method_table()->add_entry(index, hash, signature, (int)null_iid);
     if (spe->method_type() == NULL) {
       spe->set_method_type(method_type());
     }

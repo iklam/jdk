@@ -30,6 +30,7 @@
 // complex header files that have the full definitions of these enums.
 
 enum JVMFlagsEnum : int;
+enum class vmIntrinsicID : int;
 enum class vmSymbolID : int;
 
 #endif // SHARE_UTILITIES_VMENUMS_HPP
