@@ -2257,6 +2257,7 @@ void SystemDictionary::update_dictionary(unsigned int d_hash,
   {
     MutexLocker mu1(THREAD, SystemDictionary_lock);
 
+    k->reset_class_loader_data(k->class_loader_data()); // magic
     // Make a new dictionary entry.
     Dictionary* dictionary = loader_data->dictionary();
     InstanceKlass* sd_check = find_class(d_hash, name, dictionary);

@@ -624,6 +624,11 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   }
 }
 
+// magic
+void Klass::reset_class_loader_data(ClassLoaderData* loader_data) {
+  *((volatile ClassLoaderData**)&_class_loader_data) = loader_data;
+}
+
 #if INCLUDE_CDS_JAVA_HEAP
 // Used at CDS dump time to access the archived mirror. No GC barrier.
 oop Klass::archived_java_mirror_raw() {

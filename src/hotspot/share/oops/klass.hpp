@@ -298,6 +298,7 @@ protected:
   // class loader data
   ClassLoaderData* class_loader_data() const               { return _class_loader_data; }
   void set_class_loader_data(ClassLoaderData* loader_data) {  _class_loader_data = loader_data; }
+  void reset_class_loader_data(ClassLoaderData* loader_data);
 
   int shared_classpath_index() const   {
     return _shared_class_path_index;
