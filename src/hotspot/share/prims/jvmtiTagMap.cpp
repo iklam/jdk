@@ -2945,13 +2945,6 @@ inline bool VM_HeapWalkOperation::iterate_over_class(oop java_class) {
 // (static fields are ignored here as we report these as
 // references from the class).
 inline bool VM_HeapWalkOperation::iterate_over_object(oop o) {
-#if 0  // IOITMP
-  if (o->klass()->class_loader_data() == NULL) {
-    // FIXME some asserts here??
-    // not-yet reachable object from CDS heap
-    return false;
-  }
-#endif
   // reference to the class
   if (!CallbackInvoker::report_class_reference(o, o->klass()->java_mirror())) {
     return false;

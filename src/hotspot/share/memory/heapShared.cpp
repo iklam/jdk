@@ -50,7 +50,6 @@
 #include "oops/fieldStreams.inline.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
-#include "oops/oopHandle.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/javaCalls.hpp"
@@ -107,10 +106,9 @@ const static int num_open_archive_subgraph_entry_fields =
 const static int num_fmg_open_archive_subgraph_entry_fields =
   sizeof(fmg_open_archive_subgraph_entry_fields) / sizeof(ArchivableStaticFieldInfo);
 
-static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots = NULL;
-static objArrayOop _dumptime_roots = NULL;
-static narrowOop _runtime_roots_narrow;
-static OopHandle _runtime_roots;
+GrowableArrayCHeap<oop, mtClassShared>* HeapShared::_pending_roots = NULL;
+narrowOop HeapShared::_roots_narrow;
+OopHandle HeapShared::_roots;
 
 ////////////////////////////////////////////////////////////////
 //
@@ -122,7 +120,7 @@ void HeapShared::fixup_mapped_heap_regions() {
   mapinfo->fixup_mapped_heap_regions();
   set_archive_heap_region_fixed();
   if (is_mapped()) {
-    _runtime_roots = OopHandle(Universe::vm_global(), HeapShared::materialize_archived_object(_runtime_roots_narrow));
+    _roots = OopHandle(Universe::vm_global(), HeapShared::materialize_archived_object(_roots_narrow));
     if (!MetaspaceShared::use_full_module_graph()) {
       // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
       ClassLoaderDataShared::clear_archived_oops();
@@ -182,6 +180,8 @@ oop HeapShared::find_archived_heap_object(oop obj) {
 
 int HeapShared::append_root(oop obj) {
   assert(DumpSharedSpaces, "dump-time only");
+
+  // No GC should happen since we aren't scanning _pending_roots.
   assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
 
   if (_pending_roots == NULL) {
@@ -194,19 +194,22 @@ int HeapShared::append_root(oop obj) {
 objArrayOop HeapShared::roots() {
   if (DumpSharedSpaces) {
     assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
-    return _dumptime_roots;
+    if (!is_heap_object_archiving_allowed()) {
+      return NULL;
+    }
   } else {
     assert(UseSharedSpaces, "must be");
-    objArrayOop roots = (objArrayOop)_runtime_roots.resolve();
-    assert(roots != NULL, "should have been initialized");
-    return roots;
   }
+
+  objArrayOop roots = (objArrayOop)_roots.resolve();
+  assert(roots != NULL, "should have been initialized");
+  return roots;
 }
 
 void HeapShared::set_roots(narrowOop roots) {
   assert(UseSharedSpaces, "runtime only");
   assert(open_archive_heap_region_mapped(), "must be");
-  _runtime_roots_narrow = roots;
+  _roots_narrow = roots;
 }
 
 oop HeapShared::get_root(int index, bool clear) {
@@ -217,7 +220,7 @@ oop HeapShared::get_root(int index, bool clear) {
     return _pending_roots->at(index);
   } else {
     assert(UseSharedSpaces, "must be");
-    assert(!_runtime_roots.is_empty(), "must have loaded shared heap");
+    assert(!_roots.is_empty(), "must have loaded shared heap");
     oop result = roots()->obj_at(index);
     if (clear) {
       clear_root(index);
@@ -424,7 +427,7 @@ void HeapShared::copy_roots() {
   Klass *k = Universe::objectArrayKlassObj(); // already relocated to point to archived klass
   HeapWord* mem = G1CollectedHeap::heap()->archive_mem_allocate(size);
 
-  memset(mem, 0, size * BytesPerWord); // Is this correct??
+  memset(mem, 0, size * BytesPerWord);
   {
     // This is copied from MemAllocator::finish
     if (UseBiasedLocking) {
@@ -439,9 +442,9 @@ void HeapShared::copy_roots() {
     arrayOopDesc::set_length(mem, length);
   }
 
-  _dumptime_roots = (objArrayOop)mem;
+  _roots = OopHandle(Universe::vm_global(), (oop)mem);
   for (int i = 0; i < length; i++) {
-    _dumptime_roots->obj_at_put(i, _pending_roots->at(i));
+    roots()->obj_at_put(i, _pending_roots->at(i));
   }
   log_info(cds)("archived obj roots[%d] = %d words, klass = %p, obj = %p", length, size, k, mem);
 }
@@ -682,10 +685,12 @@ static void verify_the_heap(Klass* k, const char* which) {
   }
 }
 
-void HeapShared::record_well_known_classes() {
-
-}
-
+// Before GC can execute, we must ensure that all oops reachable from HeapShared::roots()
+// have a valid klass. I.e., oopDesc::klass() must have already been resolved.
+//
+// Note: if a ArchivedKlassSubGraphInfoRecord contains non-early classes, and JVMTI
+// ClassFileLoadHook is enabled, it's possible for this class to be dynamically replaced. In
+// this case, we will not load the ArchivedKlassSubGraphInfoRecord and will clear its roots.
 void HeapShared::resolve_classes(TRAPS) {
   if (!is_mapped()) {
     return; // nothing to do

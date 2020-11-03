@@ -172,7 +172,7 @@ public:
     return _excluded || _failed_verification || _klass == NULL;
   }
 
-  // Is this class loaded while JvmtiExport::is_early_phase()==true
+  // Was this class loaded while JvmtiExport::is_early_phase()==true
   bool is_early_klass() {
     return _is_early_klass;
   }

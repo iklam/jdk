@@ -33,6 +33,7 @@
 #include "oops/compressedOops.hpp"
 #include "oops/objArrayKlass.hpp"
 #include "oops/oop.hpp"
+#include "oops/oopHandle.hpp"
 #include "oops/typeArrayKlass.hpp"
 #include "utilities/bitMap.hpp"
 #include "utilities/growableArray.hpp"
@@ -66,7 +67,12 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   // is_closed_archive flag.
   GrowableArray<int>* _subgraph_entry_fields;
 
+  // Does this KlassSubGraphInfo belong to the arcived full module graph
   bool _is_full_module_graph;
+
+  // Does this KlassSubGraphInfo references any classes that were loaded while
+  // JvmtiExport::is_early_phase()!=true. If so, this KlassSubGraphInfo cannot be
+  // used at runtime if JVMTI ClassFileLoadHook is enabled.
   bool _has_non_early_klasses;
   static bool is_non_early_klass(Klass* k);
 
@@ -231,6 +237,10 @@ private:
 
   static SeenObjectsTable *_seen_objects_table;
 
+  static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots;
+  static narrowOop _roots_narrow;
+  static OopHandle _roots;
+
   static void init_seen_objects_table() {
     assert(_seen_objects_table == NULL, "must be");
     _seen_objects_table = new (ResourceObj::C_HEAP, mtClass)SeenObjectsTable();
@@ -264,7 +274,7 @@ private:
   static void copy_roots();
 
   static void resolve_classes_for_subgraphs(ArchivableStaticFieldInfo fields[],
-                                                        int num, TRAPS);
+                                            int num, TRAPS);
   static void resolve_classes_for_subgraph_of(Klass* k, TRAPS);
   static void clear_archived_roots_of(Klass* k);
   static const ArchivedKlassSubGraphInfoRecord*
@@ -312,14 +322,29 @@ private:
   static ResourceBitMap calculate_oopmap(MemRegion region);
   static void add_to_dumped_interned_strings(oop string);
 
-  // dump-time only
+  // We use the HeapShared::roots() array to make sure that objects stored in the
+  // archived heap regions are not prematurely collected. These roots include:
+  //
+  //    - mirrors of classes that have not yet been loaded.
+  //    - ConstantPool::resolved_references() of classes that have not yet been loaded.
+  //    - ArchivedKlassSubGraphInfoRecords that have not been initialized
+  //    - java.lang.Module objects that have not yet been added to the module graph
+  //
+  // When a mirror M becomes referenced by a newly loaded class K, M will be removed
+  // from HeapShared::roots() via clear_root(), and K will be responsible for
+  // keeping M alive.
+  //
+  // Other types of roots are also cleared similarly when they become referenced.
+
+  // Dump-time only. Returns the index of the root, which can be used at run time to read
+  // the root using get_root(index, ...).
   static int append_root(oop obj);
 
-  // dump-time and runtime
+  // Dump-time and runtime
   static objArrayOop roots();
   static oop get_root(int index, bool clear=false);
 
-  // run-time only
+  // Run-time only
   static void set_roots(narrowOop roots);
   static void clear_root(int index);
 #endif // INCLUDE_CDS_JAVA_HEAP
@@ -362,7 +387,6 @@ private:
 
   inline static bool is_archived_object(oop p) NOT_CDS_JAVA_HEAP_RETURN_(false);
 
-  static void record_well_known_classes() NOT_CDS_JAVA_HEAP_RETURN;
   static void resolve_classes(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static void initialize_from_archived_subgraph(Klass* k, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
 
