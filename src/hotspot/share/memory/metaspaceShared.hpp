@@ -254,8 +254,8 @@ class MetaspaceShared : AllStatic {
   static intx relocation_delta() { return _relocation_delta; }
   static intx final_delta();
   static bool use_windows_memory_mapping() {
-    const bool is_windows = (NOT_WINDOWS(false) WINDOWS_ONLY(true));
-    //const bool is_windows = true; // enable this to allow testing the windows mmap semantics on Linux, etc.
+    //const bool is_windows = (NOT_WINDOWS(false) WINDOWS_ONLY(true));
+    const bool is_windows = true; // enable this to allow testing the windows mmap semantics on Linux, etc.
     return is_windows;
   }
 
