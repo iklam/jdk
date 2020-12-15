@@ -165,6 +165,8 @@ class InstanceKlass: public Klass {
   // If you add a new field that points to any metaspace object, you
   // must add this field to InstanceKlass::metaspace_pointers_do().
 
+  Array<Annotations>* _hack;
+
   // Annotations for this class
   Annotations*    _annotations;
   // Package this class is defined in
@@ -938,7 +940,7 @@ public:
 
   // annotations support
   Annotations* annotations() const          { return _annotations; }
-  void set_annotations(Annotations* anno)   { _annotations = anno; }
+  void set_annotations(Annotations* anno);
 
   AnnotationArray* class_annotations() const {
     return (_annotations != NULL) ? _annotations->class_annotations() : NULL;

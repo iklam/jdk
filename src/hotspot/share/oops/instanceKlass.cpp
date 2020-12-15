@@ -537,6 +537,7 @@ Array<int>* InstanceKlass::create_new_default_vtable_indices(int len, TRAPS) {
 
 InstanceKlass::InstanceKlass(const ClassFileParser& parser, unsigned kind, KlassID id) :
   Klass(id),
+  _hack(NULL),
   _nest_members(NULL),
   _nest_host(NULL),
   _permitted_subclasses(NULL),
@@ -2447,6 +2448,20 @@ void InstanceKlass::store_fingerprint(uint64_t fingerprint) {
   }
 }
 
+void InstanceKlass::set_annotations(Annotations* anno) {
+   _annotations = anno;
+
+   if (anno != NULL) {
+     Thread* THREAD = Thread::current();
+     _hack = MetadataFactory::new_array<Annotations>(class_loader_data(), 1, THREAD);
+     Annotations* hack = _hack->adr_at(0);
+     hack->set_class_annotations(anno->class_annotations());
+     hack->set_class_type_annotations(anno->class_type_annotations());
+     hack->set_fields_annotations(anno->fields_annotations());
+     hack->set_fields_type_annotations(anno->fields_type_annotations());
+   }
+}
+
 void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
   Klass::metaspace_pointers_do(it);
 
@@ -2455,6 +2470,7 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
     log_trace(cds)("Iter(InstanceKlass): %p (%s)", this, external_name());
   }
 
+  it->push_metaspaceobj_array(&_hack);
   it->push(&_annotations);
   it->push((Klass**)&_array_klasses);
   it->push(&_constants);
@@ -2604,6 +2620,15 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
   if (DiagnoseSyncOnValueBasedClasses && has_value_based_class_annotation()) {
     set_is_value_based();
     set_prototype_header(markWord::prototype());
+  }
+  if (_annotations != NULL) {
+    log_info(cds)("_annotations = %p", _annotations);
+    log_info(cds)("_hack        = %p", _hack);
+    Annotations* hack = _hack->adr_at(0);
+    log_info(cds)(" a           = %p", hack->class_annotations());
+    log_info(cds)(" b           = %p", hack->class_type_annotations());
+    log_info(cds)(" c           = %p", hack->fields_annotations());
+    log_info(cds)(" d           = %p", hack->fields_type_annotations());
   }
 }
 
