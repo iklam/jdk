@@ -25,6 +25,7 @@
 #ifndef SHARE_MEMORY_METASPACECLOSURE_HPP
 #define SHARE_MEMORY_METASPACECLOSURE_HPP
 
+#include <type_traits>
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
 #include "oops/array.hpp"
@@ -324,18 +325,6 @@ public:
   // returns true if we want to keep iterating the pointers embedded inside <ref>
   virtual bool do_ref(Ref* ref, bool read_only) = 0;
 
-  // ?? This function cannot be named push() -- gcc says it conflicts with the other push(Array<T>**, Writability)
-  // For pushing pointers to arrays of MetaspaceObj. E.g.,
-  //
-  // Class Foo : public Metadata {
-  //    Array<Annotations>* _annos;
-  //    void metaspace_pointers_do(MetaspaceClosure* it) {
-  //      it->push_metaspaceobj_array(&_annos);
-  //   }
-  template <class T = MetaspaceObj> void push_metaspaceobj_array(Array<T>** mpp, Writability w = _default) {
-    push_impl(new MetaspaceObjArrayRef<T>(mpp, w));
-  }
-
   // When you do:
   //     void MyType::metaspace_pointers_do(MetaspaceClosure* it) {
   //       it->push(_my_field)
@@ -348,13 +337,26 @@ public:
   }
 
   // If the above function doesn't match (mpp is an Array<>, but T is not a pointer type), then
-  // this is the second choice.
-  template <typename T> void push(Array<T>** mpp, Writability w = _default) {
+  // either of the following two functions will be matched.
+  template <typename T, ENABLE_IF(!std::is_base_of<MetaspaceObj, T>::value)>
+  void push(Array<T>** mpp, Writability w = _default) {
     push_impl(new PrimitiveArrayRef<T>(mpp, w));
   }
 
-  // If the above function doesn't match (mpp is not an Array<> type), then
-  // this will be matched by default.
+  // For pushing pointers to arrays of MetaspaceObj. E.g.,
+  //
+  // Class Foo : public Metadata {
+  //    Array<Annotations>* _annos;
+  //    void metaspace_pointers_do(MetaspaceClosure* it) {
+  //      it->push_metaspaceobj_array(&_annos);
+  //   }
+  template <class T, ENABLE_IF(std::is_base_of<MetaspaceObj, T>::value)>
+  void push(Array<T>** mpp, Writability w = _default) {
+    push_impl(new MetaspaceObjArrayRef<T>(mpp, w));
+  }
+
+  // If none of the above push() functions match (mpp is not an Array<> type), then
+  // this will be used by default.
   template <class T> void push(T** mpp, Writability w = _default) {
     push_impl(new ObjectRef<T>(mpp, w));
   }

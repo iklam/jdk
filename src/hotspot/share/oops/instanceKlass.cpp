@@ -2470,7 +2470,7 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
     log_trace(cds)("Iter(InstanceKlass): %p (%s)", this, external_name());
   }
 
-  it->push_metaspaceobj_array(&_hack);
+  it->push(&_hack);
   it->push(&_annotations);
   it->push((Klass**)&_array_klasses);
   it->push(&_constants);
