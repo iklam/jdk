@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ParallelLoad {
     public static int MAX_CLASSES = 40;
-    public static int NUM_THREADS = 4;
+    public static int NUM_THREADS = 40;
 
     public final static int SYSTEM_LOADER = 0;
     public final static int SINGLE_CUSTOM_LOADER = 1;
@@ -185,10 +185,10 @@ class ParallelLoadThread extends Thread {
                     clazz = ParallelLoad.classLoaders[thread_id].loadClass(className);
                     break;
                 }
-                testTransformation(clazz);
+                //testTransformation(clazz);
             }
 
-            log("thread[%d] t = %s, c = %s, l = %s", thread_id, this, clazz, clazz.getClassLoader());
+            //log("thread[%d] t = %s, c = %s, l = %s", thread_id, this, clazz, clazz.getClassLoader());
         }
     }
 

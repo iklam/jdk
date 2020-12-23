@@ -1083,6 +1083,7 @@ InstanceKlass* SystemDictionaryShared::load_shared_class_for_builtin_loader(
          SystemDictionary::is_system_class_loader(class_loader()))  ||
         (ik->is_shared_platform_class() &&
          SystemDictionary::is_platform_class_loader(class_loader()))) {
+      assert(ik->class_loader_data() == NULL, "huh %s", ik->external_name());
       PackageEntry* pkg_entry = get_package_entry_from_class_name(class_loader, class_name);
       Handle protection_domain =
         SystemDictionaryShared::init_security_info(class_loader, ik, pkg_entry, CHECK_NULL);

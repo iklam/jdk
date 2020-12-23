@@ -570,6 +570,8 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
     log_trace(cds, unshareable)("restore: %s", external_name());
   }
 
+  assert(class_loader_data() == NULL, "huh %s", external_name());
+
   // If an exception happened during CDS restore, some of these fields may already be
   // set.  We leave the class on the CLD list, even if incomplete so that we don't
   // modify the CLD list outside a safepoint.
