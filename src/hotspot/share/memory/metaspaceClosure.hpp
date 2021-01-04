@@ -336,6 +336,7 @@ public:
     push_impl(new PointerArrayRef<T>(mpp, w));
   }
 
+#if 0
   // If the above function doesn't match (mpp is an Array<>, but T is not a pointer type), then
   // either of the following two functions will be matched.
   template <typename T, ENABLE_IF(!std::is_base_of<MetaspaceObj, T>::value)>
@@ -360,6 +361,29 @@ public:
   template <class T> void push(T** mpp, Writability w = _default) {
     push_impl(new ObjectRef<T>(mpp, w));
   }
+#else
+
+  template<typename T, typename Enable = void>
+  struct RefType {
+    using type = ObjectRef<T>;
+  };
+
+  template<typename T>
+  struct RefType<Array<T>, std::enable_if_t<std::is_base_of<MetaspaceObj, T>::value>> {
+    using type = MetaspaceObjArrayRef<T>;
+  };
+
+  template<typename T>
+  struct RefType<Array<T>, std::enable_if_t<!std::is_base_of<MetaspaceObj, T>::value>> {
+    using type = PrimitiveArrayRef<T>;
+  };
+
+  template<typename T>
+  void push(T** mpp, Writability w = _default) {
+    using RT = typename RefType<T>::type;
+    push_impl(new RT(mpp, w));
+  }
+#endif
 
   template <class T> void push_method_entry(T** mpp, intptr_t* p) {
     Ref* ref = new ObjectRef<T>(mpp, _default);
