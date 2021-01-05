@@ -2621,7 +2621,7 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
     set_is_value_based();
     set_prototype_header(markWord::prototype());
   }
-  if (_annotations != NULL) {
+  if (_annotations != NULL && UseNewCode) {
     log_info(cds)("_annotations = %p", _annotations);
     log_info(cds)("_hack        = %p", _hack);
     Annotations* hack = _hack->adr_at(0);

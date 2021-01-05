@@ -25,6 +25,7 @@
 #ifndef SHARE_MEMORY_METASPACECLOSURE_HPP
 #define SHARE_MEMORY_METASPACECLOSURE_HPP
 
+#include <memory>
 #include <type_traits>
 #include "logging/log.hpp"
 #include "memory/allocation.hpp"
@@ -93,8 +94,8 @@ public:
   // However, to save space, MetaspaceObj has NO vtable. The vtable is introduced
   // only in the Metadata class.
   //
-  // To work around the lack of a vtable, we use Ref class with templates
-  // (see ObjectRef, PrimitiveArrayRef and PointerArrayRef)
+  // To work around the lack of a vtable, we use the Ref class with templates
+  // (see ObjectRef, ArrayRef, MetaspaceObjArrayRef, and PointerArrayRef)
   // so that we can statically discover the type of a object. The use of Ref
   // depends on the fact that:
   //
@@ -156,8 +157,8 @@ public:
   };
 
 private:
-  // -------------------------------------------------- ObjectRef
-  template <class T> class ObjectRef : public Ref {
+  // ObjectRef -- iterate an instance of MetaspaceObj
+  template <class T = MetaspaceObj> class ObjectRef : public Ref {
     T** _mpp;
     T* dereference() const {
       return *_mpp;
@@ -183,19 +184,21 @@ private:
     }
   };
 
-  // -------------------------------------------------- PrimitiveArrayRef
-  template <class T> class PrimitiveArrayRef : public Ref {
+  // ArrayRef -- iterate an instance of Array<T>, where T is NOT a subtype of MetaspaceObj.
+  // T can be a primitive type, since as int, or a structure. However, we do not iterate
+  // over any MetaspaceObj pointers that may be embedded inside T.
+  template <class T> class ArrayRef : public Ref {
+  protected:
     Array<T>** _mpp;
     Array<T>* dereference() const {
       return *_mpp;
     }
-  protected:
     virtual void** mpp() const {
       return (void**)_mpp;
     }
 
   public:
-    PrimitiveArrayRef(Array<T>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
+    ArrayRef(Array<T>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
 
     // all Arrays are read-only by default
     virtual bool is_read_only_by_default() const { return true; }
@@ -205,16 +208,39 @@ private:
 
     virtual void metaspace_pointers_do(MetaspaceClosure *it) const {
       Array<T>* array = dereference();
-      log_trace(cds)("Iter(PrimitiveArray): %p [%d]", array, array->length());
+      log_trace(cds)("Iter(Array): %p [%d]", array, array->length());
     }
     virtual void metaspace_pointers_do_at(MetaspaceClosure *it, address new_loc) const {
       Array<T>* array = (Array<T>*)new_loc;
-      log_trace(cds)("Iter(PrimitiveArray): %p [%d]", array, array->length());
+      log_trace(cds)("Iter(Array): %p [%d]", array, array->length());
     }
   };
 
-  // -------------------------------------------------- PointerArrayRef
-  template <class T> class PointerArrayRef : public Ref {
+  // ObjectArrayRef -- iterate an instance of Array<T>, where T is a subtype of MetaspaceObj.
+  // We recursively call T::metaspace_pointers_do() for each element in this array.
+  template <class T = MetaspaceObj> class ObjectArrayRef : public ArrayRef<T> {
+  public:
+    ObjectArrayRef(Array<T>** mpp, Writability w) : ArrayRef<T>(mpp, w) {}
+
+    virtual void metaspace_pointers_do(MetaspaceClosure *it) const {
+      metaspace_pointers_do_at_impl(it, ArrayRef<T>::dereference());
+    }
+    virtual void metaspace_pointers_do_at(MetaspaceClosure *it, address new_loc) const {
+      metaspace_pointers_do_at_impl(it, (Array<T>*)new_loc);
+    }
+  private:
+    void metaspace_pointers_do_at_impl(MetaspaceClosure *it, Array<T>* array) const {
+      log_trace(cds)("Iter(MetaspaceObj): %p [%d]", array, array->length());
+      for (int i = 0; i < array->length(); i++) {
+        T* elm = array->adr_at(i);
+        elm->metaspace_pointers_do(it);
+      }
+    }
+  };
+
+  // ObjectPointerArrayRef -- iterate an instance of Array<T*>, where T is a subtype of MetaspaceObj.
+  // We recursively call MetaspaceClosure::push() for each pointer in this array.
+  template <class T = MetaspaceObj> class ObjectPointerArrayRef : public Ref {
     Array<T*>** _mpp;
     Array<T*>* dereference() const {
       return *_mpp;
@@ -225,7 +251,7 @@ private:
     }
 
   public:
-    PointerArrayRef(Array<T*>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
+    ObjectPointerArrayRef(Array<T*>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
 
     // all Arrays are read-only by default
     virtual bool is_read_only_by_default() const { return true; }
@@ -249,42 +275,53 @@ private:
     }
   };
 
-  // -------------------------------------------------- MetaspaceObjArrayRef
-  template <class T = MetaspaceObj> class MetaspaceObjArrayRef : public Ref {
-    Array<T>** _mpp;
-    Array<T>* dereference() const {
-      return *_mpp;
-    }
-  protected:
-    virtual void** mpp() const {
-      return (void**)_mpp;
-    }
-
-  public:
-    MetaspaceObjArrayRef(Array<T>** mpp, Writability w) : Ref(w), _mpp(mpp) {}
-
-    // all Arrays are read-only by default
-    virtual bool is_read_only_by_default() const { return true; }
-    virtual bool not_null()                const { return dereference() != NULL; }
-    virtual int size()                     const { return dereference()->size(); }
-    virtual MetaspaceObj::Type msotype()   const { return MetaspaceObj::array_type(sizeof(T)); }
-
-    virtual void metaspace_pointers_do(MetaspaceClosure *it) const {
-      metaspace_pointers_do_at_impl(it, dereference());
-    }
-    virtual void metaspace_pointers_do_at(MetaspaceClosure *it, address new_loc) const {
-      metaspace_pointers_do_at_impl(it, (Array<T>*)new_loc);
-    }
-  private:
-    void metaspace_pointers_do_at_impl(MetaspaceClosure *it, Array<T>* array) const {
-      log_trace(cds)("Iter(ObjectArray): %p [%d]", array, array->length());
-      for (int i = 0; i < array->length(); i++) {
-        T* elm = array->adr_at(i);
-        elm->metaspace_pointers_do(it);
-      }
-    }
+  // RefMatcher uses SFINAE to provide the correct XxxRef type for wrapping a pointer when
+  // MetaspaceClosure::push() is called. E.g.:
+  //
+  // MetaspaceClosure*      it = ...;
+  // Klass*                 o  = ...;  it->push(&o);     => ObjectRef
+  // Array<int>*            a1 = ...;  it->push(&a1);    => ArrayRef
+  // Array<Annotation>*     a2 = ...;  it->push(&a3);    => ObjectArrayRef
+  // Array<Klass*>*         a3 = ...;  it->push(&a2);    => ObjectPointerArrayRef
+  // Array<Array<Klass*>*>* a4 = ...;  it->push(&a3);    => ObjectPointerArrayRef
+  // Array<Annotation>*     a5 = ...;  it->push(&a3);    => ObjectPointerArrayRef
+  //
+  // Note that the following will fail to compile:
+  //
+  // Hashtable*             h  = ...;  it->push(&h);     => Hashtable is not a subclass of MetaspaceObj
+  // Array<Hashtable*>*     a6 = ...;  it->push(&a7);    => Hashtable is not a subclass of MetaspaceObj
+  // Array<int*>*           a7 = ...;  it->push(&a6);    => int       is not a subclass of MetaspaceObj
+  template <typename T, typename Enable = void>
+  struct RefMatcher {
+    using type = ObjectRef<T>;
   };
 
+  template <typename T>
+  struct RefMatcher<Array<T>, std::enable_if_t<!std::is_pointer<T>::value && !std::is_base_of<MetaspaceObj, T>::value>> {
+    using type = ArrayRef<T>;
+  };
+
+  template <typename T>
+  struct RefMatcher<Array<T>, std::enable_if_t<!std::is_pointer<T>::value &&  std::is_base_of<MetaspaceObj, T>::value>> {
+    using type = ObjectArrayRef<T>;
+  };
+
+  template <typename T>
+  struct RefMatcher<Array<T>, std::enable_if_t<std::is_pointer<T>::value>> {
+    using E = typename std::pointer_traits<T>::element_type;
+    using type = ObjectPointerArrayRef<E>;
+  };
+
+public:
+  // This is the main entry point for a subtype of MetaspaceObject to interate with a MetaspaceClosure.
+  // See Annotations::metaspace_pointers_do().
+  template <typename T>
+  void push(T** mpp, Writability w = _default) {
+    using RT = typename RefMatcher<T>::type;
+    push_impl(new RT(mpp, w));
+  }
+
+private:
   // Normally, chains of references like a->b->c->d are iterated recursively. However,
   // if recursion is too deep, we save the Refs in _pending_refs, and push them later in
   // MetaspaceClosure::finish(). This avoids overflowing the C stack.
@@ -324,66 +361,6 @@ public:
 
   // returns true if we want to keep iterating the pointers embedded inside <ref>
   virtual bool do_ref(Ref* ref, bool read_only) = 0;
-
-  // When you do:
-  //     void MyType::metaspace_pointers_do(MetaspaceClosure* it) {
-  //       it->push(_my_field)
-  //     }
-  //
-  // C++ will try to match the "most specific" template function. This one will
-  // will be matched if possible (if mpp is an Array<> of any pointer type).
-  template <typename T> void push(Array<T*>** mpp, Writability w = _default) {
-    push_impl(new PointerArrayRef<T>(mpp, w));
-  }
-
-#if 0
-  // If the above function doesn't match (mpp is an Array<>, but T is not a pointer type), then
-  // either of the following two functions will be matched.
-  template <typename T, ENABLE_IF(!std::is_base_of<MetaspaceObj, T>::value)>
-  void push(Array<T>** mpp, Writability w = _default) {
-    push_impl(new PrimitiveArrayRef<T>(mpp, w));
-  }
-
-  // For pushing pointers to arrays of MetaspaceObj. E.g.,
-  //
-  // Class Foo : public Metadata {
-  //    Array<Annotations>* _annos;
-  //    void metaspace_pointers_do(MetaspaceClosure* it) {
-  //      it->push_metaspaceobj_array(&_annos);
-  //   }
-  template <class T, ENABLE_IF(std::is_base_of<MetaspaceObj, T>::value)>
-  void push(Array<T>** mpp, Writability w = _default) {
-    push_impl(new MetaspaceObjArrayRef<T>(mpp, w));
-  }
-
-  // If none of the above push() functions match (mpp is not an Array<> type), then
-  // this will be used by default.
-  template <class T> void push(T** mpp, Writability w = _default) {
-    push_impl(new ObjectRef<T>(mpp, w));
-  }
-#else
-
-  template<typename T, typename Enable = void>
-  struct RefType {
-    using type = ObjectRef<T>;
-  };
-
-  template<typename T>
-  struct RefType<Array<T>, std::enable_if_t<std::is_base_of<MetaspaceObj, T>::value>> {
-    using type = MetaspaceObjArrayRef<T>;
-  };
-
-  template<typename T>
-  struct RefType<Array<T>, std::enable_if_t<!std::is_base_of<MetaspaceObj, T>::value>> {
-    using type = PrimitiveArrayRef<T>;
-  };
-
-  template<typename T>
-  void push(T** mpp, Writability w = _default) {
-    using RT = typename RefType<T>::type;
-    push_impl(new RT(mpp, w));
-  }
-#endif
 
   template <class T> void push_method_entry(T** mpp, intptr_t* p) {
     Ref* ref = new ObjectRef<T>(mpp, _default);
