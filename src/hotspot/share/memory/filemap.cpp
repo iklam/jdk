@@ -1574,7 +1574,7 @@ MapArchiveResult FileMapInfo::map_regions(int regions[], int num_regions, char* 
   }
 
   header()->set_mapped_base_address(header()->requested_base_address() + addr_delta);
-  if (addr_delta != 0 && !relocate_pointers(addr_delta)) {
+  if (addr_delta != 0 && !relocate_pointers_in_core_regions(addr_delta)) {
     return MAP_ARCHIVE_OTHER_FAILURE;
   }
 
@@ -1687,12 +1687,14 @@ char* FileMapInfo::map_bitmap_region() {
   return bitmap_base;
 }
 
-bool FileMapInfo::relocate_pointers(intx addr_delta) {
+// This is called when we cannot map the archive at the default base address (usually 0x800000000).
+// We relocate all pointers in the 3 core regions (mc, ro, rw).
+bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
   log_debug(cds, reloc)("runtime archive relocation start");
   char* bitmap_base = map_bitmap_region();
 
   if (bitmap_base == NULL) {
-    return false;
+    return false; // OOM, or CRC check failure
   } else {
     size_t ptrmap_size_in_bits = header()->ptrmap_size_in_bits();
     log_debug(cds, reloc)("mapped relocation bitmap @ " INTPTR_FORMAT " (" SIZE_FORMAT " bits)",

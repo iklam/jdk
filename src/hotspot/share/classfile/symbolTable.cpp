@@ -610,7 +610,7 @@ void SymbolTable::write_to_archive(GrowableArray<Symbol*>* symbols) {
   if (!DynamicDumpSharedSpaces) {
     _shared_table.reset();
     writer.dump(&_shared_table, "symbol");
-
+#if 0
     // Verify the written shared table is correct -- at this point,
     // vmSymbols has already been relocated to point to the archived
     // version of the Symbols.
@@ -619,6 +619,7 @@ void SymbolTable::write_to_archive(GrowableArray<Symbol*>* symbols) {
     int len = sym->utf8_length();
     unsigned int hash = hash_symbol(name, len, _alt_hash);
     assert(sym == _shared_table.lookup(name, hash, len), "sanity");
+#endif
   } else {
     _dynamic_shared_table.reset();
     writer.dump(&_dynamic_shared_table, "symbol");

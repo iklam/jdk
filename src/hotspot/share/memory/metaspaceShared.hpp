@@ -132,9 +132,9 @@ class MetaspaceShared : AllStatic {
   static void print_on(outputStream* st);
 
   // Delta of this object from SharedBaseAddress
-  static uintx object_delta_uintx(void* obj);
+  static uintx object_delta_uintx(void* obj);  // FIXME -- move to archiveBuilder
 
-  static u4 object_delta_u4(void* obj) {
+  static u4 object_delta_u4(void* obj) { // FIXME -- move to archiveBuilder
     // offset is guaranteed to be less than MAX_SHARED_DELTA in DumpRegion::expand_top_to()
     uintx deltax = object_delta_uintx(obj);
     guarantee(deltax <= MAX_SHARED_DELTA, "must be 32-bit offset");

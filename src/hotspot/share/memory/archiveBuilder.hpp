@@ -28,6 +28,7 @@
 #include "memory/archiveUtils.hpp"
 #include "memory/metaspaceClosure.hpp"
 #include "oops/klass.hpp"
+#include "runtime/os.hpp"
 #include "utilities/bitMap.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/hashtable.hpp"
@@ -146,6 +147,7 @@ private:
   DumpRegion* _mc_region;
   DumpRegion* _rw_region;
   DumpRegion* _ro_region;
+  CHeapBitMap _ptrmap; // FIXME rename
 
   SourceObjList _rw_src_objs;                 // objs to put in rw region
   SourceObjList _ro_src_objs;                 // objs to put in ro region
@@ -199,15 +201,29 @@ protected:
 
   // Conservative estimate for number of bytes needed for:
   size_t _estimated_metaspaceobj_bytes;   // all archived MetaspaceObj's.
+  size_t _estimated_hashtable_bytes;     // symbol table and dictionaries
+  size_t _estimated_trampoline_bytes;    // method entry trampolines
+
+  static const int _total_dump_regions = 3;
+
+  size_t estimate_archive_size();
+
+  static size_t reserve_alignment() {
+    return os::vm_allocation_granularity();
+  }
 
 protected:
   DumpRegion* _current_dump_space;
   address _alloc_bottom;
+  address _last_verified_top;
+  int _num_dump_regions_used;
+  size_t _other_region_used_bytes;
 
   DumpRegion* current_dump_space() const {  return _current_dump_space;  }
 
 public:
   void set_current_dump_space(DumpRegion* r) { _current_dump_space = r; }
+  address reserve_space_and_init_buffer_to_target_delta();
 
   bool is_in_buffer_space(address p) const {
     return (_alloc_bottom <= p && p < (address)current_dump_space()->top());
@@ -231,6 +247,8 @@ public:
     return (T)(address(obj) + _buffer_to_target_delta);
   }
 
+  uintx object_delta_uintx(address obj) const;
+
 public:
   ArchiveBuilder(DumpRegion* mc_region, DumpRegion* rw_region, DumpRegion* ro_region);
   ~ArchiveBuilder();
@@ -244,7 +262,7 @@ public:
 
   void dump_rw_region();
   void dump_ro_region();
-  void relocate_pointers();
+  void finish_core_regions();
   void relocate_well_known_klasses();
   void make_klasses_shareable();
   void write_cds_map_to_log(FileMapInfo* mapinfo,
@@ -285,7 +303,6 @@ public:
   void allocate_method_trampolines_for(InstanceKlass* ik);
   size_t allocate_method_trampoline_info();
   void update_method_trampolines();
-
 };
 
 #endif // SHARE_MEMORY_ARCHIVEBUILDER_HPP

@@ -176,7 +176,11 @@ ArchiveBuilder::ArchiveBuilder(DumpRegion* mc_region, DumpRegion* rw_region, Dum
   _rw_region = rw_region;
   _ro_region = ro_region;
 
+  _num_dump_regions_used = 0;
+
   _estimated_metaspaceobj_bytes = 0;
+  _estimated_hashtable_bytes = 0;
+  _estimated_trampoline_bytes = 0;
 }
 
 ArchiveBuilder::~ArchiveBuilder() {
@@ -193,6 +197,20 @@ ArchiveBuilder::~ArchiveBuilder() {
   delete _symbols;
   delete _special_refs;
   delete _alloc_stats;
+}
+
+uintx ArchiveBuilder::object_delta_uintx(address obj) const {
+  Arguments::assert_is_dumping_archive();
+
+  address base_address;
+  if (MetaspaceShared::is_in_shared_metaspace(obj)) {
+    base_address = address(SharedBaseAddress);
+  } else {
+    assert(is_in_buffer_space(obj), "must be");
+    base_address = _alloc_bottom; // FIXME for dynamic archive
+  }
+  uintx deltax = address(obj) - base_address;
+  return deltax;
 }
 
 class GatherKlassesAndSymbols : public UniqueMetaspaceClosure {
@@ -238,6 +256,10 @@ bool ArchiveBuilder::gather_klass_and_symbol(MetaspaceClosure::Ref* ref, bool re
 
   int bytes = ref->size() * BytesPerWord;
   _estimated_metaspaceobj_bytes += align_up(bytes, SharedSpaceObjectAlignment);
+
+  if (DumpSharedSpaces) {
+    _estimated_metaspaceobj_bytes += 10 * 1024 * 1024; // FIX -- need to estimate the archived modules stuff
+  }
 
   return true; // recurse
 }
@@ -568,8 +590,8 @@ void ArchiveBuilder::relocate_roots() {
   doit.finish();
 }
 
-void ArchiveBuilder::relocate_pointers() {
-  log_info(cds)("Relocating embedded pointers ... ");
+void ArchiveBuilder::finish_core_regions() {
+  log_info(cds)("Relocating embedded pointers in core regions ... ");
   relocate_embedded_pointers(&_rw_src_objs);
   relocate_embedded_pointers(&_ro_src_objs);
   update_special_refs();

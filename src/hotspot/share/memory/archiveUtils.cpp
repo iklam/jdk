@@ -149,12 +149,14 @@ char* DumpRegion::expand_top_to(char* newtop) {
     ShouldNotReachHere();
   }
 
+  // FIXME -- add check in ArchiveBuilder::reserve_space_and_init_buffer_to_target_delta
+#if 0
   if (_rs == MetaspaceShared::shared_rs()) {
     uintx delta;
     if (DynamicDumpSharedSpaces) {
-      delta = DynamicArchive::object_delta_uintx(newtop);
+      delta = DynamicArchive::object_delta_uintx(newtop); // obsolete!
     } else {
-      delta = MetaspaceShared::object_delta_uintx(newtop);
+      delta = MetaspaceShared::object_delta_uintx(newtop); // obsolete!
     }
     if (delta > MAX_SHARED_DELTA) {
       // This is just a sanity check and should not appear in any real world usage. This
@@ -164,6 +166,7 @@ char* DumpRegion::expand_top_to(char* newtop) {
                                     "Please reduce the number of shared classes.");
     }
   }
+#endif
 
   MetaspaceShared::commit_to(_rs, _vs, newtop);
   _top = newtop;

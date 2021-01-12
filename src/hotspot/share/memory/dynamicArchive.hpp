@@ -92,13 +92,6 @@ public:
     return (T)original_to_buffer_impl(address(obj));
   }
 
-  // Delta of this object from SharedBaseAddress
-  static uintx object_delta_uintx(void* buff_obj);
-
-  // Does obj point to an address inside the runtime target space of the dynamic
-  // archive?
-  static bool is_in_target_space(void *obj);
-
   static bool is_mapped() { return FileMapInfo::dynamic_info() != NULL; }
   static bool validate(FileMapInfo* dynamic_info);
 };
