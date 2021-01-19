@@ -241,7 +241,7 @@ private:
 
 public:
   VM_ChangeSingleStep(bool on);
-  VMOp_Type type() const                         { return VMOp_ChangeSingleStep; }
+  VMOp_Type type() const                         { return VMOp_Type::ChangeSingleStep; }
   bool allow_nested_vm_operations() const        { return true; }
   void doit();   // method definition is after definition of JvmtiEventControllerPrivate because of scoping
 };

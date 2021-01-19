@@ -1050,7 +1050,7 @@ public:
     _out = out;
   }
 
-  virtual VMOp_Type type() const { return VMOp_DumpTouchedMethods; }
+  virtual VMOp_Type type() const { return VMOp_Type::DumpTouchedMethods; }
 
   virtual void doit() {
     Method::print_touched_methods(_out);

@@ -890,7 +890,7 @@ class VM_HeapIterateOperation: public VM_Operation {
  public:
   VM_HeapIterateOperation(ObjectClosure* blk) { _blk = blk; }
 
-  VMOp_Type type() const { return VMOp_HeapIterateOperation; }
+  VMOp_Type type() const { return VMOp_Type::HeapIterateOperation; }
   void doit() {
     // allows class files maps to be cached during iteration
     ClassFieldMapCacheMark cm;
@@ -1185,7 +1185,7 @@ class VM_JvmtiPostObjectFree: public VM_Operation {
   JvmtiTagMap* _tag_map;
  public:
   VM_JvmtiPostObjectFree(JvmtiTagMap* tag_map) : _tag_map(tag_map) {}
-  VMOp_Type type() const { return VMOp_Cleanup; }
+  VMOp_Type type() const { return VMOp_Type::Cleanup; }
   void doit() {
     _tag_map->remove_dead_entries(true /* post_object_free */);
   }
@@ -2426,7 +2426,7 @@ class VM_HeapWalkOperation: public VM_Operation {
 
   ~VM_HeapWalkOperation();
 
-  VMOp_Type type() const { return VMOp_HeapWalkOperation; }
+  VMOp_Type type() const { return VMOp_Type::HeapWalkOperation; }
   void doit();
 };
 

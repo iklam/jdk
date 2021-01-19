@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -37,7 +37,7 @@ public:
   Semaphore* _test_complete;
   VM_StopSafepoint(Semaphore* running, Semaphore* wait_for) :
     _running(running), _test_complete(wait_for) {}
-  VMOp_Type type() const          { return VMOp_None; }
+  VMOp_Type type() const          { return VMOp_Type::None; }
   bool evaluate_at_safepoint() const { return false; }
   void doit()                     { _running->signal(); _test_complete->wait(); }
 };

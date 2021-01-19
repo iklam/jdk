@@ -37,6 +37,7 @@
 #include "runtime/thread.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/vframe.hpp"
+#include "runtime/vmOperations.hpp"
 #include "runtime/vmThread.hpp"
 #include "utilities/preserveException.hpp"
 
@@ -234,6 +235,9 @@ void InterfaceSupport::verify_last_frame() {
 
 #endif // ASSERT
 
+void InterfaceSupport::block_if_vm_exited() {
+  VM_Exit::block_if_vm_exited();
+}
 
 void InterfaceSupport_init() {
 #ifdef ASSERT

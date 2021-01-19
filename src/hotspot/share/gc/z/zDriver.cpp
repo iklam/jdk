@@ -160,7 +160,7 @@ static bool should_boost_worker_threads() {
 class VM_ZMarkStart : public VM_ZOperation {
 public:
   virtual VMOp_Type type() const {
-    return VMOp_ZMarkStart;
+    return VMOp_Type::ZMarkStart;
   }
 
   virtual bool needs_inactive_gc_locker() const {
@@ -189,7 +189,7 @@ public:
 class VM_ZMarkEnd : public VM_ZOperation {
 public:
   virtual VMOp_Type type() const {
-    return VMOp_ZMarkEnd;
+    return VMOp_Type::ZMarkEnd;
   }
 
   virtual bool do_operation() {
@@ -202,7 +202,7 @@ public:
 class VM_ZRelocateStart : public VM_ZOperation {
 public:
   virtual VMOp_Type type() const {
-    return VMOp_ZRelocateStart;
+    return VMOp_Type::ZRelocateStart;
   }
 
   virtual bool needs_inactive_gc_locker() const {
@@ -220,7 +220,7 @@ public:
 class VM_ZVerify : public VM_Operation {
 public:
   virtual VMOp_Type type() const {
-    return VMOp_ZVerify;
+    return VMOp_Type::ZVerify;
   }
 
   virtual bool skip_thread_oop_barriers() const {

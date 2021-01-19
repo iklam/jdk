@@ -28,8 +28,9 @@
 #include "runtime/perfData.hpp"
 #include "runtime/thread.hpp"
 #include "runtime/task.hpp"
-#include "runtime/vmOperations.hpp"
+#include "utilities/vmEnums.hpp"
 
+class VM_Operation;
 // VM operation timeout handling: warn or abort the VM when VM operation takes
 // too long. Periodic tasks do not participate in safepoint protocol, and therefore
 // can fire when application threads are stopped.
@@ -104,11 +105,14 @@ class VMThread: public NamedThread {
     return _cur_vm_operation;
   }
 
-  static VM_Operation::VMOp_Type vm_op_type()     {
+  static VMOp_Type vm_op_type();
+#if 0
+     {
     VM_Operation* op = vm_operation();
     assert(op != NULL, "sanity");
     return op->type();
   }
+#endif
 
   // Returns the single instance of VMThread.
   static VMThread* vm_thread()                    { return _vm_thread; }

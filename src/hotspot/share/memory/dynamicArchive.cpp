@@ -547,7 +547,7 @@ class VM_PopulateDynamicDumpSharedSpace: public VM_GC_Sync_Operation {
   DynamicArchiveBuilder* _builder;
 public:
   VM_PopulateDynamicDumpSharedSpace(DynamicArchiveBuilder* builder) : VM_GC_Sync_Operation(), _builder(builder) {}
-  VMOp_Type type() const { return VMOp_PopulateDumpSharedSpace; }
+  VMOp_Type type() const { return VMOp_Type::PopulateDumpSharedSpace; }
   void doit() {
     ResourceMark rm;
     if (SystemDictionaryShared::empty_dumptime_table()) {

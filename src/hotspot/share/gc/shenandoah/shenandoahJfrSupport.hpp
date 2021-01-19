@@ -30,7 +30,7 @@
 class VM_ShenandoahSendHeapRegionInfoEvents : public VM_Operation {
 public:
   virtual void doit();
-  virtual VMOp_Type type() const { return VMOp_HeapIterateOperation; }
+  virtual VMOp_Type type() const { return VMOp_Type::HeapIterateOperation; }
 };
 
 class ShenandoahJFRSupport {

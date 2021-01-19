@@ -537,7 +537,7 @@ class VM_RedefineClasses: public VM_Operation {
   VM_RedefineClasses(jint class_count,
                      const jvmtiClassDefinition *class_defs,
                      JvmtiClassLoadKind class_load_kind);
-  VMOp_Type type() const { return VMOp_RedefineClasses; }
+  VMOp_Type type() const { return VMOp_Type::RedefineClasses; }
   bool doit_prologue();
   void doit();
   void doit_epilogue();

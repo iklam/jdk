@@ -33,6 +33,7 @@
 #include "runtime/stackWatermarkSet.hpp"
 #include "runtime/task.hpp"
 #include "runtime/thread.hpp"
+#include "runtime/vmOperations.hpp"
 #include "runtime/vmThread.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/filterQueue.inline.hpp"
@@ -271,7 +272,7 @@ class VM_HandshakeAllThreads: public VM_Handshake {
     log_handshake_info(start_time_ns, _op->name(), number_of_threads_issued, emitted_handshakes_executed);
   }
 
-  VMOp_Type type() const { return VMOp_HandshakeAllThreads; }
+  VMOp_Type type() const { return VMOp_Type::HandshakeAllThreads; }
 };
 
 void HandshakeOperation::do_handshake(JavaThread* thread) {

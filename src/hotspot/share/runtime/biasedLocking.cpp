@@ -62,7 +62,7 @@ static void enable_biased_locking() {
 class VM_EnableBiasedLocking: public VM_Operation {
  public:
   VM_EnableBiasedLocking() {}
-  VMOp_Type type() const          { return VMOp_EnableBiasedLocking; }
+  VMOp_Type type() const          { return VMOp_Type::EnableBiasedLocking; }
 
   void doit() {
     // Iterate the class loader data dictionaries enabling biased locking for all
@@ -484,7 +484,7 @@ public:
     , _bulk_rebias(bulk_rebias)
     , _safepoint_id(0) {}
 
-  virtual VMOp_Type type() const { return VMOp_BulkRevokeBias; }
+  virtual VMOp_Type type() const { return VMOp_Type::BulkRevokeBias; }
 
   virtual void doit() {
     BiasedLocking::bulk_revoke_at_safepoint((*_obj)(), _bulk_rebias, _requesting_thread);

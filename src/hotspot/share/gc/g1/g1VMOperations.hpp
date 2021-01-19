@@ -39,7 +39,7 @@ public:
                    GCCause::Cause cause) :
     VM_GC_Operation(gc_count_before, cause, full_gc_count_before, true),
     _gc_succeeded(false) { }
-  virtual VMOp_Type type() const { return VMOp_G1CollectFull; }
+  virtual VMOp_Type type() const { return VMOp_Type::G1CollectFull; }
   virtual void doit();
   bool gc_succeeded() const { return _gc_succeeded; }
 };
@@ -56,7 +56,7 @@ public:
   VM_G1TryInitiateConcMark(uint gc_count_before,
                            GCCause::Cause gc_cause,
                            double target_pause_time_ms);
-  virtual VMOp_Type type() const { return VMOp_G1TryInitiateConcMark; }
+  virtual VMOp_Type type() const { return VMOp_Type::G1TryInitiateConcMark; }
   virtual bool doit_prologue();
   virtual void doit();
   bool transient_failure() const { return _transient_failure; }
@@ -75,7 +75,7 @@ public:
                             uint           gc_count_before,
                             GCCause::Cause gc_cause,
                             double         target_pause_time_ms);
-  virtual VMOp_Type type() const { return VMOp_G1CollectForAllocation; }
+  virtual VMOp_Type type() const { return VMOp_Type::G1CollectForAllocation; }
   virtual void doit();
   bool gc_succeeded() const { return _gc_succeeded; }
 };
@@ -89,7 +89,7 @@ class VM_G1Concurrent : public VM_Operation {
 public:
   VM_G1Concurrent(VoidClosure* cl, const char* message) :
     _cl(cl), _message(message), _gc_id(GCId::current()) { }
-  virtual VMOp_Type type() const { return VMOp_G1Concurrent; }
+  virtual VMOp_Type type() const { return VMOp_Type::G1Concurrent; }
   virtual void doit();
   virtual bool doit_prologue();
   virtual void doit_epilogue();

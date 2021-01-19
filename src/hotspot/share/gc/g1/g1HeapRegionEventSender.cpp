@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
 #include "gc/g1/heapRegion.hpp"
 #include "g1HeapRegionEventSender.hpp"
 #include "jfr/jfrEvents.hpp"
+#include "runtime/vmOperations.hpp"
 #include "runtime/vmThread.hpp"
 
 class DumpEventInfoClosure : public HeapRegionClosure {
@@ -47,7 +48,7 @@ class VM_G1SendHeapRegionInfoEvents : public VM_Operation {
     DumpEventInfoClosure c;
     G1CollectedHeap::heap()->heap_region_iterate(&c);
   }
-  virtual VMOp_Type type() const { return VMOp_HeapIterateOperation; }
+  virtual VMOp_Type type() const { return VMOp_Type::HeapIterateOperation; }
 };
 
 void G1HeapRegionEventSender::send_events() {

@@ -161,13 +161,13 @@ public:
     VM_Operation* vm_op = VMThread::vm_operation();
     if (vm_op == NULL) return false;
 
-    VM_Operation::VMOp_Type type = vm_op->type();
-    return type == VM_Operation::VMOp_ShenandoahInitMark ||
-           type == VM_Operation::VMOp_ShenandoahFinalMarkStartEvac ||
-           type == VM_Operation::VMOp_ShenandoahInitUpdateRefs ||
-           type == VM_Operation::VMOp_ShenandoahFinalUpdateRefs ||
-           type == VM_Operation::VMOp_ShenandoahFullGC ||
-           type == VM_Operation::VMOp_ShenandoahDegeneratedGC;
+    VMOp_Type type = vm_op->type();
+    return type == VMOp_Type::ShenandoahInitMark ||
+           type == VMOp_Type::ShenandoahFinalMarkStartEvac ||
+           type == VMOp_Type::ShenandoahInitUpdateRefs ||
+           type == VMOp_Type::ShenandoahFinalUpdateRefs ||
+           type == VMOp_Type::ShenandoahFullGC ||
+           type == VMOp_Type::ShenandoahDegeneratedGC;
   }
 };
 

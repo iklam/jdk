@@ -33,7 +33,6 @@
 #include "runtime/safepointMechanism.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/thread.hpp"
-#include "runtime/vmOperations.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/preserveException.hpp"
@@ -46,8 +45,8 @@
 
 
 class InterfaceSupport: AllStatic {
-# ifdef ASSERT
  public:
+# ifdef ASSERT
   static unsigned int _scavenge_alot_counter;
   static unsigned int _fullgc_alot_counter;
   static int _fullgc_alot_invocation;
@@ -64,6 +63,7 @@ class InterfaceSupport: AllStatic {
   static void verify_stack();
   static void verify_last_frame();
 # endif
+  static void block_if_vm_exited();
 };
 
 
@@ -461,7 +461,7 @@ extern "C" {                                                         \
 #define JVM_LEAF(result_type, header)                                \
 extern "C" {                                                         \
   result_type JNICALL header {                                       \
-    VM_Exit::block_if_vm_exited();                                   \
+    InterfaceSupport::block_if_vm_exited();                          \
     VM_LEAF_BASE(result_type, header)
 
 

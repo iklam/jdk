@@ -66,6 +66,7 @@
 #include "runtime/thread.inline.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/timerTrace.hpp"
+#include "runtime/vmOperations.hpp"
 #include "services/runtimeService.hpp"
 #include "utilities/events.hpp"
 #include "utilities/macros.hpp"
@@ -1005,10 +1006,10 @@ jlong SafepointTracing::_last_app_time_ns = 0;
 int SafepointTracing::_nof_threads = 0;
 int SafepointTracing::_nof_running = 0;
 int SafepointTracing::_page_trap = 0;
-VM_Operation::VMOp_Type SafepointTracing::_current_type;
+VMOp_Type SafepointTracing::_current_type;
 jlong     SafepointTracing::_max_sync_time = 0;
 jlong     SafepointTracing::_max_vmop_time = 0;
-uint64_t  SafepointTracing::_op_count[VM_Operation::VMOp_Terminating] = {0};
+uint64_t  SafepointTracing::_op_count[as_int(VMOp_Type::Terminating)] = {0};
 
 void SafepointTracing::init() {
   // Application start
@@ -1067,12 +1068,14 @@ void SafepointTracing::statistics_exit_log() {
   if (!log_is_enabled(Info, safepoint, stats)) {
     return;
   }
-  for (int index = 0; index < VM_Operation::VMOp_Terminating; index++) {
+#if 0 // FIXME
+  for (int index = 0; index < VMOp_Type::Terminating; index++) {
     if (_op_count[index] != 0) {
       log_info(safepoint, stats)("%-28s" UINT64_FORMAT_W(10), VM_Operation::name(index),
                _op_count[index]);
     }
   }
+#endif
 
   log_info(safepoint, stats)("Maximum sync time  " INT64_FORMAT" ns",
                               (int64_t)(_max_sync_time));
@@ -1081,8 +1084,8 @@ void SafepointTracing::statistics_exit_log() {
                               (int64_t)(_max_vmop_time));
 }
 
-void SafepointTracing::begin(VM_Operation::VMOp_Type type) {
-  _op_count[type]++;
+void SafepointTracing::begin(VMOp_Type type) {
+  _op_count[as_int(type)]++;
   _current_type = type;
 
   // update the time stamp to begin recording safepoint time

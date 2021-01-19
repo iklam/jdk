@@ -34,7 +34,7 @@
 // initiated by a Java thread but that must
 // take place in the VMThread.
 
-#define VM_OP_ENUM(type)   VMOp_##type,
+#define VM_OP_ENUM(type)   type,
 
 // Note: When new VM_XXX comes up, add 'XXX' to the template table.
 #define VM_OPS_DO(template)                       \
@@ -113,13 +113,23 @@
   template(JFROldObject)                          \
   template(JvmtiPostObjectFree)
 
-class VM_Operation : public StackObj {
- public:
-  enum VMOp_Type {
-    VM_OPS_DO(VM_OP_ENUM)
-    VMOp_Terminating
-  };
+enum class VMOp_Type : int {
+  VM_OPS_DO(VM_OP_ENUM)
+  Terminating
+};
 
+constexpr int as_int(VMOp_Type t) {
+  // FIXME range check
+  return static_cast<int>(t);
+}
+
+template<typename T, ENABLE_IF(std::is_integral<T>::value)>
+constexpr VMOp_Type as_VMOp_Type(T i) {
+  // FIXME range check
+  return static_cast<VMOp_Type>(i);
+}
+
+class VM_Operation : public StackObj {
  private:
   Thread*         _calling_thread;
 
@@ -161,10 +171,10 @@ class VM_Operation : public StackObj {
 
   // Debugging
   virtual void print_on_error(outputStream* st) const;
-  virtual const char* name() const  { return _names[type()]; }
-  static const char* name(int type) {
-    assert(type >= 0 && type < VMOp_Terminating, "invalid VM operation type");
-    return _names[type];
+  virtual const char* name() const  { return _names[static_cast<int>(type())]; }
+  static const char* name(VMOp_Type type) {
+    //assert(type >= 0 && type < static_cast<int>(VMOp_Type::Terminating), "invalid VM operation type"); // FIXME
+    return _names[static_cast<int>(type)];
   }
 #ifndef PRODUCT
   void print_on(outputStream* st) const { print_on_error(st); }
@@ -176,13 +186,13 @@ class VM_None: public VM_Operation {
  public:
   VM_None(const char* reason) : _reason(reason) {}
   const char* name() const { return _reason; }
-  VMOp_Type type() const { return VMOp_None; }
+  VMOp_Type type() const { return VMOp_Type::None; }
   void doit() {};
 };
 
 class VM_Cleanup: public VM_Operation {
  public:
-  VMOp_Type type() const { return VMOp_Cleanup; }
+  VMOp_Type type() const { return VMOp_Type::Cleanup; }
   void doit() {};
 };
 
@@ -192,32 +202,32 @@ class VM_ClearICs: public VM_Operation {
  public:
   VM_ClearICs(bool preserve_static_stubs) { _preserve_static_stubs = preserve_static_stubs; }
   void doit();
-  VMOp_Type type() const { return VMOp_ClearICs; }
+  VMOp_Type type() const { return VMOp_Type::ClearICs; }
 };
 
 // empty vm op, evaluated just to force a safepoint
 class VM_ForceSafepoint: public VM_Operation {
  public:
   void doit()         {}
-  VMOp_Type type() const { return VMOp_ForceSafepoint; }
+  VMOp_Type type() const { return VMOp_Type::ForceSafepoint; }
 };
 
 // empty vm op, when forcing a safepoint to suspend a thread
 class VM_ThreadSuspend: public VM_ForceSafepoint {
  public:
-  VMOp_Type type() const { return VMOp_ThreadSuspend; }
+  VMOp_Type type() const { return VMOp_Type::ThreadSuspend; }
 };
 
 // empty vm op, when forcing a safepoint to suspend threads from jvmti
 class VM_ThreadsSuspendJVMTI: public VM_ForceSafepoint {
  public:
-  VMOp_Type type() const { return VMOp_ThreadsSuspendJVMTI; }
+  VMOp_Type type() const { return VMOp_Type::ThreadsSuspendJVMTI; }
 };
 
 // empty vm op, when forcing a safepoint due to inline cache buffers being full
 class VM_ICBufferFull: public VM_ForceSafepoint {
  public:
-  VMOp_Type type() const { return VMOp_ICBufferFull; }
+  VMOp_Type type() const { return VMOp_Type::ICBufferFull; }
   virtual bool skip_thread_oop_barriers() const { return true; }
 };
 
@@ -226,7 +236,7 @@ class VM_ICBufferFull: public VM_ForceSafepoint {
 // Typically also need to transition the gtest thread from native to VM.
 class VM_GTestExecuteAtSafepoint: public VM_Operation {
  public:
-  VMOp_Type type() const                         { return VMOp_GTestExecuteAtSafepoint; }
+  VMOp_Type type() const                         { return VMOp_Type::GTestExecuteAtSafepoint; }
 
  protected:
   VM_GTestExecuteAtSafepoint() {}
@@ -235,7 +245,7 @@ class VM_GTestExecuteAtSafepoint: public VM_Operation {
 class VM_CleanClassLoaderDataMetaspaces : public VM_Operation {
  public:
   VM_CleanClassLoaderDataMetaspaces() {}
-  VMOp_Type type() const                         { return VMOp_CleanClassLoaderDataMetaspaces; }
+  VMOp_Type type() const                         { return VMOp_Type::CleanClassLoaderDataMetaspaces; }
   void doit();
 };
 
@@ -251,7 +261,7 @@ class VM_DeoptimizeFrame: public VM_Operation {
   VM_DeoptimizeFrame(JavaThread* thread, intptr_t* id, int reason);
 
  public:
-  VMOp_Type type() const                         { return VMOp_DeoptimizeFrame; }
+  VMOp_Type type() const                         { return VMOp_Type::DeoptimizeFrame; }
   void doit();
   bool allow_nested_vm_operations() const        { return true;  }
 };
@@ -262,7 +272,7 @@ class VM_DeoptimizeAll: public VM_Operation {
   Klass* _dependee;
  public:
   VM_DeoptimizeAll() {}
-  VMOp_Type type() const                         { return VMOp_DeoptimizeAll; }
+  VMOp_Type type() const                         { return VMOp_Type::DeoptimizeAll; }
   void doit();
   bool allow_nested_vm_operations() const        { return true; }
 };
@@ -271,7 +281,7 @@ class VM_DeoptimizeAll: public VM_Operation {
 class VM_ZombieAll: public VM_Operation {
  public:
   VM_ZombieAll() {}
-  VMOp_Type type() const                         { return VMOp_ZombieAll; }
+  VMOp_Type type() const                         { return VMOp_Type::ZombieAll; }
   void doit();
   bool allow_nested_vm_operations() const        { return true; }
 };
@@ -290,7 +300,7 @@ class VM_PrintThreads: public VM_Operation {
     : _out(out), _print_concurrent_locks(print_concurrent_locks), _print_extended_info(print_extended_info)
   {}
   VMOp_Type type() const {
-    return VMOp_PrintThreads;
+    return VMOp_Type::PrintThreads;
   }
   void doit();
   bool doit_prologue();
@@ -303,7 +313,7 @@ class VM_PrintJNI: public VM_Operation {
  public:
   VM_PrintJNI()                         { _out = tty; }
   VM_PrintJNI(outputStream* out)        { _out = out; }
-  VMOp_Type type() const                { return VMOp_PrintJNI; }
+  VMOp_Type type() const                { return VMOp_Type::PrintJNI; }
   void doit();
 };
 
@@ -318,7 +328,7 @@ class VM_PrintMetadata : public VM_Operation {
     : _out(out), _scale(scale), _flags(flags)
   {};
 
-  VMOp_Type type() const  { return VMOp_PrintMetadata; }
+  VMOp_Type type() const  { return VMOp_Type::PrintMetadata; }
   void doit();
 };
 
@@ -337,7 +347,7 @@ class VM_FindDeadlocks: public VM_Operation {
   ~VM_FindDeadlocks();
 
   DeadlockCycle* result()      { return _deadlocks; };
-  VMOp_Type type() const       { return VMOp_FindDeadlocks; }
+  VMOp_Type type() const       { return VMOp_Type::FindDeadlocks; }
   void doit();
 };
 
@@ -369,7 +379,7 @@ class VM_ThreadDump : public VM_Operation {
                 bool with_locked_monitors,
                 bool with_locked_synchronizers);
 
-  VMOp_Type type() const { return VMOp_ThreadDump; }
+  VMOp_Type type() const { return VMOp_Type::ThreadDump; }
   void doit();
   bool doit_prologue();
   void doit_epilogue();
@@ -395,7 +405,7 @@ class VM_Exit: public VM_Operation {
       wait_if_vm_exited();
     }
   }
-  VMOp_Type type() const { return VMOp_Exit; }
+  VMOp_Type type() const { return VMOp_Type::Exit; }
   void doit();
 };
 
@@ -405,7 +415,7 @@ class VM_PrintCompileQueue: public VM_Operation {
 
  public:
   VM_PrintCompileQueue(outputStream* st) : _out(st) {}
-  VMOp_Type type() const { return VMOp_PrintCompileQueue; }
+  VMOp_Type type() const { return VMOp_Type::PrintCompileQueue; }
   void doit();
 };
 
@@ -421,7 +431,7 @@ class VM_PrintClassHierarchy: public VM_Operation {
   VM_PrintClassHierarchy(outputStream* st, bool print_interfaces, bool print_subclasses, char* classname) :
     _out(st), _print_interfaces(print_interfaces), _print_subclasses(print_subclasses),
     _classname(classname) {}
-  VMOp_Type type() const { return VMOp_PrintClassHierarchy; }
+  VMOp_Type type() const { return VMOp_Type::PrintClassHierarchy; }
   void doit();
 };
 #endif // INCLUDE_SERVICES

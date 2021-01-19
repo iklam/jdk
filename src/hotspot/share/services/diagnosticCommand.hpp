@@ -31,6 +31,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/os.hpp"
+#include "runtime/vmOperations.hpp"
 #include "runtime/vmThread.hpp"
 #include "services/diagnosticArgument.hpp"
 #include "services/diagnosticCommand.hpp"
@@ -779,7 +780,7 @@ public:
     _verbose = verbose;
   }
 
-  virtual VMOp_Type type() const { return VMOp_DumpHashtable; }
+  virtual VMOp_Type type() const { return VMOp_Type::DumpHashtable; }
 
   virtual void doit() {
     switch (_which) {

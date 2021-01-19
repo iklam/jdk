@@ -31,6 +31,7 @@
 #include "memory/allocation.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/safepoint.hpp"
+#include "runtime/vmOperations.hpp"
 #include "oops/reflectionAccessorImplKlassHelper.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
@@ -518,7 +519,7 @@ public:
   {}
 
   VMOp_Type type() const {
-    return VMOp_ClassLoaderHierarchyOperation;
+    return VMOp_Type::ClassLoaderHierarchyOperation;
   }
 
   void doit() {

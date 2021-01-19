@@ -49,7 +49,7 @@
 
 #define VM_OP_NAME_INITIALIZE(name) #name,
 
-const char* VM_Operation::_names[VM_Operation::VMOp_Terminating] = \
+const char* VM_Operation::_names[static_cast<int>(VMOp_Type::Terminating)] = \
   { VM_OPS_DO(VM_OP_NAME_INITIALIZE) };
 
 void VM_Operation::set_calling_thread(Thread* thread) {

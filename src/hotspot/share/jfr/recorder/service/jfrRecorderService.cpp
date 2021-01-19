@@ -372,7 +372,7 @@ class JfrVMOperation : public VM_Operation {
  public:
   JfrVMOperation(Instance& instance) : _instance(instance) {}
   void doit() { (_instance.*func)(); }
-  VMOp_Type type() const { return VMOp_JFRCheckpoint; }
+  VMOp_Type type() const { return VMOp_Type::JFRCheckpoint; }
 };
 
 JfrRecorderService::JfrRecorderService() :

@@ -1633,7 +1633,7 @@ class VM_ReportJavaOutOfMemory : public VM_Operation {
   const char* _message;
  public:
   VM_ReportJavaOutOfMemory(const char* message) { _message = message; }
-  VMOp_Type type() const                        { return VMOp_ReportJavaOutOfMemory; }
+  VMOp_Type type() const                        { return VMOp_Type::ReportJavaOutOfMemory; }
   void doit();
 };
 

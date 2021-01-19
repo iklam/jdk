@@ -252,11 +252,11 @@ void CodeBlobTypeConstant::serialize(JfrCheckpointWriter& writer) {
 };
 
 void VMOperationTypeConstant::serialize(JfrCheckpointWriter& writer) {
-  static const u4 nof_entries = VM_Operation::VMOp_Terminating;
+  static const u4 nof_entries = static_cast<u4>(VMOp_Type::Terminating);
   writer.write_count(nof_entries);
   for (u4 i = 0; i < nof_entries; ++i) {
     writer.write_key(i);
-    writer.write(VM_Operation::name(VM_Operation::VMOp_Type(i)));
+    writer.write(VM_Operation::name(as_VMOp_Type(i)));
   }
 }
 

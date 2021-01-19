@@ -63,6 +63,7 @@
 #include "runtime/threadCritical.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/timer.hpp"
+#include "runtime/vmOperations.hpp"
 #include "runtime/vm_version.hpp"
 #include "signals_posix.hpp"
 #include "semaphore_posix.hpp"
@@ -1658,7 +1659,7 @@ class VM_LinuxDllLoad: public VM_Operation {
  public:
   VM_LinuxDllLoad(const char *fn, char *ebuf, int ebuflen) :
     _filename(fn), _ebuf(ebuf), _ebuflen(ebuflen), _lib(NULL) {}
-  VMOp_Type type() const { return VMOp_LinuxDllLoad; }
+  VMOp_Type type() const { return VMOp_Type::LinuxDllLoad; }
   void doit() {
     _lib = os::Linux::dll_load_in_vmthread(_filename, _ebuf, _ebuflen);
     os::Linux::_stack_is_executable = true;

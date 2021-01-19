@@ -609,7 +609,7 @@ public:
 
   bool skip_operation() const { return false; }
 
-  VMOp_Type type() const { return VMOp_PopulateDumpSharedSpace; }
+  VMOp_Type type() const { return VMOp_Type::PopulateDumpSharedSpace; }
   void doit();   // outline because gdb sucks
   bool allow_nested_vm_operations() const { return true; }
 }; // class VM_PopulateDumpSharedSpace

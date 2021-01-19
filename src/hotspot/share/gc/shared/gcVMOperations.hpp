@@ -101,7 +101,7 @@ public:
 
 class VM_Verify : public VM_GC_Sync_Operation {
  public:
-  VMOp_Type type() const { return VMOp_Verify; }
+  VMOp_Type type() const { return VMOp_Type::Verify; }
   void doit();
 };
 
@@ -174,7 +174,7 @@ class VM_GC_HeapInspection: public VM_GC_Operation {
                     _parallel_thread_num(parallel_thread_num) {}
 
   ~VM_GC_HeapInspection() {}
-  virtual VMOp_Type type() const { return VMOp_GC_HeapInspection; }
+  virtual VMOp_Type type() const { return VMOp_Type::GC_HeapInspection; }
   virtual bool skip_operation() const;
   virtual void doit();
  protected:
@@ -206,7 +206,7 @@ class VM_GenCollectForAllocation : public VM_CollectForAllocation {
     assert(word_size != 0, "An allocation should always be requested with this operation.");
   }
   ~VM_GenCollectForAllocation()  {}
-  virtual VMOp_Type type() const { return VMOp_GenCollectForAllocation; }
+  virtual VMOp_Type type() const { return VMOp_Type::GenCollectForAllocation; }
   virtual void doit();
 };
 
@@ -224,7 +224,7 @@ class VM_GenCollectFull: public VM_GC_Operation {
                       max_generation != GenCollectedHeap::YoungGen /* full */),
       _max_generation(max_generation) { }
   ~VM_GenCollectFull() {}
-  virtual VMOp_Type type() const { return VMOp_GenCollectFull; }
+  virtual VMOp_Type type() const { return VMOp_Type::GenCollectFull; }
   virtual void doit();
 };
 
@@ -243,7 +243,7 @@ class VM_CollectForMetadataAllocation: public VM_GC_Operation {
                                   uint full_gc_count_before,
                                   GCCause::Cause gc_cause);
 
-  virtual VMOp_Type type() const { return VMOp_CollectForMetadataAllocation; }
+  virtual VMOp_Type type() const { return VMOp_Type::CollectForMetadataAllocation; }
   virtual void doit();
   MetaWord* result() const       { return _result; }
 

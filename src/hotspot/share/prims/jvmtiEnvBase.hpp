@@ -431,7 +431,7 @@ public:
     _calling_thread = calling_thread;
     _info_ptr = info_ptr;
   }
-  VMOp_Type type() const { return VMOp_GetObjectMonitorUsage; }
+  VMOp_Type type() const { return VMOp_Type::GetObjectMonitorUsage; }
   jvmtiError result() { return _result; }
   void doit() {
     _result = ((JvmtiEnvBase*) _env)->get_object_monitor_usage(_calling_thread, _object, _info_ptr);
@@ -525,7 +525,7 @@ public:
         _final_thread_count(0),
         _collector(env, max_frame_count) {
   }
-  VMOp_Type type() const          { return VMOp_GetAllStackTraces; }
+  VMOp_Type type() const          { return VMOp_Type::GetAllStackTraces; }
   void doit();
   jint final_thread_count()       { return _final_thread_count; }
   jvmtiStackInfo *stack_info()    { return _collector.stack_info(); }
@@ -545,7 +545,7 @@ public:
         _thread_list(thread_list),
         _collector(env, max_frame_count) {
   }
-  VMOp_Type type() const { return VMOp_GetThreadListStackTraces; }
+  VMOp_Type type() const { return VMOp_Type::GetThreadListStackTraces; }
   void doit();
   jvmtiStackInfo *stack_info()    { return _collector.stack_info(); }
   jvmtiError result()             { return _collector.result(); }

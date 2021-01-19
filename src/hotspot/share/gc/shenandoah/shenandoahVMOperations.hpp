@@ -54,7 +54,7 @@ public:
 class VM_ShenandoahInitMark: public VM_ShenandoahOperation {
 public:
   VM_ShenandoahInitMark() : VM_ShenandoahOperation() {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahInitMark; }
+  VMOp_Type type() const               { return VMOp_Type::ShenandoahInitMark; }
   const char* name()             const { return "Shenandoah Init Marking"; }
   virtual void doit();
 };
@@ -62,7 +62,7 @@ public:
 class VM_ShenandoahFinalMarkStartEvac: public VM_ShenandoahOperation {
 public:
   VM_ShenandoahFinalMarkStartEvac() : VM_ShenandoahOperation() {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahFinalMarkStartEvac; }
+  VMOp_Type type()               const { return VMOp_Type::ShenandoahFinalMarkStartEvac; }
   const char* name()             const { return "Shenandoah Final Mark and Start Evacuation"; }
   virtual  void doit();
 };
@@ -74,7 +74,7 @@ private:
   int _point;
 public:
   VM_ShenandoahDegeneratedGC(int point) : VM_ShenandoahReferenceOperation(), _point(point) {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahDegeneratedGC; }
+  VMOp_Type type()               const { return VMOp_Type::ShenandoahDegeneratedGC; }
   const char* name()             const { return "Shenandoah Degenerated GC"; }
   virtual  void doit();
 };
@@ -84,7 +84,7 @@ private:
   GCCause::Cause _gc_cause;
 public:
   VM_ShenandoahFullGC(GCCause::Cause gc_cause) : VM_ShenandoahReferenceOperation(), _gc_cause(gc_cause) {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahFullGC; }
+  VMOp_Type type()               const { return VMOp_Type::ShenandoahFullGC; }
   const char* name()             const { return "Shenandoah Full GC"; }
   virtual void doit();
 };
@@ -92,7 +92,7 @@ public:
 class VM_ShenandoahInitUpdateRefs: public VM_ShenandoahOperation {
 public:
   VM_ShenandoahInitUpdateRefs() : VM_ShenandoahOperation() {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahInitUpdateRefs; }
+  VMOp_Type type()               const { return VMOp_Type::ShenandoahInitUpdateRefs; }
   const char* name()             const { return "Shenandoah Init Update References"; }
   virtual void doit();
 };
@@ -100,7 +100,7 @@ public:
 class VM_ShenandoahFinalUpdateRefs: public VM_ShenandoahOperation {
 public:
   VM_ShenandoahFinalUpdateRefs() : VM_ShenandoahOperation() {};
-  VM_Operation::VMOp_Type type() const { return VMOp_ShenandoahFinalUpdateRefs; }
+  VMOp_Type type()               const { return VMOp_Type::ShenandoahFinalUpdateRefs; }
   const char* name()             const { return "Shenandoah Final Update References"; }
   virtual void doit();
 };

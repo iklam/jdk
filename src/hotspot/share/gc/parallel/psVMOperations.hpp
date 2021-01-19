@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,7 +34,7 @@ class VM_ParallelGCFailedAllocation : public VM_CollectForAllocation {
   VM_ParallelGCFailedAllocation(size_t word_size, uint gc_count);
 
   virtual VMOp_Type type() const {
-    return VMOp_ParallelGCFailedAllocation;
+    return VMOp_Type::ParallelGCFailedAllocation;
   }
   virtual void doit();
 };
@@ -42,7 +42,7 @@ class VM_ParallelGCFailedAllocation : public VM_CollectForAllocation {
 class VM_ParallelGCSystemGC: public VM_GC_Operation {
  public:
   VM_ParallelGCSystemGC(uint gc_count, uint full_gc_count, GCCause::Cause gc_cause);
-  virtual VMOp_Type type() const { return VMOp_ParallelGCSystemGC; }
+  virtual VMOp_Type type() const { return VMOp_Type::ParallelGCSystemGC; }
   virtual void doit();
 };
 

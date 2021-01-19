@@ -107,7 +107,7 @@ class VM_JNIFunctionTableCopier : public VM_Operation {
     _function_table = func_tbl;
   };
 
-  VMOp_Type type() const { return VMOp_JNIFunctionTableCopier; }
+  VMOp_Type type() const { return VMOp_Type::JNIFunctionTableCopier; }
   void doit() {
     copy_jni_function_table(_function_table);
   };

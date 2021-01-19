@@ -245,12 +245,18 @@ static void post_vm_operation_event(EventExecuteVMOperation* event, VM_Operation
   assert(event->should_commit(), "invariant");
   assert(op != NULL, "invariant");
   const bool evaluate_at_safepoint = op->evaluate_at_safepoint();
-  event->set_operation(op->type());
+  event->set_operation(static_cast<u8>(op->type()));
   event->set_safepoint(evaluate_at_safepoint);
   event->set_blocking(true);
   event->set_caller(JFR_THREAD_ID(op->calling_thread()));
   event->set_safepointId(evaluate_at_safepoint ? SafepointSynchronize::safepoint_id() : 0);
   event->commit();
+}
+
+VMOp_Type VMThread::vm_op_type() {
+  VM_Operation* op = vm_operation();
+  assert(op != NULL, "sanity");
+  return op->type();
 }
 
 void VMThread::evaluate_operation(VM_Operation* op) {

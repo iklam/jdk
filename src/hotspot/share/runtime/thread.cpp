@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "runtime/thread.inline.hpp"
 #include "jvm.h"
 #include "aot/aotLoader.hpp"
 #include "classfile/classLoader.hpp"
@@ -1467,7 +1468,7 @@ class VM_JVMCIResizeCounters : public VM_Operation {
 
  public:
   VM_JVMCIResizeCounters(int new_size) : _new_size(new_size), _failed(false) { }
-  VMOp_Type type()                  const        { return VMOp_JVMCIResizeCounters; }
+  VMOp_Type type()                  const        { return VMOp_Type::JVMCIResizeCounters; }
   bool allow_nested_vm_operations() const        { return true; }
   void doit() {
     // Resize the old thread counters array

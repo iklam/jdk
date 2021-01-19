@@ -28,9 +28,9 @@
 #include "memory/allocation.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
-#include "runtime/vmOperations.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/waitBarrier.hpp"
+#include "utilities/vmEnums.hpp"
 
 //
 // Safepoint synchronization
@@ -259,17 +259,17 @@ private:
   static int _nof_running;
   static int _page_trap;
 
-  static VM_Operation::VMOp_Type _current_type;
+  static VMOp_Type _current_type;
   static jlong     _max_sync_time;
   static jlong     _max_vmop_time;
-  static uint64_t  _op_count[VM_Operation::VMOp_Terminating];
+  static uint64_t  _op_count[];
 
   static void statistics_log();
 
 public:
   static void init();
 
-  static void begin(VM_Operation::VMOp_Type type);
+  static void begin(VMOp_Type type);
   static void synchronized(int nof_threads, int nof_running, int traps);
   static void cleanup();
   static void end();

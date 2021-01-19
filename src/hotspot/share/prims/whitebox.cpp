@@ -148,7 +148,7 @@ volatile bool WhiteBox::compilation_locked = false;
 class VM_WhiteBoxOperation : public VM_Operation {
  public:
   VM_WhiteBoxOperation()                         { }
-  VMOp_Type type()                  const        { return VMOp_WhiteBoxOperation; }
+  VMOp_Type type()                  const        { return VMOp_Type::WhiteBoxOperation; }
   bool allow_nested_vm_operations() const        { return true; }
 };
 

@@ -153,7 +153,7 @@ public:
   }
 
   VMOp_Type type() const {
-    return VMOp_ClassLoaderStatsOperation;
+    return VMOp_Type::ClassLoaderStatsOperation;
   }
 
   void doit();

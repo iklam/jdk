@@ -1533,7 +1533,7 @@ class VM_HeapDumper : public VM_GC_Operation, public AbstractGangTask {
     delete _klass_map;
   }
 
-  VMOp_Type type() const { return VMOp_HeapDumper; }
+  VMOp_Type type() const { return VMOp_Type::HeapDumper; }
   void doit();
   void work(uint worker_id);
 };

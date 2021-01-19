@@ -57,6 +57,7 @@
 #include "runtime/init.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/safepointVerifiers.hpp"
+#include "runtime/vmOperations.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/copy.hpp"
 #if INCLUDE_G1GC

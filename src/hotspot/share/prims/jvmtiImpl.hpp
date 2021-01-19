@@ -293,7 +293,7 @@ public:
     assert(bp != NULL, "bp != NULL");
   }
 
-  VMOp_Type type() const { return VMOp_ChangeBreakpoints; }
+  VMOp_Type type() const { return VMOp_Type::ChangeBreakpoints; }
   void doit();
 };
 
@@ -346,7 +346,7 @@ public:
   VM_GetOrSetLocal(JavaThread* thread, JavaThread* calling_thread, jint depth,
                    int index);
 
-  VMOp_Type type() const { return VMOp_GetOrSetLocal; }
+  VMOp_Type type() const { return VMOp_Type::GetOrSetLocal; }
   jvalue value()         { return _value; }
   jvmtiError result()    { return _result; }
 
