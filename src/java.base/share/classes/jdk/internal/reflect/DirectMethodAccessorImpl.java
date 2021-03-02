@@ -48,8 +48,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             return target.invokeExact(obj, args);
         } catch (IllegalArgumentException | InvocationTargetException e) {
             throw e;
-        } catch (ClassCastException | NullPointerException e) {
+        } catch (ClassCastException e) {
             throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
+            throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Error|RuntimeException e) {
             throw e;
         } catch (Throwable e) {
@@ -98,8 +100,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 return dmh.invokeExact(obj, args);
             } catch (IllegalArgumentException | InvocationTargetException e) {
                 throw e;
-            } catch (ClassCastException | NullPointerException e) {
+            } catch (ClassCastException e) {
                 throw new IllegalArgumentException("argument type mismatch", e);
+            } catch (NullPointerException e) {
+                throw new IllegalArgumentException(e.getMessage(), e);
             } catch (Error|RuntimeException e) {
                 throw e;
             } catch (Throwable e) {

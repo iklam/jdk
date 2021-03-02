@@ -58,7 +58,9 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
             return (char) getter_C.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
             throw new InternalError(e);
@@ -107,7 +109,9 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
             setter_C.invokeExact(obj, c);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();

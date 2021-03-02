@@ -79,7 +79,9 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
             return (double) getter_D.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
             throw new InternalError(e);
@@ -139,7 +141,9 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
             setter_D.invokeExact(obj, d);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();

@@ -70,7 +70,9 @@ class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl
             return (int) getter_I.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
             throw new InternalError(e);
@@ -124,7 +126,9 @@ class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl
             setter_I.invokeExact(obj, i);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();

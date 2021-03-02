@@ -50,7 +50,9 @@ class MethodHandleBooleanFieldAccessorImpl extends MethodHandleFieldAccessorImpl
             return (boolean) getter_Z.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
             throw new InternalError(e);
@@ -96,7 +98,9 @@ class MethodHandleBooleanFieldAccessorImpl extends MethodHandleFieldAccessorImpl
             setter_Z.invokeExact(obj, z);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();

@@ -70,11 +70,14 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
             return (long) getter_J.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
             throw new InternalError(e);
-        }    }
+        }
+    }
 
     public float getFloat(Object obj) throws IllegalArgumentException {
         return getLong(obj);
@@ -125,7 +128,9 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
             setter_J.invokeExact(obj, l);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException|NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();

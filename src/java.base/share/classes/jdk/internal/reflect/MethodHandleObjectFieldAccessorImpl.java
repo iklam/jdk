@@ -76,7 +76,9 @@ class MethodHandleObjectFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
             setter.invoke(obj, value);
         } catch (IllegalArgumentException e) {
             throw e;
-        } catch (ClassCastException | NullPointerException e) {
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("argument type mismatch", e);
+        } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
             e.printStackTrace();
