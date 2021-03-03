@@ -28,7 +28,6 @@ package jdk.internal.reflect;
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.Unsafe;
-import jdk.internal.reflect.DirectMethodAccessorImpl.CallerSensitiveMethodAccessorImpl;
 import jdk.internal.vm.annotation.Hidden;
 
 import java.lang.invoke.MethodHandle;
@@ -43,20 +42,22 @@ import java.lang.reflect.Modifier;
 import static java.lang.invoke.MethodType.methodType;
 
 final class MethodHandleAccessorFactory {
-    private static Unsafe UNSAFE = Unsafe.getUnsafe();
-    static MethodAccessorImpl newMethodAccessor(Method method) {
+    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+
+    static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
         // so that EIIE is propagated (not wrapped with ITE)
         UNSAFE.ensureClassInitialized(method.getDeclaringClass());
         try {
-            if (Reflection.isCallerSensitive(method)) {
-                DirectMethodAccessorImpl accessor = findMethodWithTrailingCaller(method);
-                if (accessor != null) {
-                    return accessor;
+            if (callerSensitive) {
+                MethodHandle dmh = findDirectMethodWithLeadingCaller(method);
+                if (dmh != null) {
+                    return DirectMethodAccessorImpl.callerSensitiveAdapter(dmh);
                 }
             }
-            return findMethod(method);
+            MethodHandle dmh = getDirectMethod(method);
+            return DirectMethodAccessorImpl.directMethodAccessor(dmh, callerSensitive);
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
         }
@@ -123,54 +124,58 @@ final class MethodHandleAccessorFactory {
         }
     }
 
-    static MethodHandle rebindCaller(Class<?> caller, MethodHandle mh) throws IllegalAccessException {
-        return JLIA.rebindCaller(caller, mh);
-    }
-
-    private static DirectMethodAccessorImpl findMethod(Method method) throws IllegalAccessException {
+    private static MethodHandle getDirectMethod(Method method) throws IllegalAccessException {
         MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes());
-        int modifiers = method.getModifiers();
-        MethodHandle dmh = Modifier.isStatic(modifiers)
-                                ? JLIA.findStatic(method.getDeclaringClass(), method.getName(), mtype)
-                                : JLIA.findVirtual(method.getDeclaringClass(), method.getName(), mtype);
-
-        if (Reflection.isCallerSensitive(method)) {
-            return new CallerSensitiveMethodAccessorImpl(dmh, modifiers, false);
-        } else {
-            return new DirectMethodAccessorImpl(makeTarget(dmh, modifiers), modifiers);
-        }
+        boolean isStatic = Modifier.isStatic(method.getModifiers());
+        MethodHandle dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), method.getName(), mtype)
+                                    : JLIA.findVirtual(method.getDeclaringClass(), method.getName(), mtype);
+        return makeTarget(dmh, isStatic, false);
     }
 
-    private static DirectMethodAccessorImpl findMethodWithTrailingCaller(Method method) throws IllegalAccessException {
-        MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes());
-        mtype = mtype.appendParameterTypes(Class.class);
-
-        String name;
-        if (method.getName().startsWith("reflected$")) {
-            name = method.getName();
-        } else {
-            name = "reflected$" + method.getName();
-        }
-        int modifiers = method.getModifiers();
-        MethodHandle dmh = Modifier.isStatic(modifiers)
-                                ? JLIA.findStatic(method.getDeclaringClass(), name, mtype)
-                                : JLIA.findVirtual(method.getDeclaringClass(), name, mtype);
-        return dmh != null ? new CallerSensitiveMethodAccessorImpl(dmh, modifiers, true) : null;
+    private static MethodHandle findDirectMethodWithLeadingCaller(Method method) throws IllegalAccessException {
+        String name = method.getName();
+        MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes()).insertParameterTypes(0, Class.class);
+        boolean isStatic = Modifier.isStatic(method.getModifiers());
+        MethodHandle dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), name, mtype)
+                                    : JLIA.findVirtual(method.getDeclaringClass(), name, mtype);
+        return dmh != null ? makeTarget(dmh, isStatic, true) : null;
     }
 
-    static MethodHandle makeTarget(MethodHandle dmh,  int modifiers) {
+    /**
+     * Transform the given dmh to a target method handle.
+     *
+     * If {@code hasLeadingCaller} parameter is true, transform the method handle
+     * of this method type: {@code (Object, Class, Object[])Object}
+     * If {@code hasLeadingCaller} parameter is false, transform the method handle
+     * of this method type: {@code (Object, Object[])Object}
+     *
+     * @param dmh DirectMethodHandle
+     * @param isStatic whether given dmh represents static method or not
+     * @param hasLeadingCaller whether given dmh represents a method with leading
+     *                         caller Class parameter
+     * @return transformed dmh to be used as a target in direct method accessors
+     */
+    static MethodHandle makeTarget(MethodHandle dmh, boolean isStatic, boolean hasLeadingCaller) {
+        // the method type of the target method handle
+        MethodType mtype = hasLeadingCaller
+                ? methodType(Object.class, Object.class, Class.class, Object[].class)
+                : methodType(Object.class, Object.class, Object[].class);
+
         int paramCount = dmh.type().parameterCount();
+        // wrap any thrown exception with InvocationTargetException and re-throw it
         MethodHandle target = MethodHandles.catchException(dmh, Throwable.class,
                 WRAP.asType(methodType(dmh.type().returnType(), Throwable.class)));
-        if (Modifier.isStatic(modifiers)) {
-            // static method
-            MethodHandle spreader = target.asSpreader(Object[].class, paramCount);
-            target = MethodHandles.dropArguments(spreader, 0, Object.class);
-        } else {
-            // instance method
-            target = target.asSpreader(Object[].class, paramCount - 1);
+        // spread the last "real" parameters (not counting leading 'this' and 'caller')
+        // If it is a static method, it does not have a leading `this` argument and
+        // so add 1 to the spreader length. Also add 1 if it has a leading caller.
+        target = target.asSpreader(Object[].class,
+                                   paramCount - (isStatic ? 0 : 1) - (hasLeadingCaller ? 1 : 0));
+        if (isStatic) {
+            // add leading 'this' parameter to static method which is then ignored
+            target = MethodHandles.dropArguments(target, 0, Object.class);
         }
-        return target.asType(methodType(Object.class, Object.class, Object[].class));
+        // adapt to specified type
+        return target.asType(mtype);
     }
 
     // make this package-private to workaround a bug in Reflection::getCallerClass
@@ -182,16 +187,19 @@ final class MethodHandleAccessorFactory {
         throw new InvocationTargetException(e);
     }
 
-    private static final JavaLangInvokeAccess JLIA;
-    private static final MethodHandle WRAP;
+    static final JavaLangInvokeAccess JLIA;
+    static final MethodHandle WRAP;
+    static MethodHandle METHOD_ACCESSOR_INVOKE;
     static {
         try {
             JLIA = SharedSecrets.getJavaLangInvokeAccess();
             WRAP = MethodHandles.lookup().findStatic(MethodHandleAccessorFactory.class, "wrap",
                                                      methodType(Object.class, Throwable.class));
+            METHOD_ACCESSOR_INVOKE = JLIA.findVirtual(MethodAccessorImpl.class, "invoke",
+                                                     methodType(Object.class, Object.class, Object[].class));
         } catch (NoSuchMethodException|IllegalAccessException e) {
             throw new InternalError(e);
         }
     }
-
 }
+

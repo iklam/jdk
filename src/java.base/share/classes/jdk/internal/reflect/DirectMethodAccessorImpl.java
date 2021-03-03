@@ -25,20 +25,26 @@
 
 package jdk.internal.reflect;
 
+import jdk.internal.access.JavaLangInvokeAccess;
+import jdk.internal.access.SharedSecrets;
 import jdk.internal.vm.annotation.ForceInline;
 
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 
 class DirectMethodAccessorImpl extends MethodAccessorImpl {
-    protected final MethodHandle target;      // target method handle
-    protected final int modifiers;
+    static MethodAccessorImpl directMethodAccessor(MethodHandle dmh, boolean callerSensitive) {
+        return callerSensitive ? new CallerSensitiveWithInvoker(dmh)
+                               : new DirectMethodAccessorImpl(dmh);
+    }
+    static MethodAccessorImpl callerSensitiveAdapter(MethodHandle target) {
+        return new CallerSensitiveWithLeadingCaller(target);
+    }
 
-    DirectMethodAccessorImpl(MethodHandle target, int modifiers) {
+
+    protected final MethodHandle target;      // target method handle
+    private DirectMethodAccessorImpl(MethodHandle target) {
         this.target = target;
-        this.modifiers = modifiers;
     }
 
     @Override
@@ -59,45 +65,21 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
-    static class CallerSensitiveMethodAccessorImpl extends DirectMethodAccessorImpl {
-        private volatile Cache csmCache;
-        private final boolean hasTrailingCallerArgument;
-        CallerSensitiveMethodAccessorImpl(MethodHandle original, int modifiers, boolean hasTrailingCallerArgument) {
-            super(original, modifiers);
-            this.hasTrailingCallerArgument = hasTrailingCallerArgument;
+    static class CallerSensitiveWithLeadingCaller extends DirectMethodAccessorImpl {
+        private CallerSensitiveWithLeadingCaller(MethodHandle target) {
+            super(target);
         }
 
         @Override
         public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
-            throw new InternalError("caller-sensitive method: " + target);
+            throw new InternalError("cs$method invoked without explicit caller: " + target);
         }
 
-        /*
-         * This method invokes the method handle of a caller-sensitive method.
-         * The caller parameter is the caller class invoking Method::invoke.
-         *
-         * This method creates a new MH for each different caller class.
-         * The target MH is bound with the caller class and an invoker class
-         * is injected such that the invoker class will be the caller class
-         * of the CSM via MH.  The injected invoker class is in the same runtime
-         * package, has the same defining class loader and protection domain
-         * as the caller parameter.
-         *
-         * CSM.invoke does stack walking once to find the caller class
-         * in this implementation.  The invocation of the CSM may also call
-         * Reflection::getCallerClass another time.
-         *
-         * If a caller-sensitive method implements an alternative method
-         * with "reflected$" prefix that takes an additional trailing caller
-         * class argument, such alternative implementation will be invoked instead.
-         */
         @Override
         @ForceInline
-        public Object invoke(Class<?> caller, Object obj, Object[] args)
-                throws IllegalArgumentException, InvocationTargetException {
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws IllegalArgumentException, InvocationTargetException {
             try {
-                MethodHandle dmh = bindCaller(target, caller);
-                return dmh.invokeExact(obj, args);
+                return target.invokeExact(obj, caller, args);
             } catch (IllegalArgumentException | InvocationTargetException e) {
                 throw e;
             } catch (ClassCastException e) {
@@ -110,44 +92,38 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 throw new InvocationTargetException(e);
             }
         }
+    }
 
-        private MethodHandle bindCaller(MethodHandle original, Class<?> caller) {
-            // direct method handle to the caller-sensitive method invoked by the given caller
-            MethodHandle dmh = csmCache != null ? csmCache.methodHandle(caller) : null;
-            if (dmh == null) {
-                try {
-                    if (hasTrailingCallerArgument) {
-                        dmh = MethodHandles.insertArguments(original, original.type().parameterCount() - 1, caller);
-                    } else {
-                        dmh = MethodHandleAccessorFactory.rebindCaller(caller, original);
-                    }
-                    dmh = MethodHandleAccessorFactory.makeTarget(dmh, modifiers);
+    static class CallerSensitiveWithInvoker extends DirectMethodAccessorImpl {
+        private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
 
-                    // push MH into cache
-                    csmCache = new Cache(caller, dmh);
-                } catch (IllegalAccessException e) {
-                    throw new InternalError(e);
-                }
-            }
-            return dmh;
-
+        private CallerSensitiveWithInvoker(MethodHandle target) {
+            super(target);
         }
 
-        static class Cache {
-            final WeakReference<Class<?>> callerRef;
-            final WeakReference<MethodHandle> targetRef;
+        @Override
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            throw new InternalError("caller-sensitive method invoked without explicit caller: " + target);
+        }
 
-            Cache(Class<?> caller, MethodHandle target) {
-                this.callerRef = new WeakReference<>(caller);
-                this.targetRef = new WeakReference<>(target);
-            }
-
-            MethodHandle methodHandle(Class<?> caller) {
-                if (callerRef.refersTo(caller)) {
-                    return targetRef.get();
-                }
-                return null;
+        @Override
+        @ForceInline
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws IllegalArgumentException, InvocationTargetException {
+            var invoker = JLIA.reflectiveInvoker(caller);
+            try {
+                return invoker.invokeExact(target, obj, args);
+            } catch (IllegalArgumentException | InvocationTargetException e) {
+                throw e;
+            } catch (ClassCastException e) {
+                throw new IllegalArgumentException("argument type mismatch", e);
+            } catch (NullPointerException e) {
+                throw new IllegalArgumentException(e.getMessage(), e);
+            } catch (Error|RuntimeException e) {
+                throw e;
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
             }
         }
     }
 }
+

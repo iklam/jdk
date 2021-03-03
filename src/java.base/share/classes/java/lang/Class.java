@@ -375,7 +375,7 @@ public final class Class<T> implements java.io.Serializable,
         return forName0(className, true, ClassLoader.getClassLoader(caller), caller);
     }
 
-    private static Class<?> reflected$forName(String className, Class<?> caller)
+    private static Class<?> forName(Class<?> caller, String className)
             throws ClassNotFoundException {
         return forName0(className, true, ClassLoader.getClassLoader(caller), caller);
     }

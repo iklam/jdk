@@ -440,12 +440,6 @@ mh.invokeExact(System.out, "Hello, world.");
  * @since 1.7
  */
 public abstract class MethodHandle implements Constable {
-    static class WeakMethodHandle extends WeakReference<MethodHandle> {
-        WeakMethodHandle(MethodHandle referent) {
-            super(referent);
-        }
-    }
-
     /**
      * Internal marker interface which distinguishes (to the Java compiler)
      * those methods which are <a href="MethodHandle.html#sigpoly">signature polymorphic</a>.
@@ -459,7 +453,7 @@ public abstract class MethodHandle implements Constable {
     final LambdaForm form;
     // form is not private so that invokers can easily fetch it
     /*private*/
-    WeakMethodHandle asTypeCache;
+    WeakReference<MethodHandle> asTypeCache;
     // asTypeCache is not private so that invokers can easily fetch it
 
     private byte customizationCount;
@@ -876,7 +870,8 @@ public abstract class MethodHandle implements Constable {
     }
 
     private MethodHandle asTypeCached(MethodType newType) {
-        MethodHandle atc = asTypeCache != null ? asTypeCache.get() : null;
+        WeakReference<MethodHandle> cache = asTypeCache;
+        MethodHandle atc = cache != null ? cache.get() : null;
         if (atc != null && newType == atc.type) {
             return atc;
         }
@@ -889,7 +884,7 @@ public abstract class MethodHandle implements Constable {
         if (!type.isConvertibleTo(newType))
             throw new WrongMethodTypeException("cannot convert "+this+" to "+newType);
         MethodHandle mh = MethodHandleImpl.makePairwiseConvert(this, newType, true);
-        asTypeCache = new WeakMethodHandle(mh);
+        asTypeCache = new WeakReference<>(mh);
         return mh;
     }
 

@@ -90,8 +90,8 @@ public class MethodInvokeTest {
         checkCaller(Caller2.invoke(CSM.class.getMethod(CALLER_METHOD)), Caller2.class);
 
         // Reflection::getCallerClass will return the injected invoker class as the caller
-        checkOriginalCaller(Caller1.invoke(CSM.class.getMethod(CALLER_NO_ALT_METHOD)), Caller1.class);
-        checkOriginalCaller(Caller2.invoke(CSM.class.getMethod(CALLER_NO_ALT_METHOD)), Caller2.class);
+        checkInjectedInvoker(Caller1.invoke(CSM.class.getMethod(CALLER_NO_ALT_METHOD)), Caller1.class);
+        checkInjectedInvoker(Caller2.invoke(CSM.class.getMethod(CALLER_NO_ALT_METHOD)), Caller2.class);
     }
 
     void invokeMethodHandle() throws Throwable {
@@ -163,13 +163,6 @@ public class MethodInvokeTest {
             if (c.getName().startsWith(expected.getName() + "$$InjectedInvoker"))
                 throw new RuntimeException("should not have any invoker class injected");
         }
-    }
-
-    static void checkOriginalCaller(CSM csm, Class<?> expected) {
-        checkInjectedInvoker(csm, expected);
-        Class<?> originalCaller = csm.originalCaller();
-        if (originalCaller != expected)
-            throw new RuntimeException("expected original caller: " + expected + " but got: " + originalCaller);
     }
 
     /*

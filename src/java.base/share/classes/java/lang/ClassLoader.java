@@ -1614,18 +1614,11 @@ public abstract class ClassLoader {
      */
     @CallerSensitive
     protected static boolean registerAsParallelCapable() {
-        Class<?> caller = Reflection.getCallerClass();
-        if (!caller.isAssignableFrom(ClassLoader.class)) {
-            // if the caller class is not a subclass of ClassLoader,
-            // this caller-sensitive method might be invoked via reflection
-            // then find the original caller if it is bound through method handle
-            Class<?> c = SharedSecrets.getJavaLangInvokeAccess().originalCaller(caller);
-            if (c != null) {
-                caller = c;
-            }
-        }
-        Class<? extends ClassLoader> callerClass = caller.asSubclass(ClassLoader.class);
-        return ParallelLoaders.register(callerClass);
+        return ParallelLoaders.register(Reflection.getCallerClass().asSubclass(ClassLoader.class));
+    }
+
+    private static boolean registerAsParallelCapable(Class<?> caller) {
+        return ParallelLoaders.register(caller.asSubclass(ClassLoader.class));
     }
 
     /**

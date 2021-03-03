@@ -32,6 +32,7 @@
 
 import jdk.internal.reflect.ConstructorAccessor;
 import jdk.internal.reflect.MethodAccessor;
+import jdk.internal.reflect.Reflection;
 import jdk.internal.reflect.ReflectionFactory;
 
 import java.lang.reflect.Constructor;
@@ -274,7 +275,7 @@ public class MethodHandleAccessorsTest {
     }
 
     static void doTest(Method m, Object target, Object[] args, Object expectedReturn, Throwable... expectedException) {
-        MethodAccessor ma = ReflectionFactory.getReflectionFactory().newMethodAccessor(m);
+        MethodAccessor ma = ReflectionFactory.getReflectionFactory().newMethodAccessor(m, Reflection.isCallerSensitive(m));
         try {
             doTestAccessor(m, ma, target, args, expectedReturn, expectedException);
         } catch (Throwable e) {

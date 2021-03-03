@@ -29,7 +29,6 @@ import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.invoke.NativeEntryPoint;
 import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.MethodVisitor;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
 import jdk.internal.vm.annotation.ForceInline;
@@ -40,12 +39,11 @@ import sun.invoke.util.ValueConversions;
 import sun.invoke.util.VerifyType;
 import sun.invoke.util.Wrapper;
 
-import java.lang.constant.ConstantDescs;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Collections;
@@ -53,13 +51,12 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static java.lang.invoke.LambdaForm.*;
-import static java.lang.invoke.MethodHandleNatives.Constants.REF_invokeInterface;
-import static java.lang.invoke.MethodHandleNatives.Constants.REF_invokeVirtual;
 import static java.lang.invoke.MethodHandleStatics.*;
 import static java.lang.invoke.MethodHandles.Lookup.IMPL_LOOKUP;
 import static java.lang.invoke.MethodHandles.Lookup.ClassOption.NESTMATE;
@@ -500,14 +497,14 @@ abstract class MethodHandleImpl {
                 type.parameterType(collectArg).isAssignableFrom(newType.parameterType(collectArg))) {
                 // if arity and trailing parameter are compatible, do normal thing
                 MethodHandle mh = asFixedArity().asType(newType);
-                asTypeCache = new WeakMethodHandle(mh);
+                asTypeCache = new WeakReference<>(mh);
                 return mh;
             }
             // check cache
             MethodHandle acc = asCollectorCache;
             if (acc != null && acc.type().parameterCount() == newArity) {
                 MethodHandle mh = acc.asType(newType);
-                asTypeCache = new WeakMethodHandle(mh);
+                asTypeCache = new WeakReference<>(mh);
                 return mh;
             }
 
@@ -522,7 +519,7 @@ abstract class MethodHandleImpl {
             }
             asCollectorCache = collector;
             MethodHandle mh = collector.asType(newType);
-            asTypeCache = new WeakMethodHandle(mh);
+            asTypeCache = new WeakReference<>(mh);
             return mh;
         }
 
@@ -854,7 +851,7 @@ abstract class MethodHandleImpl {
             } else {
                 wrapper = newTarget; // no need for a counting wrapper anymore
             }
-            asTypeCache = new WeakMethodHandle(wrapper);
+            asTypeCache = new WeakReference<>(wrapper);
             return wrapper;
         }
 
@@ -1143,40 +1140,12 @@ abstract class MethodHandleImpl {
         return BindCaller.bindCaller(mh, hostClass);
     }
 
-    /*
-     * Returns the original caller class bound to a caller-sensitive
-     * method if the given class is an injected invoker; otherwise
-     * this method returns null.
-     *
-     * An injected invoker class is a hidden class which has the same
-     * defining class loader, runtime package, and protection domain
-     * as the lookup class that looks up the caller-sensitive method.
-     */
-    static Class<?> originalCallerBoundToInvoker(Class<?> caller) {
-        if (caller.isHidden() && caller.getName().contains(BindCaller.INVOKER_SUFFIX)) {
-            Lookup lookup = new Lookup(caller);
-            try {
-                Object cd = MethodHandles.classData(lookup, ConstantDescs.DEFAULT_NAME, Object.class);
-                if (cd instanceof Class c) {
-                    // If a hidden class matching the injected invoker name but not injected
-                    // by BindCaller calls MethodHandles.lookup(), then an invoker class
-                    // will be defined but unused. This should be rare case.
-                    if (caller.isNestmateOf(c) && BindCaller.CV_makeInjectedInvoker.get(c) == caller) {
-                        return c;
-                    }
-                }
-            } catch (IllegalAccessException e) {
-                throw new InternalError(e);
-            }
-        }
-        return null;
-    }
-
     // Put the whole mess into its own nested class.
     // That way we can lazily load the code and set up the constants.
     private static class BindCaller {
         private static MethodType INVOKER_MT = MethodType.methodType(Object.class, MethodHandle.class, Object[].class);
-        private static final String INVOKER_SUFFIX = "$$InjectedInvoker";
+        private static MethodType REFLECT_INVOKER_MT = MethodType.methodType(Object.class, MethodHandle.class, Object.class, Object[].class);
+
         static MethodHandle bindCaller(MethodHandle mh, Class<?> hostClass) {
             // Code in the boot layer should now be careful while creating method handles or
             // functional interface instances created from method references to @CallerSensitive  methods,
@@ -1191,19 +1160,19 @@ abstract class MethodHandleImpl {
 
             MemberName member = mh.internalMemberName();
             if (member != null) {
-                // Look up the alternate non-CSM method named "reflected$<method-name>"
-                // with an additional trailing caller class parameter.  If present,
-                // bind the alternate method handle with the lookup class as
+                // Look up the CSM adapter method with the same method name
+                // but with a leading caller class parameter.  If present,
+                // bind the adapter's method handle with the lookup class as
                 // the caller class argument
-                MemberName alt = IMPL_LOOKUP.resolveOrNull(member.getReferenceKind(),
+                MemberName csmAdapter = IMPL_LOOKUP.resolveOrNull(member.getReferenceKind(),
                         new MemberName(member.getDeclaringClass(),
-                                       "reflected$" + member.getName(),
-                                       member.getMethodType().appendParameterTypes(Class.class),
+                                       member.getName(),
+                                       member.getMethodType().insertParameterTypes(0, Class.class),
                                        member.getReferenceKind()));
-                if (alt != null) {
-                    assert !alt.isCallerSensitive();
-                    MethodHandle dmh = DirectMethodHandle.make(alt);
-                    dmh = MethodHandles.insertArguments(dmh, dmh.type().parameterCount() - 1, hostClass);
+                if (csmAdapter != null) {
+                    assert !csmAdapter.isCallerSensitive();
+                    MethodHandle dmh = DirectMethodHandle.make(csmAdapter);
+                    dmh = MethodHandles.insertArguments(dmh, csmAdapter.isStatic() ? 0 : 1, hostClass);
                     dmh = new WrappedMember(dmh, mh.type(), member, mh.isInvokeSpecial(), hostClass);
                     return dmh;
                 }
@@ -1225,8 +1194,7 @@ abstract class MethodHandleImpl {
             // For simplicity, convert mh to a varargs-like method.
             MethodHandle vamh = prepareForInvoker(mh);
             // Cache the result of makeInjectedInvoker once per argument class.
-            Class<?> invokerClass = CV_makeInjectedInvoker.get(hostClass);
-            MethodHandle bccInvoker = IMPL_LOOKUP.findStatic(invokerClass, "invoke_V", INVOKER_MT);
+            MethodHandle bccInvoker = CV_makeInjectedInvoker.get(hostClass).invoker();
             return restoreToType(bccInvoker.bindTo(vamh), mh, hostClass);
         }
 
@@ -1238,7 +1206,7 @@ abstract class MethodHandleImpl {
                  *
                  * @CSM must be public and exported if called by any module.
                  */
-                String name = targetClass.getName() + INVOKER_SUFFIX;
+                String name = targetClass.getName() + "$$InjectedInvoker";
                 if (targetClass.isHidden()) {
                     // use the original class name
                     name = name.replace('/', '_');
@@ -1250,11 +1218,73 @@ abstract class MethodHandleImpl {
                 return invokerClass;
         }
 
-        private static ClassValue<Class<?>> CV_makeInjectedInvoker = new ClassValue<Class<?>>() {
-            @Override protected Class<?> computeValue(Class<?> hostClass) {
-                return makeInjectedInvoker(hostClass);
+        private static ClassValue<InjectedInvokerHolder> CV_makeInjectedInvoker = new ClassValue<>() {
+            @Override
+            protected InjectedInvokerHolder computeValue(Class<?> hostClass) {
+                return new InjectedInvokerHolder(makeInjectedInvoker(hostClass));
             }
         };
+
+        /*
+         * Returns a method handle of an invoker class injected for reflection
+         * implementation use with the following signature:
+         *     reflect_invoke_V(MethodHandle mh, Object target, Object[] args)
+         *
+         * Method::invoke on a caller-sensitive method will call
+         * MethodAccessorImpl::invoke(Object, Object[]) through reflect_invoke_V
+         *     target.csm(args)
+         *     NativeMethodAccesssorImpl::invoke(target, args)
+         *     MethodAccessImpl::invoke(target, args)
+         *     InjectedInvoker::reflect_invoke_V(vamh, target, args);
+         *     method::invoke(target, args)
+         *     p.Foo::m
+         *
+         * An injected invoker class is a hidden class which has the same
+         * defining class loader, runtime package, and protection domain
+         * as the given caller class.
+         */
+        static MethodHandle reflectiveInvoker(Class<?> caller) {
+            return BindCaller.CV_makeInjectedInvoker.get(caller).reflectInvoker();
+        }
+
+        private static final class InjectedInvokerHolder {
+            private final Class<?> invokerClass;
+            // lazily resolved and cached DMH(s) of invoke_V methods
+            private MethodHandle invoker;
+            private MethodHandle reflectInvoker;
+
+            private InjectedInvokerHolder(Class<?> invokerClass) {
+                this.invokerClass = invokerClass;
+            }
+
+            private MethodHandle invoker() {
+                var mh = invoker;
+                if (mh == null) {
+                    try {
+                        invoker = mh = IMPL_LOOKUP.findStatic(invokerClass, "invoke_V", INVOKER_MT);
+                    } catch (Error | RuntimeException ex) {
+                        throw ex;
+                    } catch (Throwable ex) {
+                        throw new InternalError(ex);
+                    }
+                }
+                return mh;
+            }
+
+            private MethodHandle reflectInvoker() {
+                var mh = reflectInvoker;
+                if (mh == null) {
+                    try {
+                        reflectInvoker = mh = IMPL_LOOKUP.findStatic(invokerClass, "reflect_invoke_V", REFLECT_INVOKER_MT);
+                    } catch (Error | RuntimeException ex) {
+                        throw ex;
+                    } catch (Throwable ex) {
+                        throw new InternalError(ex);
+                    }
+                }
+                return mh;
+            }
+        }
 
         // Adapt mh so that it can be called directly from an injected invoker:
         private static MethodHandle prepareForInvoker(MethodHandle mh) {
@@ -1330,27 +1360,50 @@ abstract class MethodHandleImpl {
             ClassWriter cw = new ClassWriter(0);
 
             // private static class InjectedInvoker {
+            //     /* this is used to wrap DMH(s) of caller-sensitive methods */
             //     @Hidden
             //     static Object invoke_V(MethodHandle vamh, Object[] args) throws Throwable {
             //        return vamh.invokeExact(args);
             //     }
+            //     /* this is used in caller-sensitive reflective method accessor */
+            //     @Hidden
+            //     static Object reflect_invoke_V(MethodHandle vamh, Object target, Object[] args) throws Throwable {
+            //        return vamh.invokeExact(target, args);
+            //     }
+            // }
             // }
             cw.visit(52, ACC_PRIVATE | ACC_SUPER, "InjectedInvoker", null, "java/lang/Object", null);
+            {
+                var mv = cw.visitMethod(ACC_STATIC, "invoke_V",
+                        "(Ljava/lang/invoke/MethodHandle;[Ljava/lang/Object;)Ljava/lang/Object;",
+                        null, null);
 
-            MethodVisitor mv = cw.visitMethod(ACC_STATIC, "invoke_V",
-                          "(Ljava/lang/invoke/MethodHandle;[Ljava/lang/Object;)Ljava/lang/Object;",
-                          null, null);
+                mv.visitCode();
+                mv.visitVarInsn(ALOAD, 0);
+                mv.visitVarInsn(ALOAD, 1);
+                mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "invokeExact",
+                        "([Ljava/lang/Object;)Ljava/lang/Object;", false);
+                mv.visitInsn(ARETURN);
+                mv.visitMaxs(2, 2);
+                mv.visitEnd();
 
-            mv.visitCode();
-            mv.visitVarInsn(ALOAD, 0);
-            mv.visitVarInsn(ALOAD, 1);
-            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "invokeExact",
-                               "([Ljava/lang/Object;)Ljava/lang/Object;", false);
-            mv.visitInsn(ARETURN);
-            mv.visitMaxs(2, 2);
-            mv.visitEnd();
+                cw.visitEnd();
+            }
 
-            cw.visitEnd();
+            {
+                var mv = cw.visitMethod(ACC_STATIC, "reflect_invoke_V",
+                        "(Ljava/lang/invoke/MethodHandle;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+                        null, null);
+                mv.visitCode();
+                mv.visitVarInsn(ALOAD, 0);
+                mv.visitVarInsn(ALOAD, 1);
+                mv.visitVarInsn(ALOAD, 2);
+                mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/invoke/MethodHandle", "invokeExact",
+                        "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;", false);
+                mv.visitInsn(ARETURN);
+                mv.visitMaxs(3, 3);
+                mv.visitEnd();
+            }
             return cw.toByteArray();
         }
     }
@@ -1393,7 +1446,7 @@ abstract class MethodHandleImpl {
             // This MH is an alias for target, except for the MemberName
             // Drop the MemberName if there is any conversion.
             MethodHandle mh =  target.asType(newType);
-            asTypeCache = new WeakMethodHandle(mh);
+            asTypeCache = new WeakReference<>(mh);
             return mh;
         }
     }
@@ -1447,7 +1500,7 @@ abstract class MethodHandleImpl {
             // This MH is an alias for target, except for the intrinsic name
             // Drop the name if there is any conversion.
             MethodHandle mh = target.asType(newType);
-            asTypeCache = new WeakMethodHandle(mh);
+            asTypeCache = new WeakReference<>(mh);
             return mh;
         }
 
@@ -1865,11 +1918,6 @@ abstract class MethodHandleImpl {
             }
 
             @Override
-            public MethodHandle rebindCaller(Class<?> caller,  MethodHandle mh) throws IllegalAccessException {
-                return MethodHandles.rebindCaller(caller, mh);
-            }
-
-            @Override
             public MethodHandle findVirtual(Class<?> defc, String name, MethodType type) throws IllegalAccessException {
                 try {
                     return IMPL_LOOKUP.findVirtual(defc, name, type);
@@ -1888,8 +1936,9 @@ abstract class MethodHandleImpl {
             }
 
             @Override
-            public Class<?> originalCaller(Class<?> caller) {
-                return MethodHandleImpl.originalCallerBoundToInvoker(caller);
+            public MethodHandle reflectiveInvoker(Class<?> caller) {
+                Objects.requireNonNull(caller);
+                return BindCaller.reflectiveInvoker(caller);
             }
 
             @Override

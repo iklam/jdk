@@ -553,7 +553,7 @@ public final class Method extends Executable {
         throws IllegalAccessException, IllegalArgumentException,
            InvocationTargetException
     {
-        boolean callerSensitive = Reflection.isCallerSensitive(this);
+        boolean callerSensitive = isCallerSensitive();
         Class<?> caller = null;
         if (!override || callerSensitive) {
             caller = Reflection.getCallerClass();
@@ -569,7 +569,42 @@ public final class Method extends Executable {
             ma = acquireMethodAccessor();
         }
 
-        return callerSensitive && caller != null ? ma.invoke(caller, obj, args) : ma.invoke(obj, args);
+        return callerSensitive ? ma.invoke(caller, obj, args) : ma.invoke(obj, args);
+    }
+
+    private Boolean callerSensitive;       // lazily initialize
+    private boolean isCallerSensitive() {
+        Boolean cs = callerSensitive;
+        if (cs == null) {
+            callerSensitive = cs = Reflection.isCallerSensitive(this);
+        }
+        return cs;
+    }
+
+    /**
+     * This is to support MethodHandle calling caller-sensitive Method::invoke
+     * that may invoke a caller-sensitive method in order to get the original caller
+     * class (not the injected invoker).
+     *
+     * If this adapter is not presented, MethodHandle invoking Method::invoke
+     * will get an invoker class, a hidden nestmate of the original caller class,
+     * that becomes the caller class invoking Method::invoke.
+     */
+    private Object invoke(Class<?> caller, Object obj, Object... args)
+            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException
+    {
+        boolean callerSensitive = isCallerSensitive();
+        if (!override) {
+            checkAccess(caller, clazz,
+                        Modifier.isStatic(modifiers) ? null : obj.getClass(),
+                        modifiers);
+        }
+        MethodAccessor ma = methodAccessor;             // read volatile
+        if (ma == null) {
+            ma = acquireMethodAccessor();
+        }
+
+        return callerSensitive ? ma.invoke(caller, obj, args) : ma.invoke(obj, args);
     }
 
     /**
@@ -634,7 +669,7 @@ public final class Method extends Executable {
             methodAccessor = tmp;
         } else {
             // Otherwise fabricate one and propagate it up to the root
-            tmp = reflectionFactory.newMethodAccessor(this);
+            tmp = reflectionFactory.newMethodAccessor(this, isCallerSensitive());
             setMethodAccessor(tmp);
         }
 

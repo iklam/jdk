@@ -140,24 +140,6 @@ public class ReflectionFactory {
         return soleInstance;
     }
 
-    /**
-     * Returns an alternate reflective Method instance for the given method
-     * intended for reflection to invoke, if present.
-     *
-     * A trusted method can define an alternate implementation for a method `foo`
-     * by defining a method named "reflected$foo" that will be invoked
-     * reflectively.
-     */
-    private static Method findMethodForReflection(Method method) {
-        String altName = "reflected$" + method.getName();
-        try {
-           return method.getDeclaringClass()
-                        .getDeclaredMethod(altName, method.getParameterTypes());
-        } catch (NoSuchMethodException ex) {
-            return null;
-        }
-    }
-
     //--------------------------------------------------------------------------
     //
     // Routines used by java.lang.reflect
@@ -191,15 +173,8 @@ public class ReflectionFactory {
         }
     }
 
-    public MethodAccessor newMethodAccessor(Method method) {
+    public MethodAccessor newMethodAccessor(Method method, boolean callerSensitive) {
         checkInitted();
-
-        if (Reflection.isCallerSensitive(method)) {
-            Method altMethod = findMethodForReflection(method);
-            if (altMethod != null) {
-                method = altMethod;
-            }
-        }
 
         // use the root Method that will not cache caller class
         Method root = langReflectAccess.getRoot(method);
@@ -208,23 +183,60 @@ public class ReflectionFactory {
         }
 
         if (useDirectMethodHandle && VM.isModuleSystemInited()) {
-            return MethodHandleAccessorFactory.newMethodAccessor(method);
+            return MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
         } else if (!useDirectMethodHandle && noInflation
                     && !method.getDeclaringClass().isHidden()
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())) {
-            return new MethodAccessorGenerator().
-                    generateMethod(method.getDeclaringClass(),
-                                   method.getName(),
-                                   method.getParameterTypes(),
-                                   method.getReturnType(),
-                                   method.getExceptionTypes(),
-                                   method.getModifiers());
+
+            Method csmAdapter = findCSMethodAdapter(method);
+            return csmAdapter != null
+                    ? new CsMethodAccessorAdapter(method, csmAdapter, generateMethodAccessor(csmAdapter))
+                    : generateMethodAccessor(method);
         } else {
-            NativeMethodAccessorImpl acc = new NativeMethodAccessorImpl(method);
+            NativeMethodAccessorImpl acc = callerSensitive
+                    ? new NativeMethodAccessorImpl(method, findCSMethodAdapter(method))
+                    : new NativeMethodAccessorImpl(method);
             DelegatingMethodAccessorImpl res = new DelegatingMethodAccessorImpl(acc);
             acc.setParent(res);
             return res;
         }
+    }
+
+    /**
+     * Returns an alternate reflective Method instance for the given method
+     * intended for reflection to invoke, if present.
+     *
+     * A trusted method can define an alternate implementation for a method `foo`
+     * with a leading caller class argument that will be invoked reflectively.
+     */
+    static Method findCSMethodAdapter(Method method) {
+        if (!Reflection.isCallerSensitive(method)) return null;
+
+        int paramCount = method.getParameterCount();
+        Class<?>[] ptypes = new Class<?>[paramCount+1];
+        ptypes[0] = Class.class;
+        System.arraycopy(method.getParameterTypes(), 0, ptypes, 1, paramCount);
+        try {
+            return method.getDeclaringClass().getDeclaredMethod(method.getName(), ptypes);
+        } catch (NoSuchMethodException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Generate the MethodAccessor that invokes the given method with
+     * bytecode invocation.
+     */
+    static MethodAccessorImpl generateMethodAccessor(Method method) {
+        return (MethodAccessorImpl)
+                new MethodAccessorGenerator().generateMethod(
+                        method.getDeclaringClass(),
+                        method.getName(),
+                        method.getParameterTypes(),
+                        method.getReturnType(),
+                        method.getExceptionTypes(),
+                        method.getModifiers()
+                );
     }
 
     public ConstructorAccessor newConstructorAccessor(Constructor<?> c) {

@@ -26,7 +26,6 @@ package java.util;
 import java.lang.StackWalker.StackFrame;
 import java.util.stream.Stream;
 
-import jdk.internal.access.SharedSecrets;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
 
@@ -55,7 +54,7 @@ public class CSM {
      * If caller() is invoked via method handle, this alternate method is
      * called instead.  The caller class would be the lookup class.
      */
-    private static CSM reflected$caller(Class<?> caller) {
+    private static CSM caller(Class<?> caller) {
         return new CSM(caller);
     }
 
@@ -66,9 +65,5 @@ public class CSM {
     @CallerSensitive
     public static CSM callerNoAlternateImpl() {
         return new CSM(Reflection.getCallerClass());
-    }
-
-    public Class<?> originalCaller() {
-        return SharedSecrets.getJavaLangInvokeAccess().originalCaller(caller);
     }
 }

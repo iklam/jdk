@@ -138,9 +138,7 @@ public interface JavaLangInvokeAccess {
 
     MethodHandle unreflectConstructor(Constructor<?> ctor) throws IllegalAccessException;
     MethodHandle unreflectField(Field field, boolean isSetter) throws IllegalAccessException;
-    MethodHandle rebindCaller(Class<?> caller, MethodHandle mh) throws IllegalAccessException;
     MethodHandle findVirtual(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
     MethodHandle findStatic(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
-
-    Class<?> originalCaller(Class<?> caller);
+    MethodHandle reflectiveInvoker(Class<?> caller);
 }

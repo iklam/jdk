@@ -39,39 +39,72 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
         = U.objectFieldOffset(NativeMethodAccessorImpl.class, "generated");
 
     private final Method method;
+    private final Method csmAdapter;
+    private final boolean callerSensitive;
     private DelegatingMethodAccessorImpl parent;
     private int numInvocations;
     private volatile int generated;
-
     NativeMethodAccessorImpl(Method method) {
+        assert !Reflection.isCallerSensitive(method);
         this.method = method;
+        this.csmAdapter = null;
+        this.callerSensitive = false;
     }
 
+    NativeMethodAccessorImpl(Method method, Method csmAdapter) {
+        assert Reflection.isCallerSensitive(method);
+        this.method = method;
+        this.csmAdapter = csmAdapter;
+        this.callerSensitive = true;
+    }
+
+    @Override
     public Object invoke(Object obj, Object[] args)
         throws IllegalArgumentException, InvocationTargetException
     {
+        assert csmAdapter == null;
+
+        maybeSwapDelegate(method);
+        return invoke0(method, obj, args);
+    }
+
+    @Override
+    public Object invoke(Class<?> caller, Object obj, Object[] args)
+            throws IllegalArgumentException, InvocationTargetException
+    {
+        assert callerSensitive;
+
+        if (csmAdapter != null) {
+            maybeSwapDelegate(csmAdapter);
+
+            Object[] newArgs = new Object[csmAdapter.getParameterCount()];
+            newArgs[0] = caller;
+            if (args != null) {
+                System.arraycopy(args, 0, newArgs, 1, args.length);
+            }
+            return invoke0(csmAdapter, obj, newArgs);
+        } else {
+            // invoke the caller-sensitive method through an injected invoker,
+            // a nestmate of the caller class, acting as the caller
+            return super.invoke(caller, obj, args);
+        }
+    }
+
+    private void maybeSwapDelegate(Method method) {
         try {
             if (VM.isModuleSystemInited()
                     && ReflectionFactory.useDirectMethodHandle()
                     && generated == 0
                     && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
-                MethodAccessorImpl acc =
-                    MethodHandleAccessorFactory.newMethodAccessor(method);
+                MethodAccessorImpl acc = MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
                 parent.setDelegate(acc);
             } else if (!ReflectionFactory.useDirectMethodHandle()
-                        && ++numInvocations > ReflectionFactory.inflationThreshold()
-                        && !method.getDeclaringClass().isHidden()
-                        && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
-                        && generated == 0
-                        && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
-                MethodAccessorImpl acc = (MethodAccessorImpl)
-                     new MethodAccessorGenerator().
-                         generateMethod(method.getDeclaringClass(),
-                                        method.getName(),
-                                        method.getParameterTypes(),
-                                        method.getReturnType(),
-                                        method.getExceptionTypes(),
-                                        method.getModifiers());
+                    && ++numInvocations > ReflectionFactory.inflationThreshold()
+                    && !method.getDeclaringClass().isHidden()
+                    && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
+                    && generated == 0
+                    && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
+                MethodAccessorImpl acc = ReflectionFactory.generateMethodAccessor(method);
                 parent.setDelegate(acc);
             }
         } catch (Throwable t) {
@@ -79,8 +112,6 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
             generated = 0;
             throw t;
         }
-
-        return invoke0(method, obj, args);
     }
 
     void setParent(DelegatingMethodAccessorImpl parent) {
