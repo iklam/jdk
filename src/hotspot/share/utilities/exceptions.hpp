@@ -313,17 +313,59 @@ class Exceptions {
 #define THROW_NULL(name)                    THROW_(name, NULL)
 #define THROW_MSG_NULL(name, message)       THROW_MSG_(name, message, NULL)
 
-// The CATCH macro checks that no exception has been thrown by a function; it is used at
-// call sites about which is statically known that the callee cannot throw an exception
-// even though it is declared with TRAPS.
+// The CATCH macro is used to intercept potential exceptions to:
+// - Handle the exception, rethrow it, or throw an alternative exception. Example:
+//       .... TODO, see examples in JDK-8262907 for now
+//
+// - Assert that no exception has been thrown by a function; this pattern is used at
+//   call sites about which is statically known that the callee cannot throw an exception
+//   even though it is declared with TRAPS. Example:
+//       callee(CATCH(t));
+//       assert(t.must_succeed(), "explanation why this will always succeed");
 
-#define CATCH                              \
-  THREAD); if (HAS_PENDING_EXCEPTION) {    \
-    oop ex = PENDING_EXCEPTION;            \
-    CLEAR_PENDING_EXCEPTION;               \
-    DEBUG_ONLY(ex->print();)               \
-    assert(false, "CATCH");                \
-  } (void)(0
+#define CATCH(_catcher) THREAD); ExceptionCatcher _catcher(THREAD
+
+class ExceptionCatcher {
+  Thread* THREAD;
+  bool _has_pending;
+  bool _has_checked;
+  bool _has_cleared;
+  bool _has_thrown;
+public:
+  ExceptionCatcher(Thread* current)
+  : THREAD(current),
+    _has_checked(false),
+    _has_cleared(false),
+    _has_thrown(false) {
+    _has_pending = HAS_PENDING_EXCEPTION;
+  }
+
+  ~ExceptionCatcher() {
+    assert(_has_checked, "ExceptionCatcher was not chcked");
+    if (_has_pending) {
+      assert(_has_cleared | _has_thrown, "pending exception must have been cleared or thrown");
+    }
+  }
+
+  bool has_pending_exception() {
+    _has_checked = true;
+    return _has_pending;
+  }
+
+  oop pending_exception() {
+    return PENDING_EXCEPTION;
+  }
+
+  void clear_pending_exception() {
+    CLEAR_PENDING_EXCEPTION;
+    _has_cleared = true;
+  }
+
+  bool must_succeed();
+
+  inline void dummy() {} // Used by the CATCH macro
+};
+
 
 // ExceptionMark is a stack-allocated helper class for local exception handling.
 // It is used with the EXCEPTION_MARK macro.
@@ -331,10 +373,15 @@ class Exceptions {
 class ExceptionMark {
  private:
   Thread* _thread;
-
+  inline void check_no_pending_exception();
  public:
-  ExceptionMark(Thread*& thread);
+  ExceptionMark();
+  ExceptionMark(Thread* thread);
   ~ExceptionMark();
+
+  Thread* thread() {
+    return _thread;
+  }
 };
 
 
@@ -347,6 +394,8 @@ class ExceptionMark {
 // which preserves pre-existing exceptions and does not allow new
 // exceptions.
 
-#define EXCEPTION_MARK                           Thread* THREAD = NULL; ExceptionMark __em(THREAD);
+#define EXCEPTION_MARK                           ExceptionMark __em;    Thread* THREAD = __em.thread();
+#define EXCEPTION_MARK_WITH(t)                   ExceptionMark __em(t); Thread* THREAD = __em.thread();
+
 
 #endif // SHARE_UTILITIES_EXCEPTIONS_HPP

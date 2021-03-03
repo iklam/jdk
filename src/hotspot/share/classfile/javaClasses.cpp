@@ -4992,7 +4992,8 @@ bool JavaClasses::check_offset(const char *klass_name, int deserialized_offset, 
   EXCEPTION_MARK;
   fieldDescriptor fd;
   TempNewSymbol klass_sym = SymbolTable::new_symbol(klass_name);
-  Klass* k = SystemDictionary::resolve_or_fail(klass_sym, true, CATCH);
+  Klass* k = SystemDictionary::resolve_or_fail(klass_sym, true, CATCH(t));
+  assert(t.must_succeed(), "this is a vmClass and must have already been resolved");
   InstanceKlass* ik = InstanceKlass::cast(k);
   TempNewSymbol f_name = SymbolTable::new_symbol(field_name);
   TempNewSymbol f_sig  = SymbolTable::new_symbol(field_sig);

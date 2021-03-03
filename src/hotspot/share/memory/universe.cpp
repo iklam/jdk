@@ -475,8 +475,8 @@ void Universe::fixup_mirrors(TRAPS) {
   for (int i = 0; i < list_length; i++) {
     Klass* k = list->at(i);
     assert(k->is_klass(), "List should only hold classes");
-    EXCEPTION_MARK;
-    java_lang_Class::fixup_mirror(k, CATCH);
+    java_lang_Class::fixup_mirror(k, CATCH(t));
+    assert(t.must_succeed(), "FIXME why?");
   }
   delete java_lang_Class::fixup_mirror_list();
   java_lang_Class::set_fixup_mirror_list(NULL);
@@ -930,7 +930,8 @@ void Universe::initialize_known_methods(TRAPS) {
 
 void universe2_init() {
   EXCEPTION_MARK;
-  Universe::genesis(CATCH);
+  Universe::genesis(CATCH(t));
+  assert(t.must_succeed(), "FIXME why?");
 }
 
 // Set after initialization of the module runtime, call_initModuleRuntime

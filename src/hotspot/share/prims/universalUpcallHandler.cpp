@@ -35,18 +35,19 @@
 extern struct JavaVM_ main_vm;
 
 void ProgrammableUpcallHandler::upcall_helper(JavaThread* thread, jobject rec, address buff) {
-  JavaThread* THREAD = thread;
-  ThreadInVMfromNative tiv(THREAD);
+  ThreadInVMfromNative tiv(thread);
   const UpcallMethod& upcall_method = instance().upcall_method;
 
-  ResourceMark rm(THREAD);
+  ResourceMark rm(thread);
   JavaValue result(T_VOID);
   JavaCallArguments args(2); // long = 2 slots
 
   args.push_jobject(rec);
   args.push_long((jlong) buff);
 
-  JavaCalls::call_static(&result, upcall_method.klass, upcall_method.name, upcall_method.sig, &args, CATCH);
+  EXCEPTION_MARK_WITH(thread);
+  JavaCalls::call_static(&result, upcall_method.klass, upcall_method.name, upcall_method.sig, &args, CATCH(t));
+  assert(t.must_succeed(), "FIXME -- why?");
 }
 
 void ProgrammableUpcallHandler::attach_thread_and_do_upcall(jobject rec, address buff) {
@@ -75,11 +76,14 @@ const ProgrammableUpcallHandler& ProgrammableUpcallHandler::instance() {
 }
 
 ProgrammableUpcallHandler::ProgrammableUpcallHandler() {
-  Thread* THREAD = Thread::current();
+  EXCEPTION_MARK;
   ResourceMark rm(THREAD);
   Symbol* sym = SymbolTable::new_symbol(FOREIGN_ABI "ProgrammableUpcallHandler");
-  Klass* k = SystemDictionary::resolve_or_null(sym, Handle(), Handle(), CATCH);
-  k->initialize(CATCH);
+  Klass* k = SystemDictionary::resolve_or_null(sym, Handle(), Handle(), CATCH(t1));
+  assert(t1.must_succeed(), "FIXME why?");
+
+  k->initialize(CATCH(t2));
+  assert(t2.must_succeed(), "FIXME why?");
 
   upcall_method.klass = k;
   upcall_method.name = SymbolTable::new_symbol("invoke");

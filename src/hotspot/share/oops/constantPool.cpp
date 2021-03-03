@@ -2284,7 +2284,8 @@ void ConstantPool::print_entry_on(const int index, outputStream* st) {
   st->print(" : ");
   switch (tag_at(index).value()) {
     case JVM_CONSTANT_Class :
-      { Klass* k = klass_at(index, CATCH);
+      { Klass* k = klass_at(index, CATCH(t));
+        assert(t.must_succeed(), "FIXME why???");
         guarantee(k != NULL, "need klass");
         k->print_value_on(st);
         st->print(" {" PTR_FORMAT "}", p2i(k));

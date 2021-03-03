@@ -299,10 +299,11 @@ bool ciMethod::has_balanced_monitors() {
   }
 
   {
-    EXCEPTION_MARK;
+    EXCEPTION_MARK_WITH(THREAD);
     ResourceMark rm(THREAD);
     GeneratePairingInfo gpi(method);
-    gpi.compute_map(CATCH);
+    gpi.compute_map(CATCH(t));
+    assert(t.must_succeed(), "sanity");
     if (!gpi.monitor_safe()) {
       return false;
     }

@@ -498,7 +498,7 @@ void ClassListParser::resolve_indy_impl(Symbol* class_name_symbol, TRAPS) {
       // don't attempt to resolve indy on classes that has previously failed verification
       return;
     }
-    MetaspaceShared::try_link_class(ik, CHECK);
+    MetaspaceShared::try_link_class(THREAD, ik);
 
     ConstantPool* cp = ik->constants();
     ConstantPoolCache* cpcache = cp->cache();

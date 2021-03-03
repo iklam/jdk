@@ -102,14 +102,15 @@ OopMapForCacheEntry::OopMapForCacheEntry(const methodHandle& method, int bci, Oo
 }
 
 
-void OopMapForCacheEntry::compute_map(TRAPS) {
+void OopMapForCacheEntry::compute_map(TRAPS) { // <-- fixme: change params to (Thread* current)
   assert(!method()->is_native(), "cannot compute oop map for native methods");
   // First check if it is a method where the stackmap is always empty
   if (method()->code_size() == 0 || method()->max_locals() + method()->max_stack() == 0) {
     _entry->set_mask_size(0);
   } else {
     ResourceMark rm;
-    GenerateOopMap::compute_map(CATCH);
+    GenerateOopMap::compute_map(CATCH(t));
+    assert(t.must_succeed(), "FIXME -- why?");
     result_for_basicblock(_bci);
   }
 }
@@ -333,7 +334,8 @@ void OopMapCacheEntry::fill(const methodHandle& method, int bci) {
   } else {
     EXCEPTION_MARK;
     OopMapForCacheEntry gen(method, bci, this);
-    gen.compute_map(CATCH);
+    gen.compute_map(CATCH(t));
+    assert(t.must_succeed(), "FIXME -- why?");
   }
 }
 

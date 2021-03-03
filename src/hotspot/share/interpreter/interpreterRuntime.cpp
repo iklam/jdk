@@ -777,7 +777,8 @@ JRT_ENTRY(void, InterpreterRuntime::new_illegal_monitor_state_exception(JavaThre
   if (!exception->is_a(vmClasses::ThreadDeath_klass())) {
     exception = get_preinitialized_exception(
                        vmClasses::IllegalMonitorStateException_klass(),
-                       CATCH);
+                       CATCH(t));
+    assert(t.must_succeed(), "why why why???"); // <<<<< FIXME this is wrong. klass->allocate_instance(CHECK_(exception)) can throw!
   }
   thread->set_vm_result(exception());
 JRT_END

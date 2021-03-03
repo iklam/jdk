@@ -3599,7 +3599,8 @@ static jint JNI_CreateJavaVM_inner(JavaVM **vm, void **penv, void *args) {
         // JVMCI is initialized on a CompilerThread
         if (BootstrapJVMCI) {
           JavaThread* THREAD = thread;
-          JVMCICompiler* compiler = JVMCICompiler::instance(true, CATCH);
+          JVMCICompiler* compiler = JVMCICompiler::instance(true, CATCH(t));
+          assert(t.must_succeed(), "FIXME -- tell me why");
           compiler->bootstrap(THREAD);
           if (HAS_PENDING_EXCEPTION) {
             HandleMark hm(THREAD);

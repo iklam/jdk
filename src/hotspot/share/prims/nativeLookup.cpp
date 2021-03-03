@@ -569,13 +569,15 @@ address NativeLookup::base_library_lookup(const char* class_name, const char* me
   TempNewSymbol s_name = SymbolTable::new_symbol(signature);
 
   // Find the class
-  Klass* k = SystemDictionary::resolve_or_fail(c_name, true, CATCH);
+  Klass* k = SystemDictionary::resolve_or_fail(c_name, true, CATCH(t));
+  assert(t.must_succeed(), "FIXME -- why?");
   InstanceKlass* klass  = InstanceKlass::cast(k);
 
   // Find method and invoke standard lookup
   methodHandle method (THREAD,
                        klass->uncached_lookup_method(m_name, s_name, Klass::OverpassLookupMode::find));
-  address result = lookup(method, in_base_library, CATCH);
+  address result = lookup(method, in_base_library, CATCH(t2));
+  assert(t2.must_succeed(), "FIXME -- why?");
   assert(in_base_library, "must be in basic library");
   guarantee(result != NULL, "must be non NULL");
   return result;

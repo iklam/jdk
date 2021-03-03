@@ -1405,7 +1405,8 @@ C2V_VMENTRY_0(jint, isResolvedInvokeHandleInPool, (JNIEnv* env, jobject, jobject
     // MethodHandle.invoke* --> LambdaForm?
     ResourceMark rm;
 
-    LinkInfo link_info(cp, index, CATCH);
+    LinkInfo link_info(cp, index, CATCH(t));
+    assert(t.must_succeed(), "FIXME -- tell me why");
 
     Klass* resolved_klass = link_info.resolved_klass();
 

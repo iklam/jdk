@@ -558,8 +558,7 @@ bool MetaspaceShared::link_class_for_cds(InstanceKlass* ik, TRAPS) {
   // Link the class to cause the bytecodes to be rewritten and the
   // cpcache to be created. Class verification is done according
   // to -Xverify setting.
-  bool res = MetaspaceShared::try_link_class(ik, THREAD);
-  guarantee(!HAS_PENDING_EXCEPTION, "exception in link_class");
+  bool res = MetaspaceShared::try_link_class(THREAD, ik);
 
   if (DumpSharedSpaces) {
     // The following function is used to resolve all Strings in the statically
@@ -610,9 +609,9 @@ void MetaspaceShared::prepare_for_dumping() {
   Arguments::check_unsupported_dumping_properties();
 
   EXCEPTION_MARK;
-  ClassLoader::initialize_shared_path(THREAD);
-  if (HAS_PENDING_EXCEPTION) {
-    java_lang_Throwable::print(PENDING_EXCEPTION, tty);
+  ClassLoader::initialize_shared_path(CATCH(t));
+  if (t.has_pending_exception()) {
+    java_lang_Throwable::print(t.pending_exception(), tty);
     vm_exit_during_initialization("ClassLoader::initialize_shared_path() failed unexpectedly");
   }
 }
@@ -688,7 +687,9 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
     // were not explicitly specified in the classlist. E.g., if an interface implemented by class K
     // fails verification, all other interfaces that were not specified in the classlist but
     // are implemented by K are not verified.
-    link_and_cleanup_shared_classes(CATCH);
+    link_and_cleanup_shared_classes(CATCH(trap));
+    guarantee(trap.must_succeed(), "sanity");
+
     log_info(cds)("Rewriting and linking classes: done");
 
 #if INCLUDE_CDS_JAVA_HEAP
@@ -733,8 +734,7 @@ int MetaspaceShared::preload_classes(const char* class_list_path, TRAPS) {
         // cpcache to be created. The linking is done as soon as classes
         // are loaded in order that the related data structures (klass and
         // cpCache) are located together.
-        try_link_class(ik, THREAD);
-        guarantee(!HAS_PENDING_EXCEPTION, "exception in link_class");
+        try_link_class(THREAD, ik);
       }
 
       class_count++;
@@ -745,7 +745,8 @@ int MetaspaceShared::preload_classes(const char* class_list_path, TRAPS) {
 }
 
 // Returns true if the class's status has changed
-bool MetaspaceShared::try_link_class(InstanceKlass* ik, TRAPS) {
+bool MetaspaceShared::try_link_class(Thread* current, InstanceKlass* ik) {
+  EXCEPTION_MARK_WITH(current);
   Arguments::assert_is_dumping_archive();
   if (ik->is_loaded() && !ik->is_linked() &&
       !SystemDictionaryShared::has_class_failed_verification(ik)) {
@@ -760,12 +761,12 @@ bool MetaspaceShared::try_link_class(InstanceKlass* ik, TRAPS) {
       // dumping.
       BytecodeVerificationLocal = BytecodeVerificationRemote;
     }
-    ik->link_class(THREAD);
-    if (HAS_PENDING_EXCEPTION) {
+    ik->link_class(CATCH(t));
+    if (t.has_pending_exception()) {
       ResourceMark rm(THREAD);
       log_warning(cds)("Preload Warning: Verification failed for %s",
                     ik->external_name());
-      CLEAR_PENDING_EXCEPTION;
+      t.clear_pending_exception();
       SystemDictionaryShared::set_class_has_failed_verification(ik);
       _has_error_classes = true;
     }
