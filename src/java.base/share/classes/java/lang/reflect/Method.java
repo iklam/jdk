@@ -550,8 +550,7 @@ public final class Method extends Executable {
     @ForceInline // to ensure Reflection.getCallerClass optimization
     @IntrinsicCandidate
     public Object invoke(Object obj, Object... args)
-        throws IllegalAccessException, IllegalArgumentException,
-           InvocationTargetException
+        throws IllegalAccessException, InvocationTargetException
     {
         boolean callerSensitive = isCallerSensitive();
         Class<?> caller = null;
@@ -572,15 +571,6 @@ public final class Method extends Executable {
         return callerSensitive ? ma.invoke(caller, obj, args) : ma.invoke(obj, args);
     }
 
-    private Boolean callerSensitive;       // lazily initialize
-    private boolean isCallerSensitive() {
-        Boolean cs = callerSensitive;
-        if (cs == null) {
-            callerSensitive = cs = Reflection.isCallerSensitive(this);
-        }
-        return cs;
-    }
-
     /**
      * This is to support MethodHandle calling caller-sensitive Method::invoke
      * that may invoke a caller-sensitive method in order to get the original caller
@@ -591,7 +581,7 @@ public final class Method extends Executable {
      * that becomes the caller class invoking Method::invoke.
      */
     private Object invoke(Class<?> caller, Object obj, Object... args)
-            throws IllegalAccessException, IllegalArgumentException, InvocationTargetException
+            throws IllegalAccessException, InvocationTargetException
     {
         boolean callerSensitive = isCallerSensitive();
         if (!override) {
@@ -605,6 +595,15 @@ public final class Method extends Executable {
         }
 
         return callerSensitive ? ma.invoke(caller, obj, args) : ma.invoke(obj, args);
+    }
+
+    private Boolean callerSensitive;       // lazily initialize
+    private boolean isCallerSensitive() {
+        Boolean cs = callerSensitive;
+        if (cs == null) {
+            callerSensitive = cs = Reflection.isCallerSensitive(this);
+        }
+        return cs;
     }
 
     /**

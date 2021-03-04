@@ -331,12 +331,7 @@ public class BasicTest {
     @Test(dataProvider = "cantBeHiddenClasses", expectedExceptions = NoClassDefFoundError.class)
     public void failToDeriveAsHiddenClass(String name) throws Exception {
         byte[] bytes = Files.readAllBytes(CLASSES_DIR.resolve(name + ".class"));
-        try {
         Class<?> hc = lookup().defineHiddenClass(bytes, false).lookupClass();
-        } catch (LinkageError e) {
-           e.printStackTrace();
-           throw e;
-        }
     }
 
     /*

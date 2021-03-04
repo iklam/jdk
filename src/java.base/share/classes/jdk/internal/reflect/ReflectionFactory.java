@@ -88,6 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
+    private static boolean useCallerSensitiveAdaptor = true;
 
     // true if deserialization constructor checking is disabled
     private static boolean disableSerialConstructorChecks = false;
@@ -167,7 +168,7 @@ public class ReflectionFactory {
         boolean isFinal = Modifier.isFinal(field.getModifiers());
         boolean isReadOnly = isFinal && (!override || langReflectAccess.isTrustedFinalField(field));
         if (useDirectMethodHandle && VM.isModuleSystemInited()) {
-           return MethodHandleAccessorFactory.newFieldAccessor(field, isReadOnly);
+            return MethodHandleAccessorFactory.newFieldAccessor(field, isReadOnly);
         } else {
             return UnsafeFieldAccessorFactory.newFieldAccessor(field, isReadOnly);
         }
@@ -187,7 +188,6 @@ public class ReflectionFactory {
         } else if (!useDirectMethodHandle && noInflation
                     && !method.getDeclaringClass().isHidden()
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())) {
-
             Method csmAdapter = findCSMethodAdapter(method);
             return csmAdapter != null
                     ? new CsMethodAccessorAdapter(method, csmAdapter, generateMethodAccessor(csmAdapter))
@@ -655,6 +655,9 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
+    static boolean useCallerSensitiveAdaptor() {
+        return useCallerSensitiveAdaptor;
+    }
 
     /** We have to defer full initialization of this class until after
         the static initializer is run since java.lang.reflect.Method's
@@ -688,6 +691,12 @@ public class ReflectionFactory {
         val = props.getProperty("jdk.reflect.useDirectMethodHandle");
         if (val != null && val.equals("false")) {
             useDirectMethodHandle = false;
+
+            // turn off explicitly for performance testing
+            val = props.getProperty("jdk.reflect.useCallerSensitiveAdaptor");
+            if (val != null && val.equals("false")) {
+                useCallerSensitiveAdaptor = false;
+            }
         }
 
         disableSerialConstructorChecks =

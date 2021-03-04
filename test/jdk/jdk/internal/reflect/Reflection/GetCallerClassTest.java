@@ -41,7 +41,7 @@
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass
- * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Dsun.reflect.noInflation=false GetCallerClassTest
+ * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Djdk.reflect.useCallerSensitiveAdaptor=true -Dsun.reflect.noInflation=false GetCallerClassTest
  */
 
 /*
@@ -50,7 +50,7 @@
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass
- * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Dsun.reflect.noInflation=true GetCallerClassTest
+ * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Djdk.reflect.useCallerSensitiveAdaptor=true -Dsun.reflect.noInflation=true GetCallerClassTest
  */
 
 import boot.GetCallerClass;

@@ -30,6 +30,8 @@ import jdk.internal.misc.Unsafe;
 import jdk.internal.misc.VM;
 import sun.reflect.misc.ReflectUtil;
 
+import static jdk.internal.reflect.ReflectionFactory.generateMethodAccessor;
+
 /** Used only for the first few invocations of a Method; afterward,
     switches to bytecode-based implementation */
 
@@ -83,10 +85,13 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
                 System.arraycopy(args, 0, newArgs, 1, args.length);
             }
             return invoke0(csmAdapter, obj, newArgs);
-        } else {
+        } else if (ReflectionFactory.useCallerSensitiveAdaptor()) {
             // invoke the caller-sensitive method through an injected invoker,
             // a nestmate of the caller class, acting as the caller
             return super.invoke(caller, obj, args);
+        } else {
+            // ignore the caller sensitive adaptor for performance testing
+            return invoke(obj, args);
         }
     }
 
@@ -104,7 +109,9 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
                     && generated == 0
                     && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
-                MethodAccessorImpl acc = ReflectionFactory.generateMethodAccessor(method);
+                MethodAccessorImpl acc = csmAdapter != null
+                            ? new CsMethodAccessorAdapter(method, csmAdapter, generateMethodAccessor(csmAdapter))
+                            : generateMethodAccessor(method);
                 parent.setDelegate(acc);
             }
         } catch (Throwable t) {
