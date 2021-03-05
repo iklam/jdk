@@ -88,7 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
-    private static boolean useCallerSensitiveAdaptor = true;
+    private static boolean useCallerSensitiveAdapter = true;
 
     // true if deserialization constructor checking is disabled
     private static boolean disableSerialConstructorChecks = false;
@@ -210,6 +210,7 @@ public class ReflectionFactory {
      * with a leading caller class argument that will be invoked reflectively.
      */
     static Method findCSMethodAdapter(Method method) {
+        if (!useCallerSensitiveAdapter) return null;
         if (!Reflection.isCallerSensitive(method)) return null;
 
         int paramCount = method.getParameterCount();
@@ -655,8 +656,8 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
-    static boolean useCallerSensitiveAdaptor() {
-        return useCallerSensitiveAdaptor;
+    static boolean useCallerSensitiveAdapter() {
+        return useCallerSensitiveAdapter;
     }
 
     /** We have to defer full initialization of this class until after
@@ -691,11 +692,12 @@ public class ReflectionFactory {
         val = props.getProperty("jdk.reflect.useDirectMethodHandle");
         if (val != null && val.equals("false")) {
             useDirectMethodHandle = false;
+            useCallerSensitiveAdapter = false;
 
             // turn off explicitly for performance testing
-            val = props.getProperty("jdk.reflect.useCallerSensitiveAdaptor");
-            if (val != null && val.equals("false")) {
-                useCallerSensitiveAdaptor = false;
+            val = props.getProperty("jdk.reflect.useCallerSensitiveAdapter");
+            if (val != null && val.equals("true")) {
+                useCallerSensitiveAdapter = true;
             }
         }
 

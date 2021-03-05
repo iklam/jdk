@@ -85,7 +85,7 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
                 System.arraycopy(args, 0, newArgs, 1, args.length);
             }
             return invoke0(csmAdapter, obj, newArgs);
-        } else if (ReflectionFactory.useCallerSensitiveAdaptor()) {
+        } else if (ReflectionFactory.useCallerSensitiveAdapter()) {
             // invoke the caller-sensitive method through an injected invoker,
             // a nestmate of the caller class, acting as the caller
             return super.invoke(caller, obj, args);
