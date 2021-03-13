@@ -1,0 +1,128 @@
+#Test Results (version 2)
+#Fri Mar 12 22:42:03 PST 2021
+#-----testdescription-----
+$file=/jdk2/ken/open/test/hotspot/jtreg/demo/Test2.java
+$root=/jdk2/ken/open/test/hotspot/jtreg
+keywords=
+library=/test/hotspot/jtreg/demo/lib
+run=USER_SPECIFIED main LibB\nUSER_SPECIFIED main Test2\n
+source=Test2.java
+title=\ 
+
+#-----environment-----
+
+#-----testresult-----
+description=file\:/jdk2/ken/open/test/hotspot/jtreg/demo/Test2.java
+elapsed=68 0\:00\:00.068
+end=Fri Mar 12 22\:42\:03 PST 2021
+environment=regtest
+execStatus=Error. Agent communication error\: java.io.EOFException; check console log for any additional details
+harnessLoaderMode=Classpath Loader
+harnessVariety=Full Bundle
+hostname=ioilinux
+javatestOS=Linux 4.4.0-138-generic (amd64)
+javatestVersion=6.0-ea+b11-2020-05-19
+jtregVersion=jtreg 5.1 ea b01
+script=com.sun.javatest.regtest.exec.RegressionScript
+sections=script_messages build main
+start=Fri Mar 12 22\:42\:03 PST 2021
+test=demo/Test2.java
+testJDK=/home/iklam/jdk/bld/ken/images/jdk
+totalTime=69
+user.name=iklam
+work=/jdk2/tmp/jtreg/work/demo
+
+#section:script_messages
+----------messages:(7/448)----------
+JDK under test: /home/iklam/jdk/bld/ken/images/jdk
+java version "17-internal" 2021-09-14
+Java(TM) SE Runtime Environment (build 17-internal+0-adhoc.iklam.open)
+Java HotSpot(TM) 64-Bit Server VM (build 17-internal+0-adhoc.iklam.open, mixed mode, sharing)
+Library /test/hotspot/jtreg/demo/lib; kind: packages
+   source directory: /jdk2/ken/open/test/hotspot/jtreg/demo/lib
+   class directory: /jdk2/tmp/jtreg/work/classes/test/hotspot/jtreg/demo/lib
+
+#section:build
+----------messages:(3/87)----------
+command: build LibB
+reason: Named class compiled on demand
+elapsed time (seconds): 0.0
+result: Passed. All files up to date
+
+#section:main
+----------messages:(5/121)----------
+command: main LibB
+reason: User specified action: run main LibB 
+Mode: agentvm
+Agent id: 2
+elapsed time (seconds): 0.067
+----------configuration:(12/488)----------
+Boot Layer
+  class path: /jdk/tools/jtreg/5.1-b01/lib/javatest.jar 
+              /jdk/tools/jtreg/5.1-b01/lib/jtreg.jar 
+              /jdk/tools/jtreg/5.1-b01/lib/junit.jar 
+              /jdk/tools/jtreg/5.1-b01/lib/testng.jar 
+  patch:      java.base /jdk2/tmp/jtreg/work/patches/java.base
+
+Test Layer
+  class path: /jdk2/ken/open/test/hotspot/jtreg/demo
+              /jdk2/tmp/jtreg/work/classes/test/hotspot/jtreg/demo/lib
+              /jdk2/ken/open/test/hotspot/jtreg/demo/lib
+
+----------rerun:(26/1586)*----------
+cd /jdk2/tmp/jtreg/work/scratch && \\
+DISPLAY=:2 \\
+HOME=/home/iklam \\
+JTREG_COMPILEJDK=/home/iklam/jdk/bld/ken/images/jdk \\
+JTREG_RETAIN=-retain:all \\
+LANG=en_US.UTF-8 \\
+PATH=/bin:/usr/bin:/usr/sbin \\
+    /home/iklam/jdk/bld/ken/images/jdk/bin/java \\
+        -Dtest.vm.opts=-XX:MaxRAM=8g \\
+        -Dtest.tool.vm.opts=-J-XX:MaxRAM=8g \\
+        -Dtest.compiler.opts= \\
+        -Dtest.java.opts= \\
+        -Dtest.jdk=/home/iklam/jdk/bld/ken/images/jdk \\
+        -Dcompile.jdk=/home/iklam/jdk/bld/ken/images/jdk \\
+        -Dtest.timeout.factor=4.0 \\
+        -Dtest.nativepath=/home/iklam/jdk/bld/ken/images/jdk/../../images/test/hotspot/jtreg/native \\
+        -Dtest.root=/jdk2/ken/open/test/hotspot/jtreg \\
+        -Dtest.name=demo/Test2.java \\
+        -Dtest.file=/jdk2/ken/open/test/hotspot/jtreg/demo/Test2.java \\
+        -Dtest.src=/jdk2/ken/open/test/hotspot/jtreg/demo \\
+        -Dtest.src.path=/jdk2/ken/open/test/hotspot/jtreg/demo:/jdk2/ken/open/test/hotspot/jtreg/demo/lib \\
+        -Dtest.classes=/jdk2/tmp/jtreg/work/classes/demo/Test2.d \\
+        -Dtest.class.path=/jdk2/tmp/jtreg/work/classes/demo/Test2.d:/jdk2/tmp/jtreg/work/classes/test/hotspot/jtreg/demo/lib \\
+        -Dtest.class.path.prefix=/jdk2/ken/open/test/hotspot/jtreg/demo:/jdk2/tmp/jtreg/work/classes/test/hotspot/jtreg/demo/lib \\
+        -classpath /jdk2/ken/open/test/hotspot/jtreg/demo:/jdk2/tmp/jtreg/work/classes/test/hotspot/jtreg/demo/lib:/jdk2/ken/open/test/hotspot/jtreg/demo/lib:/jdk/tools/jtreg/5.1-b01/lib/javatest.jar:/jdk/tools/jtreg/5.1-b01/lib/jtreg.jar \\
+        LibB
+----------stderr:(25/1726)----------
+java.lang.NoClassDefFoundError: LibA
+	at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1010)
+	at java.base/java.security.SecureClassLoader.defineClass(SecureClassLoader.java:150)
+	at java.base/java.net.URLClassLoader.defineClass(URLClassLoader.java:511)
+	at java.base/java.net.URLClassLoader$1.run(URLClassLoader.java:419)
+	at java.base/java.net.URLClassLoader$1.run(URLClassLoader.java:413)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:691)
+	at java.base/java.net.URLClassLoader.findClass(URLClassLoader.java:412)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:586)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:519)
+	at com.sun.javatest.regtest.agent.MainActionHelper.runClass(MainActionHelper.java:143)
+	at com.sun.javatest.regtest.agent.AgentServer.doMain(AgentServer.java:301)
+	at com.sun.javatest.regtest.agent.AgentServer.run(AgentServer.java:232)
+	at com.sun.javatest.regtest.agent.AgentServer.main(AgentServer.java:69)
+Caused by: java.lang.ClassNotFoundException: LibA
+	at java.base/java.net.URLClassLoader.findClass(URLClassLoader.java:432)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:586)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:519)
+	... 14 more
+Exception in thread "main" java.lang.SecurityException: System.exit() forbidden by JT Harness
+	at com.sun.javatest.regtest.agent.JavaTestSecurityManager.checkExit(JavaTestSecurityManager.java:116)
+	at java.base/java.lang.Runtime.exit(Runtime.java:112)
+	at java.base/java.lang.System.exit(System.java:1769)
+	at com.sun.javatest.regtest.agent.AgentServer.main(AgentServer.java:72)
+result: Error. Agent communication error: java.io.EOFException; check console log for any additional details
+
+
+test result: Error. Agent communication error: java.io.EOFException; check console log for any additional details
