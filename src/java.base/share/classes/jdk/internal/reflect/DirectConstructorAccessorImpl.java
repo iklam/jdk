@@ -39,7 +39,7 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
     public Object newInstance(Object[] args) throws InstantiationException, InvocationTargetException {
         try {
             return target.invokeExact(args);
-        } catch (IllegalArgumentException|InvocationTargetException e) {
+        } catch (InvocationTargetException e) {
             throw e;
         } catch (ClassCastException e) {
             throw new IllegalArgumentException("argument type mismatch", e);

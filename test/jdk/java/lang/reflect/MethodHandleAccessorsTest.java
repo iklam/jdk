@@ -26,7 +26,11 @@
  * @bug 6824466
  * @modules java.base/jdk.internal.reflect
  * @summary Test compliance of ConstructorAccessor and MethodAccessor implementations
- * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true  -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ */
+/*
+ * @test
+ * @modules java.base/jdk.internal.reflect
  * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
 
@@ -301,6 +305,9 @@ public class MethodHandleAccessorsTest {
             new IllegalArgumentException("object is not an instance of declaring class"),
     };
 
+    private final Throwable[] wrong_argument_count_no_details = new Throwable[] {
+            new IllegalArgumentException("wrong number of arguments")
+    };
     private final Throwable[] wrong_argument_count = new Throwable[] {
             new IllegalArgumentException("wrong number of arguments"),
             new IllegalArgumentException("array is not of length 1")
@@ -311,6 +318,10 @@ public class MethodHandleAccessorsTest {
     };
     private final Throwable[] null_argument_value = new Throwable[] {
             new IllegalArgumentException()
+    };
+    private final Throwable[] null_argument_value_npe = new Throwable[] {
+            new IllegalArgumentException("java.lang.NullPointerException"),
+            new NullPointerException()
     };
     private final Throwable[] null_target = new Throwable[] {
             new NullPointerException()
@@ -356,37 +367,33 @@ public class MethodHandleAccessorsTest {
         boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
         System.out.println("TESTING old implementation " + newImpl);
         return new Object[][]{
-            new Object[]{"public_static_I_V", int.class, null, new Object[]{12}, null, noException},
-            new Object[]{"public_static_I_I", int.class, null, new Object[]{12}, 12, noException},
-            new Object[]{"public_I_V", int.class,        inst, new Object[]{12}, null, noException},
-            new Object[]{"public_I_I", int.class,        inst, new Object[]{12}, 12, noException},
-
+            new Object[]{"public_static_I_V",  int.class, null, new Object[]{12}, null, noException},
+            new Object[]{"public_static_I_I",  int.class, null, new Object[]{12}, 12, noException},
+            new Object[]{"public_I_V",         int.class, inst, new Object[]{12}, null, noException},
+            new Object[]{"public_I_I",         int.class, inst, new Object[]{12}, 12, noException},
             new Object[]{"private_static_I_V", int.class, null, new Object[]{12}, null, noException},
             new Object[]{"private_static_I_I", int.class, null, new Object[]{12}, 12, noException},
-            new Object[]{"private_I_V", int.class,        inst, new Object[]{12}, null, noException},
-            new Object[]{"private_I_I", int.class,        inst, new Object[]{12}, 12, noException},
+            new Object[]{"private_I_V",        int.class, inst, new Object[]{12}, null, noException},
+            new Object[]{"private_I_I",        int.class, inst, new Object[]{12}, 12, noException},
 
             new Object[] {"public_static_I_I", int.class, null, new Object[]{"a"}, null, mismatched_argument_type},
-
-            new Object[] {"public_I_I", int.class,        inst, new Object[]{"a"}, null, mismatched_argument_type},
-
-            new Object[] {"public_static_I_I", int.class, null, new Object[]{12, 13}, null, wrong_argument_count},
-
-            new Object[] {"public_I_I", int.class, inst, new Object[]{12, 13}, null, wrong_argument_count},
-            // FIXME: does not match previous implementation
-            new Object[] {"public_I_I", int.class, wrongInst, new Object[]{12}, 12,
+            new Object[] {"public_I_I",        int.class, inst, new Object[]{"a"}, null, mismatched_argument_type},
+            new Object[] {"public_static_I_I", int.class, null, new Object[]{12, 13}, null,
+                    newImpl ? wrong_argument_count_no_details : wrong_argument_count},
+            new Object[] {"public_I_I",        int.class, inst, new Object[]{12, 13}, null,
+                    newImpl ? wrong_argument_count_no_details : wrong_argument_count},
+            new Object[] {"public_I_I",        int.class, wrongInst, new Object[]{12}, 12,
                     newImpl ? mismatched_argument_type : mismatched_target_type},
-            // FIXME: does not match previous implementation
-            new Object[] {"public_I_I", int.class, null, new Object[]{12}, 12,
-                    newImpl ? wrapped_npe_no_msg : null_target},
+            new Object[] {"public_I_I",        int.class, null, new Object[]{12}, 12, null_target},
 
-            new Object[] {"public_static_I_V", int.class, null, null, null, null_argument},
+            new Object[] {"public_static_I_V", int.class, null, null, null,
+                    newImpl ? wrong_argument_count_no_details : null_argument},
+            new Object[] {"public_static_I_V", int.class, null, new Object[]{null}, null,
+                    newImpl ? null_argument_value_npe : null_argument_value},
+            new Object[] {"public_I_I",        int.class, inst, null, null, null_argument},
 
-            new Object[] {"public_static_I_V", int.class, null, new Object[]{null}, null, null_argument_value},
-
-            new Object[] {"public_I_I", int.class, inst, null, null, null_argument},
-
-            new Object[] {"public_I_I", int.class, inst, new Object[]{null}, null, null_argument_value},
+            new Object[] {"public_I_I", int.class, inst, new Object[]{null}, null,
+                    newImpl ? null_argument_value_npe : null_argument_value},
             new Object[] {"throws_exception", RuntimeException.class, null, new Object[]{new NullPointerException("NPE")}, null, wrapped_npe},
             new Object[] {"throws_exception", RuntimeException.class, null, new Object[]{new IllegalArgumentException("IAE")}, null, wrapped_iae},
             new Object[] {"throws_exception", RuntimeException.class, null, new Object[]{new ClassCastException("CCE")}, null, wrapped_cce},

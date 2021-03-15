@@ -29,64 +29,183 @@ import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.vm.annotation.ForceInline;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.Set;
 
 class DirectMethodAccessorImpl extends MethodAccessorImpl {
-    static MethodAccessorImpl directMethodAccessor(MethodHandle dmh, boolean callerSensitive) {
-        return callerSensitive ? new CallerSensitiveWithInvoker(dmh)
-                               : new DirectMethodAccessorImpl(dmh);
+    static MethodAccessorImpl directMethodAccessor(Method method, MethodHandle dmh, boolean callerSensitive) {
+        return callerSensitive ? new CallerSensitiveWithInvoker(dmh, method)
+                               : new DirectMethodAccessorImpl(dmh, method);
     }
-    static MethodAccessorImpl callerSensitiveAdapter(MethodHandle target) {
-        return new CallerSensitiveWithLeadingCaller(target);
+    static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target) {
+        return new CallerSensitiveWithLeadingCaller(target, original);
     }
 
-
+    protected final Method method;
     protected final MethodHandle target;      // target method handle
-    private DirectMethodAccessorImpl(MethodHandle target) {
+    protected final boolean isStatic;
+    protected final boolean isVarArgs;
+
+    protected final int paramCount;
+    private DirectMethodAccessorImpl(MethodHandle target, Method method) {
         this.target = target;
+        this.method = method;
+        this.isStatic = Modifier.isStatic(method.getModifiers());
+        this.isVarArgs = method.isVarArgs();
+        this.paramCount = method.getParameterCount();
     }
 
     @Override
     @ForceInline
     public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+        if (MethodHandleAccessorFactory.VERBOSE) {
+            System.out.println("invoke " + method + " with target " + obj + " args " + Arrays.deepToString(args));
+        }
+        checkReceiver(obj);
+        checkArgumentCount(args);
         try {
-            return target.invokeExact(obj, args);
-        } catch (IllegalArgumentException | InvocationTargetException e) {
-            throw e;
-        } catch (ClassCastException e) {
-            throw new IllegalArgumentException("argument type mismatch", e);
+            return switch (paramCount) {
+                case 0 ->  isStatic ? target.invokeExact()
+                                    : target.invokeExact(obj);
+                case 1 ->  isStatic ? target.invokeExact(unpack(args, 0))
+                                   : target.invokeExact(obj, unpack(args, 0));
+                case 2 ->  isStatic ? target.invokeExact(unpack(args, 0), unpack(args, 1))
+                                    : target.invokeExact(obj, unpack(args, 0), unpack(args, 1));
+                default -> isStatic ? target.invokeExact(args)
+                                    : target.invokeExact(obj, args);
+            };
+        } catch (IllegalArgumentException e) {
+            throw new InvocationTargetException(e);
+        } catch (ClassCastException|WrongMethodTypeException e) {
+            if (isIllegalArgument(e))
+                throw new IllegalArgumentException("argument type mismatch", e);
+            else
+                throw new InvocationTargetException(e);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (Error|RuntimeException e) {
+            if (isIllegalArgument(e))
+                throw new IllegalArgumentException(e);
+            else
+                throw new InvocationTargetException(e);
+        } catch (InvocationTargetException e) {
             throw e;
         } catch (Throwable e) {
             throw new InvocationTargetException(e);
         }
     }
 
+    protected void checkReceiver(Object obj) {
+        if (!isStatic && obj == null) {
+            throw new NullPointerException();
+        }
+    }
+
+    protected void checkArgumentCount(Object[] args) {
+        // only check argument count for specialized forms
+        if (paramCount > 2) return;
+
+        int argc = args != null ? args.length : 0;
+        if (argc != paramCount) {
+            throw new IllegalArgumentException("wrong number of arguments");
+        }
+    }
+
+    private static Object unpack(Object[] args, int index) {
+        if (args != null && index < args.length) {
+            return args[index];
+        }
+        return null;
+    }
+
+    boolean isIllegalArgument(RuntimeException e) {
+        StackTraceElement[] stackTrace = e.getStackTrace();
+        int i = 0;
+        StackTraceElement frame = stackTrace[0];
+        if ((frame.getClassName().equals("java.lang.Class") && frame.getMethodName().equals("cast"))
+                || (frame.getClassName().equals("java.util.Objects") && frame.getMethodName().equals("requiresNonNull"))) {
+            // skip Class::cast and Objects::requireNonNull from top frame
+            i++;
+        }
+        for (; i < stackTrace.length; i++) {
+            frame = stackTrace[i];
+            String cname = frame.getClassName();
+            if (cname.equals(this.getClass().getName())) {
+                // it's illegal argument if this exception is thrown from
+                // DirectMethodAccessorImpl::invoke
+                return true;
+            }
+            if (frame.getModuleName() == null || !frame.getModuleName().equals("java.base")) {
+                // if this exception is thrown from a unnamed module or non java.base module
+                // it's not IAE as it's thrown from the reflective method
+                return false;
+            }
+            // if thrown from java.base
+            int index = cname.lastIndexOf(".");
+            String pn = cname.substring(0, index);
+            if (!IMPL_PACKAGES.contains(pn)) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> IMPL_PACKAGES = Set.of(
+            "java.lang.reflect",
+            "java.lang.invoke",
+            "jdk.internal.reflect",
+            "sun.invoke.util"
+    );
+
     static class CallerSensitiveWithLeadingCaller extends DirectMethodAccessorImpl {
-        private CallerSensitiveWithLeadingCaller(MethodHandle target) {
-            super(target);
+        private CallerSensitiveWithLeadingCaller(MethodHandle target, Method original) {
+            super(target, original);
         }
 
         @Override
         public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
-            throw new InternalError("cs$method invoked without explicit caller: " + target);
+            throw new InternalError("caller sensitive method invoked without explicit caller: " + target);
         }
 
         @Override
         @ForceInline
-        public Object invoke(Class<?> caller, Object obj, Object[] args) throws IllegalArgumentException, InvocationTargetException {
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println("caller " + caller.getName() + " target " + obj + " args " + Arrays.deepToString(args));
+            }
+            checkReceiver(obj);
+            checkArgumentCount(args);
             try {
-                return target.invokeExact(obj, caller, args);
-            } catch (IllegalArgumentException | InvocationTargetException e) {
-                throw e;
-            } catch (ClassCastException e) {
-                throw new IllegalArgumentException("argument type mismatch", e);
+                return switch (paramCount) {
+                    case 0  -> isStatic ? target.invokeExact(caller)
+                                        : target.invokeExact(obj, caller);
+                    case 1  -> isStatic ? target.invokeExact(caller, unpack(args, 0))
+                                        : target.invokeExact(obj, caller, unpack(args, 0));
+                    case 2  -> isStatic ? target.invokeExact(caller, unpack(args, 0), unpack(args, 1))
+                                        : target.invokeExact(obj, caller, unpack(args, 0), unpack(args, 1));
+                    default -> isStatic ? target.invokeExact(caller, args)
+                                        : target.invokeExact(obj, caller, args);
+                };
+            } catch (IllegalArgumentException e) {
+                throw new InvocationTargetException(e);
+            } catch (ClassCastException|WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
             } catch (NullPointerException e) {
-                throw new IllegalArgumentException(e.getMessage(), e);
-            } catch (Error|RuntimeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (InvocationTargetException e) {
                 throw e;
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
@@ -94,11 +213,21 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
+    /**
+     * MethodAccessor class to invoke caller-sensitive methods via a reflective invoker
+     * injected as a caller class to invoke a method handle.
+     *
+     * This uses the simple form of direct method handle with the same method type
+     * as Method::invoke.
+     *
+     * To use specialized target method handles (see MethodHandleAccessorFactory::makeSpecializedTarget)
+     * it needs support in the injected invoker::reflect_invoke_V for different specialized forms.
+     */
     static class CallerSensitiveWithInvoker extends DirectMethodAccessorImpl {
         private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
 
-        private CallerSensitiveWithInvoker(MethodHandle target) {
-            super(target);
+        private CallerSensitiveWithInvoker(MethodHandle target, Method method) {
+            super(target, method);
         }
 
         @Override
@@ -108,17 +237,29 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
 
         @Override
         @ForceInline
-        public Object invoke(Class<?> caller, Object obj, Object[] args) throws IllegalArgumentException, InvocationTargetException {
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println("target " + obj + " args " + Arrays.deepToString(args));
+            }
+            checkReceiver(obj);
+            checkArgumentCount(args);
             var invoker = JLIA.reflectiveInvoker(caller);
             try {
+                // invoke the target method handle via an invoker
                 return invoker.invokeExact(target, obj, args);
-            } catch (IllegalArgumentException | InvocationTargetException e) {
-                throw e;
-            } catch (ClassCastException e) {
-                throw new IllegalArgumentException("argument type mismatch", e);
+            } catch (IllegalArgumentException e) {
+                throw new InvocationTargetException(e);
+            } catch (ClassCastException|WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
             } catch (NullPointerException e) {
-                throw new IllegalArgumentException(e.getMessage(), e);
-            } catch (Error|RuntimeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (InvocationTargetException e) {
                 throw e;
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
