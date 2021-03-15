@@ -95,8 +95,6 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 throw new IllegalArgumentException(e);
             else
                 throw new InvocationTargetException(e);
-        } catch (InvocationTargetException e) {
-            throw e;
         } catch (Throwable e) {
             throw new InvocationTargetException(e);
         }
@@ -205,8 +203,6 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                     throw new IllegalArgumentException(e);
                 else
                     throw new InvocationTargetException(e);
-            } catch (InvocationTargetException e) {
-                throw e;
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
             }
@@ -259,8 +255,6 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                     throw new IllegalArgumentException(e);
                 else
                     throw new InvocationTargetException(e);
-            } catch (InvocationTargetException e) {
-                throw e;
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
             }
