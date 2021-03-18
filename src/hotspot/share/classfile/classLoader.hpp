@@ -262,6 +262,7 @@ class ClassLoader: AllStatic {
                                                  bool throw_exception,
                                                  bool is_boot_append,
                                                  bool from_class_path_attr, TRAPS);
+  static void unload_jimage_library();
 
   // Canonicalizes path names, so strcmp will work properly. This is mainly
   // to avoid confusing the zip library

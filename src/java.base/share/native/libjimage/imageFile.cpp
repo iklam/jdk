@@ -212,8 +212,13 @@ ImageFileReaderTable::ImageFileReaderTable() : _count(0), _max(_growth) {
 }
 
 ImageFileReaderTable::~ImageFileReaderTable() {
+}
+
+// Shutdown the table gracefully.
+void ImageFileReaderTable::shutdown() {
     for (u4 i = 0; i < _count; i++) {
         ImageFileReader* image = _table[i];
+        _table[i] = NULL;
 
         if (image != NULL) {
             delete image;
@@ -261,6 +266,11 @@ bool ImageFileReaderTable::contains(ImageFileReader* image) {
 ImageFileReaderTable ImageFileReader::_reader_table;
 
 SimpleCriticalSection _reader_table_lock;
+
+// Gracefully releases all resources used by the JImage library.
+void ImageFileReader::shutdown() {
+    _reader_table.shutdown();
+}
 
 // Locate an image if file already open.
 ImageFileReader* ImageFileReader::find_image(const char* name) {

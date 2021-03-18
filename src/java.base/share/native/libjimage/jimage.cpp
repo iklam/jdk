@@ -35,6 +35,13 @@
 
 #include "imageFile.hpp"
 
+#include <stdlib.h>
+
+extern "C" JNIEXPORT void
+JIMAGE_Shutdown() {
+    ImageFileReader::shutdown();
+}
+
 /*
  * JImageOpen - Given the supplied full path file name, open an image file. This
  * function will also initialize tables and retrieve meta-data necessary to
@@ -215,3 +222,5 @@ JIMAGE_ResourceIterator(JImageFile* image,
         }
     }
 }
+
+

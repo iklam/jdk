@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "jvm.h"
 #include "aot/aotLoader.hpp"
+#include "classfile/classLoader.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/stringTable.hpp"
@@ -527,6 +528,9 @@ void before_exit(JavaThread* thread) {
       guarantee(fail_cnt == 0, "unexpected StringTable verification failures");
     }
   }
+
+  // Gracefully close jimage support.
+  ClassLoader::unload_jimage_library();
 
   #undef BEFORE_EXIT_NOT_RUN
   #undef BEFORE_EXIT_RUNNING

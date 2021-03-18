@@ -103,6 +103,7 @@ int ClassLoader::_libzip_loaded = 0;
 
 // Entry points for jimage.dll for loading jimage file entries
 
+static JImageShutdown_t                JImageShutdown         = NULL;
 static JImageOpen_t                    JImageOpen             = NULL;
 static JImageClose_t                   JImageClose            = NULL;
 static JImagePackageToModule_t         JImagePackageToModule  = NULL;
@@ -1003,12 +1004,19 @@ void ClassLoader::load_jimage_library() {
     vm_exit_during_initialization("Unable to load jimage library", path);
   }
 
+  JImageShutdown = CAST_TO_FN_PTR(JImageShutdown_t, dll_lookup(handle, "JIMAGE_Shutdown", path));
   JImageOpen = CAST_TO_FN_PTR(JImageOpen_t, dll_lookup(handle, "JIMAGE_Open", path));
   JImageClose = CAST_TO_FN_PTR(JImageClose_t, dll_lookup(handle, "JIMAGE_Close", path));
   JImagePackageToModule = CAST_TO_FN_PTR(JImagePackageToModule_t, dll_lookup(handle, "JIMAGE_PackageToModule", path));
   JImageFindResource = CAST_TO_FN_PTR(JImageFindResource_t, dll_lookup(handle, "JIMAGE_FindResource", path));
   JImageGetResource = CAST_TO_FN_PTR(JImageGetResource_t, dll_lookup(handle, "JIMAGE_GetResource", path));
   JImageResourceIterator = CAST_TO_FN_PTR(JImageResourceIterator_t, dll_lookup(handle, "JIMAGE_ResourceIterator", path));
+}
+
+void ClassLoader::unload_jimage_library() {
+    if (JImageShutdown != NULL) {
+        (*JImageShutdown)();
+    }
 }
 
 int ClassLoader::crc32(int crc, const char* buf, int len) {

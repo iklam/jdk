@@ -373,6 +373,9 @@ public:
     ImageFileReaderTable();
     ~ImageFileReaderTable();
 
+    // Shutdown the table gracefully.
+    void shutdown();
+
     // Return the number of entries.
     inline u4 count() { return _count; }
 
@@ -445,6 +448,9 @@ public:
         // Image file minor version number.
         MINOR_VERSION = 0
     };
+
+    // Gracefully releases all resources used by the JImage library.
+    static void shutdown();
 
     // Locate an image if file already open.
     static ImageFileReader* find_image(const char* name);

@@ -51,6 +51,19 @@ typedef jlong JImageLocationRef;
 // The image file content is malformed
 #define JIMAGE_CORRUPTED (-3)
 
+
+/*
+ * JImageShutdown - Gracefully releases all resources used by the JImage
+ * library.
+ *
+ * Ex.
+ *  (*JImageShutdown)();
+ */
+extern "C" JNIEXPORT void
+JIMAGE_Shutdown();
+
+typedef void (*JImageShutdown_t)();
+
 /*
  * JImageOpen - Given the supplied full path file name, open an image file. This
  * function will also initialize tables and retrieve meta-data necessary to
