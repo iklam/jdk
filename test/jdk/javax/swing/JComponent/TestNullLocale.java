@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,17 +19,30 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#include "precompiled.hpp"
-#include "gc/shared/softRefPolicy.hpp"
+/* @test
+   @bug 8263481
+   @summary Verifies calling setDefaultLocale(null) will reset
+            to VM's default locale
+   @run main TestNullLocale
+ */
 
-SoftRefPolicy::SoftRefPolicy() :
-    _should_clear_all_soft_refs(false),
-    _all_soft_refs_clear(false) {
+import javax.swing.JComponent;
+import java.util.Locale;
+
+public class TestNullLocale {
+    public static void main(String[] args) {
+        Locale defaultLocale = JComponent.getDefaultLocale();
+        JComponent.setDefaultLocale(Locale.GERMAN);
+        JComponent.setDefaultLocale(null);
+        Locale currentLocale = JComponent.getDefaultLocale();
+        if (defaultLocale != currentLocale) {
+            System.out.println("currentLocale " + currentLocale);
+            System.out.println("defaultLocale " + defaultLocale);
+            throw new RuntimeException("locale not reset to default locale");
+        }
+    }
 }
 
-void SoftRefPolicy::cleared_all_soft_refs() {
-  _all_soft_refs_clear = true;
-}
+
