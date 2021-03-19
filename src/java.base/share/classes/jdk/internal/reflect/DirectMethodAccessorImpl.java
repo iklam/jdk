@@ -29,10 +29,6 @@ import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.vm.annotation.ForceInline;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.UncheckedIOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.InvocationTargetException;
@@ -53,14 +49,12 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     protected final Method method;
     protected final MethodHandle target;      // target method handle
     protected final boolean isStatic;
-    protected final boolean isVarArgs;
 
     protected final int paramCount;
     private DirectMethodAccessorImpl(MethodHandle target, Method method) {
         this.target = target;
         this.method = method;
         this.isStatic = Modifier.isStatic(method.getModifiers());
-        this.isVarArgs = method.isVarArgs();
         this.paramCount = method.getParameterCount();
     }
 
@@ -76,15 +70,13 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             return switch (paramCount) {
                 case 0 ->  isStatic ? target.invokeExact()
                                     : target.invokeExact(obj);
-                case 1 ->  isStatic ? target.invokeExact(unpack(args, 0))
-                                   : target.invokeExact(obj, unpack(args, 0));
-                case 2 ->  isStatic ? target.invokeExact(unpack(args, 0), unpack(args, 1))
-                                    : target.invokeExact(obj, unpack(args, 0), unpack(args, 1));
+                case 1 ->  isStatic ? target.invokeExact(argAt(args, 0))
+                                    : target.invokeExact(obj, argAt(args, 0));
+                case 2 ->  isStatic ? target.invokeExact(argAt(args, 0), argAt(args, 1))
+                                    : target.invokeExact(obj, argAt(args, 0), argAt(args, 1));
                 default -> isStatic ? target.invokeExact(args)
                                     : target.invokeExact(obj, args);
             };
-        } catch (IllegalArgumentException e) {
-            throw new InvocationTargetException(e);
         } catch (ClassCastException|WrongMethodTypeException e) {
             if (isIllegalArgument(e))
                 throw new IllegalArgumentException("argument type mismatch", e);
@@ -100,13 +92,13 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
-    protected void checkReceiver(Object obj) {
+    void checkReceiver(Object obj) {
         if (!isStatic && obj == null) {
             throw new NullPointerException();
         }
     }
 
-    protected void checkArgumentCount(Object[] args) {
+    void checkArgumentCount(Object[] args) {
         // only check argument count for specialized forms
         if (paramCount > 2) return;
 
@@ -116,7 +108,7 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
-    private static Object unpack(Object[] args, int index) {
+    private static Object argAt(Object[] args, int index) {
         if (args != null && index < args.length) {
             return args[index];
         }
@@ -125,6 +117,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
 
     boolean isIllegalArgument(RuntimeException e) {
         StackTraceElement[] stackTrace = e.getStackTrace();
+        if (stackTrace.length == 0) {
+            return false;       // would this happen?
+        }
+
         int i = 0;
         StackTraceElement frame = stackTrace[0];
         if ((frame.getClassName().equals("java.lang.Class") && frame.getMethodName().equals("cast"))
@@ -182,18 +178,16 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             checkArgumentCount(args);
             try {
                 return switch (paramCount) {
-                    case 0  -> isStatic ? target.invokeExact(caller)
+                    case 0 ->  isStatic ? target.invokeExact(caller)
                                         : target.invokeExact(obj, caller);
-                    case 1  -> isStatic ? target.invokeExact(caller, unpack(args, 0))
-                                        : target.invokeExact(obj, caller, unpack(args, 0));
-                    case 2  -> isStatic ? target.invokeExact(caller, unpack(args, 0), unpack(args, 1))
-                                        : target.invokeExact(obj, caller, unpack(args, 0), unpack(args, 1));
+                    case 1 ->  isStatic ? target.invokeExact(caller, argAt(args, 0))
+                                        : target.invokeExact(obj, caller, argAt(args, 0));
+                    case 2 ->  isStatic ? target.invokeExact(caller, argAt(args, 0), argAt(args, 1))
+                                        : target.invokeExact(obj, caller, argAt(args, 0), argAt(args, 1));
                     default -> isStatic ? target.invokeExact(caller, args)
                                         : target.invokeExact(obj, caller, args);
                 };
-            } catch (IllegalArgumentException e) {
-                throw new InvocationTargetException(e);
-            } catch (ClassCastException|WrongMethodTypeException e) {
+            } catch (ClassCastException | WrongMethodTypeException e) {
                 if (isIllegalArgument(e))
                     throw new IllegalArgumentException("argument type mismatch", e);
                 else
@@ -243,8 +237,6 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             try {
                 // invoke the target method handle via an invoker
                 return invoker.invokeExact(target, obj, args);
-            } catch (IllegalArgumentException e) {
-                throw new InvocationTargetException(e);
             } catch (ClassCastException|WrongMethodTypeException e) {
                 if (isIllegalArgument(e))
                     throw new IllegalArgumentException("argument type mismatch", e);
