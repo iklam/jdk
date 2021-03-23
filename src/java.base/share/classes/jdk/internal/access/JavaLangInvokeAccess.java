@@ -141,4 +141,5 @@ public interface JavaLangInvokeAccess {
     MethodHandle findVirtual(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
     MethodHandle findStatic(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
     MethodHandle reflectiveInvoker(Class<?> caller);
+    VarHandle unreflectVarHandle(Field field) throws IllegalAccessException;
 }

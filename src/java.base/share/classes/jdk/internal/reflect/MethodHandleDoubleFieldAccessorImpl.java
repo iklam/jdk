@@ -36,9 +36,14 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
     private final MethodHandle setter_D;
     MethodHandleDoubleFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_D = getter.asType(methodType(double.class, Object.class));
-        this.setter_D = setter != null ? setter.asType(methodType(void.class, Object.class, double.class))
-                : null;
+        this.getter_D = isStatic ? getter.asType(methodType(double.class))
+                                 : getter.asType(methodType(double.class, Object.class));
+        if (setter != null) {
+            this.setter_D = isStatic ? setter.asType(methodType(void.class, double.class))
+                                     : setter.asType(methodType(void.class, Object.class, double.class));
+        } else {
+            this.setter_D = null;
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -74,9 +79,8 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
     }
 
     public double getDouble(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (double) getter_D.invokeExact(obj);
+            return isStatic ? (double) getter_D.invokeExact() : (double) getter_D.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -86,6 +90,46 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
         } catch (Throwable e) {
             throw new InternalError(e);
         }
+    }
+
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Byte) {
+            setDouble(obj, ((Byte) value).byteValue());
+            return;
+        }
+        if (value instanceof Short) {
+            setDouble(obj, ((Short) value).shortValue());
+            return;
+        }
+        if (value instanceof Character) {
+            setDouble(obj, ((Character) value).charValue());
+            return;
+        }
+        if (value instanceof Integer) {
+            setDouble(obj, ((Integer) value).intValue());
+            return;
+        }
+        if (value instanceof Long) {
+            setDouble(obj, ((Long) value).longValue());
+            return;
+        }
+        if (value instanceof Float) {
+            setDouble(obj, ((Float) value).floatValue());
+            return;
+        }
+        if (value instanceof Double) {
+            setDouble(obj, ((Double) value).doubleValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
     }
 
     public void setBoolean(Object obj, boolean z)
@@ -133,12 +177,15 @@ class MethodHandleDoubleFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
     public void setDouble(Object obj, double d)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(d);
         }
         try {
-            setter_D.invokeExact(obj, d);
+            if (isStatic) {
+                setter_D.invokeExact(d);
+            } else {
+                setter_D.invokeExact(obj, d);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

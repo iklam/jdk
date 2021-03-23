@@ -27,27 +27,14 @@ package jdk.internal.reflect;
 
 import jdk.internal.vm.annotation.ForceInline;
 
-import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
-import static java.lang.invoke.MethodType.methodType;
-
-class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
-    private final MethodHandle getter_I;
-    private final MethodHandle setter_I;
-    MethodHandleIntegerFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
-        super(field, getter, setter);
-        this.getter_I = isStatic ? getter.asType(methodType(int.class))
-                                 : getter.asType(methodType(int.class, Object.class));
-        if (setter != null) {
-            this.setter_I = isStatic ? setter.asType(methodType(void.class, int.class))
-                                     : setter.asType(methodType(void.class, Object.class, int.class));
-        } else {
-            this.setter_I = null;
-        }
+class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    VarHandleIntegerFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
+        super(field, varHandle, isReadyOnly);
     }
-
     public Object get(Object obj) throws IllegalArgumentException {
         return Integer.valueOf(getInt(obj));
     }
@@ -71,11 +58,11 @@ class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl
     @ForceInline
     public int getInt(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (int) getter_I.invokeExact() : (int) getter_I.invokeExact(obj);
+            return isStatic ? (int) varHandle.get() : (int) varHandle.get(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw new IllegalArgumentException("argument type mismatch", e);
+            throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
@@ -123,7 +110,6 @@ class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl
         throwSetIllegalArgumentException(value);
     }
 
-
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
@@ -156,18 +142,17 @@ class MethodHandleIntegerFieldAccessorImpl extends MethodHandleFieldAccessorImpl
         }
         try {
             if (isStatic) {
-                setter_I.invokeExact(i);
+                varHandle.set(i);
             } else {
-                setter_I.invokeExact(obj, i);
+                varHandle.set(obj, i);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw new IllegalArgumentException("argument type mismatch", e);
+            throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (WrongMethodTypeException e) {
-            e.printStackTrace();
             throwSetIllegalArgumentException(i);
         } catch (Throwable e) {
             throw new InternalError(e);

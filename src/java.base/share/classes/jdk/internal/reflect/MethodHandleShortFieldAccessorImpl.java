@@ -36,9 +36,14 @@ class MethodHandleShortFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     private final MethodHandle setter_S;
     MethodHandleShortFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_S = getter.asType(methodType(short.class, Object.class));
-        this.setter_S = setter != null ? setter.asType(methodType(void.class, Object.class, short.class))
-                : null;
+        this.getter_S = isStatic ? getter.asType(methodType(short.class))
+                                 : getter.asType(methodType(short.class, Object.class));
+        if (setter != null) {
+            this.setter_S = isStatic ? setter.asType(methodType(void.class, short.class))
+                                     : setter.asType(methodType(void.class, Object.class, short.class));
+        } else {
+            this.setter_S = null;
+        }
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Short.valueOf(getShort(obj));
@@ -57,9 +62,8 @@ class MethodHandleShortFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     }
 
     public short getShort(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (short) getter_S.invokeExact(obj);
+            return isStatic ? (short) getter_S.invokeExact() : (short) getter_S.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -87,6 +91,26 @@ class MethodHandleShortFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
         return getShort(obj);
     }
 
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Byte) {
+            setShort(obj, ((Byte) value).byteValue());
+            return;
+        }
+        if (value instanceof Short) {
+            setShort(obj, ((Short) value).shortValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
+    }
+
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
@@ -108,12 +132,15 @@ class MethodHandleShortFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     public void setShort(Object obj, short s)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(s);
         }
         try {
-            setter_S.invokeExact(obj, s);
+            if (isStatic) {
+                setter_S.invokeExact(s);
+            } else {
+                setter_S.invokeExact(obj, s);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

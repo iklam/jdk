@@ -1815,6 +1815,11 @@ abstract class MethodHandleImpl {
             }
 
             @Override
+            public VarHandle unreflectVarHandle(Field field) throws IllegalAccessException {
+                return IMPL_LOOKUP.unreflectVarHandle(field);
+            }
+
+            @Override
             public MethodHandle findVirtual(Class<?> defc, String name, MethodType type) throws IllegalAccessException {
                 try {
                     return IMPL_LOOKUP.findVirtual(defc, name, type);

@@ -36,9 +36,14 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     private final MethodHandle setter_J;
     MethodHandleLongFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_J = getter.asType(methodType(long.class, Object.class));
-        this.setter_J = setter != null ? setter.asType(methodType(void.class, Object.class, long.class))
-                : null;
+        this.getter_J = isStatic ? getter.asType(methodType(long.class))
+                                  : getter.asType(methodType(long.class, Object.class));
+        if (setter != null) {
+            this.setter_J = isStatic ? setter.asType(methodType(void.class, long.class))
+                                     : setter.asType(methodType(void.class, Object.class, long.class));
+        } else {
+            this.setter_J = null;
+        }
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Long.valueOf(getLong(obj));
@@ -65,9 +70,8 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     }
 
     public long getLong(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (long) getter_J.invokeExact(obj);
+            return isStatic ? (long) getter_J.invokeExact() : (long) getter_J.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -85,6 +89,38 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
 
     public double getDouble(Object obj) throws IllegalArgumentException {
         return getLong(obj);
+    }
+
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Byte) {
+            setLong(obj, ((Byte) value).byteValue());
+            return;
+        }
+        if (value instanceof Short) {
+            setLong(obj, ((Short) value).shortValue());
+            return;
+        }
+        if (value instanceof Character) {
+            setLong(obj, ((Character) value).charValue());
+            return;
+        }
+        if (value instanceof Integer) {
+            setLong(obj, ((Integer) value).intValue());
+            return;
+        }
+        if (value instanceof Long) {
+            setLong(obj, ((Long) value).longValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
     }
 
     public void setBoolean(Object obj, boolean z)
@@ -120,12 +156,15 @@ class MethodHandleLongFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     public void setLong(Object obj, long l)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(l);
         }
         try {
-            setter_J.invokeExact(obj, l);
+            if (isStatic) {
+                setter_J.invokeExact(l);
+            } else {
+                setter_J.invokeExact(obj, l);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

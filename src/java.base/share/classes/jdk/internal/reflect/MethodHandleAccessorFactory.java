@@ -28,6 +28,7 @@ package jdk.internal.reflect;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -97,48 +98,70 @@ final class MethodHandleAccessorFactory {
         // so that EIIE is propagated (not wrapped with ITE)
         UNSAFE.ensureClassInitialized(field.getDeclaringClass());
         try {
-            MethodHandle getter = JLIA.unreflectField(field, false);
-            MethodHandle setter = isReadOnly ? null : JLIA.unreflectField(field, true);
 
-            if (Modifier.isStatic(field.getModifiers())) {
-                // static field
-                getter = MethodHandles.dropArguments(getter, 0, Object.class)
-                                      .asType(methodType(Object.class, Object.class));
-                if (setter != null) {
-                    setter = MethodHandles.dropArguments(setter, 0, Object.class)
-                                          .asType(methodType(void.class, Object.class, Object.class));
-                }
-            }
-            Class<?> type = field.getType();
-            if (type == Boolean.TYPE) {
-                return new MethodHandleBooleanFieldAccessorImpl(field, getter, setter);
-            } else if (type == Byte.TYPE) {
-                return new MethodHandleByteFieldAccessorImpl(field, getter, setter);
-            } else if (type == Short.TYPE) {
-                return new MethodHandleShortFieldAccessorImpl(field, getter, setter);
-            } else if (type == Character.TYPE) {
-                return new MethodHandleCharacterFieldAccessorImpl(field, getter, setter);
-            } else if (type == Integer.TYPE) {
-                return new MethodHandleIntegerFieldAccessorImpl(field, getter, setter);
-            } else if (type == Long.TYPE) {
-                return new MethodHandleLongFieldAccessorImpl(field, getter, setter);
-            } else if (type == Float.TYPE) {
-                return new MethodHandleFloatFieldAccessorImpl(field, getter, setter);
-            } else if (type == Double.TYPE) {
-                return new MethodHandleDoubleFieldAccessorImpl(field, getter, setter);
-            } else {
-                return new MethodHandleObjectFieldAccessorImpl(field, getter, setter);
-            }
+            return ReflectionFactory.useVarHandle() ? varHandleAccessor(field, isReadOnly)
+                                                    : methodHandleAccessor(field, isReadOnly);
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
         }
     }
 
+    private static FieldAccessorImpl methodHandleAccessor(Field field, boolean isReadOnly) throws IllegalAccessException {
+        MethodHandle getter = JLIA.unreflectField(field, false);
+        MethodHandle setter = isReadOnly ? null : JLIA.unreflectField(field, true);
+
+        Class<?> type = field.getType();
+        if (type == Boolean.TYPE) {
+            return new MethodHandleBooleanFieldAccessorImpl(field, getter, setter);
+        } else if (type == Byte.TYPE) {
+            return new MethodHandleByteFieldAccessorImpl(field, getter, setter);
+        } else if (type == Short.TYPE) {
+            return new MethodHandleShortFieldAccessorImpl(field, getter, setter);
+        } else if (type == Character.TYPE) {
+            return new MethodHandleCharacterFieldAccessorImpl(field, getter, setter);
+        } else if (type == Integer.TYPE) {
+            return new MethodHandleIntegerFieldAccessorImpl(field, getter, setter);
+        } else if (type == Long.TYPE) {
+            return new MethodHandleLongFieldAccessorImpl(field, getter, setter);
+        } else if (type == Float.TYPE) {
+            return new MethodHandleFloatFieldAccessorImpl(field, getter, setter);
+        } else if (type == Double.TYPE) {
+            return new MethodHandleDoubleFieldAccessorImpl(field, getter, setter);
+        } else {
+            return new MethodHandleObjectFieldAccessorImpl(field, getter, setter);
+        }
+    }
+
+    private static FieldAccessorImpl varHandleAccessor(Field field, boolean isReadOnly) throws IllegalAccessException {
+        var varHandle = JLIA.unreflectVarHandle(field);
+
+        Class<?> type = field.getType();
+        if (type == Boolean.TYPE) {
+            return new VarHandleBooleanFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Byte.TYPE) {
+            return new VarHandleByteFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Short.TYPE) {
+            return new VarHandleShortFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Character.TYPE) {
+            return new VarHandleCharacterFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Integer.TYPE) {
+            return new VarHandleIntegerFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Long.TYPE) {
+            return new VarHandleLongFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Float.TYPE) {
+            return new VarHandleFloatFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else if (type == Double.TYPE) {
+            return new VarHandleDoubleFieldAccessorImpl(field, varHandle, isReadOnly);
+        } else {
+            return new VarHandleObjectFieldAccessorImpl(field, varHandle, isReadOnly);
+        }
+    }
+
     private static MethodHandle getDirectMethod(Method method, boolean callerSensitive) throws IllegalAccessException {
-        MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes());
-        boolean isStatic = Modifier.isStatic(method.getModifiers());
-        MethodHandle dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), method.getName(), mtype)
-                                    : JLIA.findVirtual(method.getDeclaringClass(), method.getName(), mtype);
+        var mtype = methodType(method.getReturnType(), method.getParameterTypes());
+        var isStatic = Modifier.isStatic(method.getModifiers());
+        var dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), method.getName(), mtype)
+                                        : JLIA.findVirtual(method.getDeclaringClass(), method.getName(), mtype);
         if (callerSensitive) {
             // the reflectiveInvoker for caller-sensitive method expects the same signature
             // as Method::invoke i.e. (Object, Object[])Object

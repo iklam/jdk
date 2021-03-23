@@ -36,9 +36,14 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
     private final MethodHandle setter_C;
     MethodHandleCharacterFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_C = getter.asType(methodType(char.class, Object.class));
-        this.setter_C = setter != null ? setter.asType(methodType(void.class, Object.class, char.class))
-                : null;
+        this.getter_C = isStatic ? getter.asType(methodType(char.class))
+                                 : getter.asType(methodType(char.class, Object.class));
+        if (setter != null) {
+            this.setter_C = isStatic ? setter.asType(methodType(void.class, char.class))
+                                     : setter.asType(methodType(void.class, Object.class, char.class));
+        } else {
+            this.setter_C = null;
+        }
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Character.valueOf(getChar(obj));
@@ -53,9 +58,8 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
     }
 
     public char getChar(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (char) getter_C.invokeExact(obj);
+            return isStatic ? (char) getter_C.invokeExact() : (char) getter_C.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -86,6 +90,22 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
         return getChar(obj);
     }
 
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Character) {
+            setChar(obj, ((Character) value).charValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
+    }
+
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
@@ -101,12 +121,15 @@ class MethodHandleCharacterFieldAccessorImpl extends MethodHandleFieldAccessorIm
     public void setChar(Object obj, char c)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(c);
         }
         try {
-            setter_C.invokeExact(obj, c);
+            if (isStatic) {
+                setter_C.invokeExact(c);
+            } else {
+                setter_C.invokeExact(obj, c);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

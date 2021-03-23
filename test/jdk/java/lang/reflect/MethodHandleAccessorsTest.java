@@ -33,15 +33,23 @@
  * @modules java.base/jdk.internal.reflect
  * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
+/*
+ * @test
+ * @modules java.base/jdk.internal.reflect
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.useVarHandle=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ */
 
 import jdk.internal.reflect.ConstructorAccessor;
+import jdk.internal.reflect.FieldAccessor;
 import jdk.internal.reflect.MethodAccessor;
 import jdk.internal.reflect.Reflection;
 import jdk.internal.reflect.ReflectionFactory;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.IntUnaryOperator;
@@ -84,6 +92,12 @@ public class MethodHandleAccessorsTest {
 
     private int private_I_I(int i) { return i; }
 
+    public static int varargs(int... values) {
+        int sum = 0;
+        for (int i : values) sum += i;
+        return sum;
+
+    }
     public static int varargs_primitive(int first, int... rest) {
         int sum = first;
         if (rest != null) {
@@ -106,6 +120,7 @@ public class MethodHandleAccessorsTest {
     }
 
     public static final class Public {
+        public static final int STATIC_FINAL = 1;
         private final int i;
         private final String s;
 
@@ -226,6 +241,36 @@ public class MethodHandleAccessorsTest {
         chechResult(ret, expectedReturn, exc, expectedExceptions);
     }
 
+    static void doTestAccessor(Field f, FieldAccessor fa, Object target, Object expectedValue, Throwable... expectedExceptions) {
+        Object ret;
+        Throwable exc;
+        try {
+            ret = fa.get(target);
+            exc = null;
+        } catch (Throwable e) {
+            ret = null;
+            exc = e;
+        }
+        System.out.println("\n" + f + ", invoked with target: " + target + ", value: " + ret);
+        chechResult(ret, expectedValue, exc, expectedExceptions);
+
+    }
+
+    static void doTestAccessor(Field f, FieldAccessor fa, Object target, Object newValue, Object expectedValue, Throwable... expectedExceptions) {
+        Object ret;
+        Throwable exc;
+            try {
+                fa.set(target, newValue);
+                exc = null;
+                ret = fa.get(target);
+            } catch (Throwable e) {
+                ret = null;
+                exc = e;
+            }
+            System.out.println("\n" + f + ", invoked with target: " + target + ", value: " + ret);
+            chechResult(ret, newValue, exc, expectedExceptions);
+    }
+
     static void chechResult(Object ret, Object expectedReturn, Throwable exc, Throwable... expectedExceptions) {
         if (exc != null) {
             checkException(exc, expectedExceptions);
@@ -258,7 +303,8 @@ public class MethodHandleAccessorsTest {
 
     static boolean exceptionMatches(Throwable exc, Throwable expected) {
         return expected.getClass().isInstance(exc) &&
-               Objects.equals(expected.getMessage(), exc.getMessage()) && (
+                (Objects.equals(expected.getMessage(), exc.getMessage()) ||
+                        (exc.getMessage() != null && expected.getMessage() != null && exc.getMessage().startsWith(expected.getMessage()))) && (
                    expected.getCause() == null ||
                    exceptionMatches(exc.getCause(), expected.getCause())
                );
@@ -295,47 +341,65 @@ public class MethodHandleAccessorsTest {
             throw new RuntimeException(ca.getClass().getName() + " for constructor: " + c + " test failure", e);
         }
     }
+    static void doTest(Field f, Object target, Object expectedValue, Throwable... expectedExceptions) {
+        FieldAccessor fa = ReflectionFactory.getReflectionFactory().newFieldAccessor(f, false);
+        try {
+            doTestAccessor(f, fa, target, expectedValue, expectedExceptions);
+        } catch (Throwable e) {
+            throw new RuntimeException(fa.getClass().getName() + " for field: " + f + " test failure", e);
+        }
+    }
+    static void doTest(Field f, Object target, Object oldValue, Object newValue, Throwable... expectedExceptions) {
+        FieldAccessor fa = ReflectionFactory.getReflectionFactory().newFieldAccessor(f, true);
+        try {
+            doTestAccessor(f, fa, target, oldValue, newValue, expectedExceptions);
+        } catch (Throwable e) {
+            throw new RuntimeException(fa.getClass().getName() + " for field: " + f + " test failure", e);
+        }
+    }
 
-    private final Throwable[] noException = new Throwable[0];
-    private final Throwable[] mismatched_argument_type = new Throwable[] {
+    private static final Throwable[] noException = new Throwable[0];
+    private static final Throwable[] mismatched_argument_type = new Throwable[] {
             new IllegalArgumentException("argument type mismatch")
     };
-    private final Throwable[] mismatched_target_type = new Throwable[] {
+    private static final Throwable[] mismatched_target_type = new Throwable[] {
             new IllegalArgumentException("argument type mismatch"),
             new IllegalArgumentException("object is not an instance of declaring class"),
     };
-
-    private final Throwable[] wrong_argument_count_no_details = new Throwable[] {
+    private static final Throwable[] cannot_set_final_field = new Throwable[] {
+            new IllegalArgumentException("Can not set final")
+    };
+    private static final Throwable[] wrong_argument_count_no_details = new Throwable[] {
             new IllegalArgumentException("wrong number of arguments")
     };
-    private final Throwable[] wrong_argument_count = new Throwable[] {
+    private static final Throwable[] wrong_argument_count = new Throwable[] {
             new IllegalArgumentException("wrong number of arguments"),
             new IllegalArgumentException("array is not of length 1")
     };
-    private final Throwable[] null_argument = new Throwable[] {
+    private static final Throwable[] null_argument = new Throwable[] {
             new IllegalArgumentException("wrong number of arguments"),
             new IllegalArgumentException("null array reference")
     };
-    private final Throwable[] null_argument_value = new Throwable[] {
+    private static final Throwable[] null_argument_value = new Throwable[] {
             new IllegalArgumentException()
     };
-    private final Throwable[] null_argument_value_npe = new Throwable[] {
+    private static final Throwable[] null_argument_value_npe = new Throwable[] {
             new IllegalArgumentException("java.lang.NullPointerException"),
             new NullPointerException()
     };
-    private final Throwable[] null_target = new Throwable[] {
+    private static final Throwable[] null_target = new Throwable[] {
             new NullPointerException()
     };
-    private final Throwable[] wrapped_npe_no_msg = new Throwable[]{
+    private static final Throwable[] wrapped_npe_no_msg = new Throwable[]{
             new InvocationTargetException(new NullPointerException())
     };
-    private final Throwable[] wrapped_npe = new Throwable[]{
+    private static final Throwable[] wrapped_npe = new Throwable[]{
             new InvocationTargetException(new NullPointerException("NPE"))
     };
-    private final Throwable[] wrapped_cce = new Throwable[]{
+    private static final Throwable[] wrapped_cce = new Throwable[]{
             new InvocationTargetException(new ClassCastException("CCE"))
     };
-    private final Throwable[] wrapped_iae = new Throwable[]{
+    private static final Throwable[] wrapped_iae = new Throwable[]{
             new InvocationTargetException(new IllegalArgumentException("IAE"))
     };
 
@@ -402,15 +466,19 @@ public class MethodHandleAccessorsTest {
 
     @DataProvider(name = "testMethodsWithVarargs")
     private Object[][] testMethodsWithVarargs() {
+        Class<?>[] paramTypes = new Class<?>[] { int[].class };
         Class<?>[] I_paramTypes = new Class<?>[] { int.class, int[].class };
         Class<?>[] L_paramTypes = new Class<?>[] { String.class, String[].class };
         return new Object[][]{
-             new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, new int[]{2, 3}}, 105, noException},
-             new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, new int[]{}}, 100, noException},
-             new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, null}, 1, noException},
-             new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", new String[]{"b", "c"}}, "a[b,c]", noException},
-             new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", new String[]{}}, "a[]", noException},
-             new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", null}, "a", noException},
+            new Object[] {"varargs", paramTypes, null, new Object[]{new int[]{1, 2, 3}}, 6, noException},
+            new Object[] {"varargs", paramTypes, null, new Object[]{new int[]{}}, 0, noException},
+            new Object[] {"varargs", paramTypes, null, new Object[]{null}, 0, wrapped_npe_no_msg},
+            new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, new int[]{2, 3}}, 105, noException},
+            new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, new int[]{}}, 100, noException},
+            new Object[] {"varargs_primitive", I_paramTypes, null, new Object[]{1, null}, 1, noException},
+            new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", new String[]{"b", "c"}}, "a[b,c]", noException},
+            new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", new String[]{}}, "a[]", noException},
+            new Object[] {"varargs_object", L_paramTypes,    null, new Object[]{"a", null}, "a", noException},
         };
     }
 
@@ -476,5 +544,53 @@ public class MethodHandleAccessorsTest {
         IntUnaryOperator intUnaryOp = i -> i;
         Method applyAsIntMethod = intUnaryOp.getClass().getDeclaredMethod("applyAsInt", int.class);
         doTest(applyAsIntMethod, intUnaryOp, new Object[]{12}, 12);
+    }
+
+    @DataProvider(name = "readAccess")
+    private Object[][] readAccess() {
+        boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
+        boolean useVarHandle = Boolean.getBoolean("jdk.reflect.useVarHandle");
+
+        return new Object[][]{
+                new Object[]{"i", new Public(100), 100, noException},
+                new Object[]{"s", new Public("test"), "test", noException},
+                new Object[]{"s", new Object(), "test", newImpl & !useVarHandle ? mismatched_argument_type : cannot_set_final_field},
+        };
+    }
+    @DataProvider(name = "writeAccess")
+    private Object[][] writeAccess() {
+        boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
+        boolean useVarHandle = Boolean.getBoolean("jdk.reflect.useVarHandle");
+        return new Object[][]{
+                new Object[]{"i", new Public(100), 100, 200, noException},
+                new Object[]{"s", new Public("test"), "test", "newValue", noException},
+                // ## no exception thrown
+                // new Object[]{"i", new Public(100), 100, new Object(), cannot_set_final_field},
+                new Object[]{"s", new Object(), "test", "dummy", newImpl & !useVarHandle ? mismatched_argument_type : cannot_set_final_field},
+        };
+    }
+
+    @Test(dataProvider = "readAccess")
+    public void testFieldReadAccess(String name, Object target, Object expectedValue, Throwable[] expectedExpections) throws Exception {
+        Field f = Public.class.getDeclaredField(name);
+        f.setAccessible(true);
+        doTest(f, target, expectedValue, expectedExpections);
+    }
+    @Test(dataProvider = "writeAccess")
+    public void testFieldWriteAccess(String name, Object target, Object oldValue, Object newValue, Throwable[] expectedExpections) throws Exception {
+        Field f = Public.class.getDeclaredField(name);
+        f.setAccessible(true);
+        doTest(f, target, oldValue, newValue, expectedExpections);
+    }
+    @Test
+    public void testStaticFinalFields() throws Exception {
+        Field f = Public.class.getDeclaredField("STATIC_FINAL");
+        doTest(f, new Public(), 1, noException);
+
+        try {
+            f.setInt(null, 100);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
     }
 }

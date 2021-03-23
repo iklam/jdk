@@ -228,6 +228,10 @@ abstract class FieldAccessorImpl extends MagicAccessorImpl
         throw new IllegalArgumentException(getSetMessage(attemptedType,attemptedValue));
     }
 
+    protected IllegalArgumentException newIllegalArgumentException(Object o) {
+        return new IllegalArgumentException(getSetMessage(o != null ? o.getClass().getName() : "", ""));
+    }
+
     protected void throwSetIllegalArgumentException(Object o) {
         throwSetIllegalArgumentException(o != null ? o.getClass().getName() : "", "");
     }

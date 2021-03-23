@@ -25,32 +25,29 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.MethodHandle;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-abstract class MethodHandleFieldAccessorImpl extends FieldAccessorImpl {
-    protected final MethodHandle getter;
-    protected final MethodHandle setter;
+abstract class VarHandleFieldAccessorImpl extends FieldAccessorImpl {
+    protected final VarHandle varHandle;
     protected final boolean isReadOnly;
     protected final boolean isStatic;
-
-    protected MethodHandleFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
+    protected VarHandleFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
         super(field);
-        this.getter = getter;
-        this.setter = setter;
-        this.isReadOnly = setter == null;
+        this.varHandle = varHandle;
+        this.isReadOnly = isReadOnly;
         this.isStatic = Modifier.isStatic(field.getModifiers());
     }
 
     @Override
     public Object get(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? getter.invoke() : getter.invoke(obj);
+            return isStatic ? varHandle.get() : varHandle.get(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw new IllegalArgumentException("argument type mismatch", e);
+            throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
         } catch (Throwable e) {
@@ -59,13 +56,4 @@ abstract class MethodHandleFieldAccessorImpl extends FieldAccessorImpl {
     }
 
     abstract public void set(Object obj, Object value) throws IllegalAccessException;
-
-    protected void ensureObj(Object o) {
-        if (isStatic) return;
-
-        // NOTE: will throw NullPointerException, as specified, if o is null
-        if (!field.getDeclaringClass().isAssignableFrom(o.getClass())) {
-            throwSetIllegalArgumentException(o);
-        }
-    }
 }

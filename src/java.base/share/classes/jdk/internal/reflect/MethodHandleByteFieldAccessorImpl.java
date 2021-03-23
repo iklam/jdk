@@ -36,9 +36,14 @@ final class MethodHandleByteFieldAccessorImpl extends MethodHandleFieldAccessorI
     private final MethodHandle setter_B;
     MethodHandleByteFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_B = getter.asType(methodType(byte.class, Object.class));
-        this.setter_B = setter != null ? setter.asType(methodType(void.class, Object.class, byte.class))
-                                       : null;
+        this.getter_B = isStatic ? getter.asType(methodType(byte.class))
+                                 : getter.asType(methodType(byte.class, Object.class));
+        if (setter != null) {
+            this.setter_B = isStatic ? setter.asType(methodType(void.class, byte.class))
+                                     : setter.asType(methodType(void.class, Object.class, byte.class));
+        } else {
+            this.setter_B = null;
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -50,9 +55,8 @@ final class MethodHandleByteFieldAccessorImpl extends MethodHandleFieldAccessorI
     }
 
     public byte getByte(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (byte)getter_B.invokeExact(obj);
+            return isStatic ? (byte)getter_B.invokeExact() : (byte)getter_B.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -88,6 +92,22 @@ final class MethodHandleByteFieldAccessorImpl extends MethodHandleFieldAccessorI
         return getByte(obj);
     }
 
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Byte) {
+            setByte(obj, ((Byte) value).byteValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
+    }
+
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
@@ -97,12 +117,15 @@ final class MethodHandleByteFieldAccessorImpl extends MethodHandleFieldAccessorI
     public void setByte(Object obj, byte b)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(b);
         }
         try {
-            setter_B.invokeExact(obj, b);
+            if (isStatic) {
+                setter_B.invokeExact(b);
+            } else {
+                setter_B.invokeExact(obj, b);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

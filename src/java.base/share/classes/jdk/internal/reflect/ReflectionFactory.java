@@ -88,6 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
+    private static boolean useVarHandle = false;
     private static boolean useCallerSensitiveAdapter = true;
 
     // true if deserialization constructor checking is disabled
@@ -656,6 +657,9 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
+    static boolean useVarHandle() {
+        return useVarHandle;
+    }
     static boolean useCallerSensitiveAdapter() {
         return useCallerSensitiveAdapter;
     }
@@ -699,6 +703,10 @@ public class ReflectionFactory {
             if (val != null && val.equals("true")) {
                 useCallerSensitiveAdapter = true;
             }
+        }
+        val = props.getProperty("jdk.reflect.useVarHandle");
+        if (val != null && val.equals("true")) {
+            useVarHandle = true;
         }
 
         disableSerialConstructorChecks =

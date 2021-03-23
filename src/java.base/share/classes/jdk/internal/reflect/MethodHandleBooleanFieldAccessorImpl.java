@@ -36,18 +36,22 @@ class MethodHandleBooleanFieldAccessorImpl extends MethodHandleFieldAccessorImpl
     private final MethodHandle setter_Z;
     MethodHandleBooleanFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_Z = getter.asType(methodType(boolean.class, Object.class));
-        this.setter_Z = setter != null ? setter.asType(methodType(void.class, Object.class, boolean.class))
-                : null;
+        this.getter_Z = isStatic ? getter.asType(methodType(boolean.class))
+                                 : getter.asType(methodType(boolean.class, Object.class));
+        if (setter != null) {
+            this.setter_Z = isStatic ? setter.asType(methodType(void.class, boolean.class))
+                                     : setter.asType(methodType(void.class, Object.class, boolean.class));
+        } else {
+            this.setter_Z = null;
+        }
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Boolean.valueOf(getBoolean(obj));
     }
 
     public boolean getBoolean(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (boolean) getter_Z.invokeExact(obj);
+            return isStatic ? (boolean) getter_Z.invokeExact() : (boolean) getter_Z.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -87,15 +91,34 @@ class MethodHandleBooleanFieldAccessorImpl extends MethodHandleFieldAccessorImpl
         throw newGetDoubleIllegalArgumentException();
     }
 
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Boolean) {
+            setBoolean(obj, ((Boolean) value).booleanValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
+    }
+
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(z);
         }
         try {
-            setter_Z.invokeExact(obj, z);
+            if (isStatic) {
+                setter_Z.invokeExact(z);
+            } else {
+                setter_Z.invokeExact(obj, z);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

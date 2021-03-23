@@ -36,9 +36,14 @@ class MethodHandleFloatFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     private final MethodHandle setter_F;
     MethodHandleFloatFieldAccessorImpl(Field field, MethodHandle getter, MethodHandle setter) {
         super(field, getter, setter);
-        this.getter_F = getter.asType(methodType(float.class, Object.class));
-        this.setter_F = setter != null ? setter.asType(methodType(void.class, Object.class, float.class))
-                : null;
+        this.getter_F = isStatic ? getter.asType(methodType(float.class))
+                                 : getter.asType(methodType(float.class, Object.class));
+        if (setter != null) {
+            this.setter_F = isStatic ? setter.asType(methodType(void.class, float.class))
+                                     : setter.asType(methodType(void.class, Object.class, float.class));
+        } else {
+            this.setter_F = null;
+        }
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Float.valueOf(getFloat(obj));
@@ -69,9 +74,8 @@ class MethodHandleFloatFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     }
 
     public float getFloat(Object obj) throws IllegalArgumentException {
-        ensureObj(obj);
         try {
-            return (float) getter_F.invokeExact(obj);
+            return isStatic ? (float) getter_F.invokeExact() : (float) getter_F.invokeExact(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -85,6 +89,42 @@ class MethodHandleFloatFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
 
     public double getDouble(Object obj) throws IllegalArgumentException {
         return getFloat(obj);
+    }
+
+    public void set(Object obj, Object value)
+            throws IllegalArgumentException, IllegalAccessException
+    {
+        if (isReadOnly) {
+            throwFinalFieldIllegalAccessException(value);
+        }
+        if (value == null) {
+            throwSetIllegalArgumentException(value);
+        }
+        if (value instanceof Byte) {
+            setFloat(obj, ((Byte) value).byteValue());
+            return;
+        }
+        if (value instanceof Short) {
+            setFloat(obj, ((Short) value).shortValue());
+            return;
+        }
+        if (value instanceof Character) {
+            setFloat(obj, ((Character) value).charValue());
+            return;
+        }
+        if (value instanceof Integer) {
+            setFloat(obj, ((Integer) value).intValue());
+            return;
+        }
+        if (value instanceof Long) {
+            setFloat(obj, ((Long) value).longValue());
+            return;
+        }
+        if (value instanceof Float) {
+            setFloat(obj, ((Float) value).floatValue());
+            return;
+        }
+        throwSetIllegalArgumentException(value);
     }
 
     public void setBoolean(Object obj, boolean z)
@@ -126,12 +166,15 @@ class MethodHandleFloatFieldAccessorImpl extends MethodHandleFieldAccessorImpl {
     public void setFloat(Object obj, float f)
         throws IllegalArgumentException, IllegalAccessException
     {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(f);
         }
         try {
-            setter_F.invokeExact(obj, f);
+            if (isStatic) {
+                setter_F.invokeExact(f);
+            } else {
+                setter_F.invokeExact(obj, f);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {

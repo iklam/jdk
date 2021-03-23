@@ -68,12 +68,15 @@ class MethodHandleObjectFieldAccessorImpl extends MethodHandleFieldAccessorImpl 
 
     @Override
     public void set(Object obj, Object value) throws IllegalAccessException {
-        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(value);
         }
         try {
-            setter.invoke(obj, value);
+            if (isStatic) {
+                setter.invoke(value);
+            } else {
+                setter.invoke(obj, value);
+            }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
