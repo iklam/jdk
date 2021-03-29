@@ -38,22 +38,29 @@ import java.util.Arrays;
 import java.util.Set;
 
 class DirectMethodAccessorImpl extends MethodAccessorImpl {
-    static MethodAccessorImpl directMethodAccessor(Method method, MethodHandle dmh, boolean callerSensitive) {
-        return callerSensitive ? new CallerSensitiveWithInvoker(dmh, method)
-                               : new DirectMethodAccessorImpl(dmh, method);
+    static MethodAccessorImpl directMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
+        return new DirectMethodAccessorImpl(method, mhInvoker);
     }
-    static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target) {
-        return new CallerSensitiveWithLeadingCaller(target, original);
+
+    static MethodAccessorImpl callerSensitiveMethodAccessor(Method method, MethodHandle dmh) {
+        return new CallerSensitiveWithInvoker(dmh, method);
+    }
+
+    /**
+     * Target method handle is the adapter method with the leading caller class
+     * for the given original method.
+     */
+    static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target, MHMethodAccessor mhInvoker) {
+        return new CallerSensitiveWithLeadingCaller(original, mhInvoker);
     }
 
     protected final Method method;
-    protected final MethodHandle target;      // target method handle
+    protected final MHMethodAccessor mhInvoker;
     protected final boolean isStatic;
-
     protected final int paramCount;
-    private DirectMethodAccessorImpl(MethodHandle target, Method method) {
-        this.target = target;
+    private DirectMethodAccessorImpl(Method method, MHMethodAccessor mhInvoker) {
         this.method = method;
+        this.mhInvoker = mhInvoker;
         this.isStatic = Modifier.isStatic(method.getModifiers());
         this.paramCount = method.getParameterCount();
     }
@@ -68,14 +75,14 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         checkArgumentCount(args);
         try {
             return switch (paramCount) {
-                case 0 ->  isStatic ? target.invokeExact()
-                                    : target.invokeExact(obj);
-                case 1 ->  isStatic ? target.invokeExact(argAt(args, 0))
-                                    : target.invokeExact(obj, argAt(args, 0));
-                case 2 ->  isStatic ? target.invokeExact(argAt(args, 0), argAt(args, 1))
-                                    : target.invokeExact(obj, argAt(args, 0), argAt(args, 1));
-                default -> isStatic ? target.invokeExact(args)
-                                    : target.invokeExact(obj, args);
+                case 0 ->  isStatic ? mhInvoker.invoke()
+                                    : mhInvoker.invoke(obj);
+                case 1 ->  isStatic ? mhInvoker.invoke(argAt(args, 0))
+                                    : mhInvoker.invoke(obj, argAt(args, 0));
+                case 2 ->  isStatic ? mhInvoker.invoke(argAt(args, 0), argAt(args, 1))
+                                    : mhInvoker.invoke(obj, argAt(args, 0), argAt(args, 1));
+                default -> isStatic ? mhInvoker.invoke(args)
+                                    : mhInvoker.invoke(obj, args);
             };
         } catch (ClassCastException|WrongMethodTypeException e) {
             if (isIllegalArgument(e))
@@ -104,7 +111,7 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
 
         int argc = args != null ? args.length : 0;
         if (argc != paramCount) {
-            throw new IllegalArgumentException("wrong number of arguments");
+            throw new IllegalArgumentException("wrong number of arguments: " + argc + " expected: " + paramCount);
         }
     }
 
@@ -159,13 +166,13 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     );
 
     static class CallerSensitiveWithLeadingCaller extends DirectMethodAccessorImpl {
-        private CallerSensitiveWithLeadingCaller(MethodHandle target, Method original) {
-            super(target, original);
+        private CallerSensitiveWithLeadingCaller(Method original, MHMethodAccessor mhInvoker) {
+            super(original, mhInvoker);
         }
 
         @Override
         public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
-            throw new InternalError("caller sensitive method invoked without explicit caller: " + target);
+            throw new InternalError("caller sensitive method invoked without explicit caller: " + method);
         }
 
         @Override
@@ -178,14 +185,14 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             checkArgumentCount(args);
             try {
                 return switch (paramCount) {
-                    case 0 ->  isStatic ? target.invokeExact(caller)
-                                        : target.invokeExact(obj, caller);
-                    case 1 ->  isStatic ? target.invokeExact(caller, argAt(args, 0))
-                                        : target.invokeExact(obj, caller, argAt(args, 0));
-                    case 2 ->  isStatic ? target.invokeExact(caller, argAt(args, 0), argAt(args, 1))
-                                        : target.invokeExact(obj, caller, argAt(args, 0), argAt(args, 1));
-                    default -> isStatic ? target.invokeExact(caller, args)
-                                        : target.invokeExact(obj, caller, args);
+                    case 0 ->  isStatic ? mhInvoker.invoke(caller)
+                                        : mhInvoker.invoke(obj, caller);
+                    case 1 ->  isStatic ? mhInvoker.invoke(caller, argAt(args, 0))
+                                        : mhInvoker.invoke(obj, caller, argAt(args, 0));
+                    case 2 ->  isStatic ? mhInvoker.invoke(caller, argAt(args, 0), argAt(args, 1))
+                                        : mhInvoker.invoke(obj, caller, argAt(args, 0), argAt(args, 1));
+                    default -> isStatic ? mhInvoker.invoke(caller, args)
+                                        : mhInvoker.invoke(obj, caller, args);
                 };
             } catch (ClassCastException | WrongMethodTypeException e) {
                 if (isIllegalArgument(e))
@@ -215,9 +222,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
      */
     static class CallerSensitiveWithInvoker extends DirectMethodAccessorImpl {
         private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
-
+        private final MethodHandle target;      // target method handle
         private CallerSensitiveWithInvoker(MethodHandle target, Method method) {
-            super(target, method);
+            super(method, null);
+            this.target = target;
         }
 
         @Override

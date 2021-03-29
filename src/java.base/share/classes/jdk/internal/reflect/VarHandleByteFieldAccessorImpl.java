@@ -25,13 +25,11 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleByteFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleByteFieldAccessorImpl(Field field,  MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -44,13 +42,13 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public byte getByte(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (byte) varHandle.get() : (byte) varHandle.get(obj);
+            return isStatic ? accessor.getByte() : accessor.getByte(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -110,19 +108,16 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(b);
+                accessor.setByte(b);
             } else {
-                varHandle.set(obj, b);
+                accessor.setByte(obj, b);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            e.printStackTrace();
-            throwSetIllegalArgumentException(b);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

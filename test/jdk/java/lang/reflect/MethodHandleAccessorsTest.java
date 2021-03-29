@@ -26,7 +26,7 @@
  * @bug 6824466
  * @modules java.base/jdk.internal.reflect
  * @summary Test compliance of ConstructorAccessor and MethodAccessor implementations
- * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true  -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodInvoke=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
 /*
  * @test
@@ -36,7 +36,7 @@
 /*
  * @test
  * @modules java.base/jdk.internal.reflect
- * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.useVarHandle=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodInvoke=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
 
 import jdk.internal.reflect.ConstructorAccessor;
@@ -548,25 +548,20 @@ public class MethodHandleAccessorsTest {
 
     @DataProvider(name = "readAccess")
     private Object[][] readAccess() {
-        boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
-        boolean useVarHandle = Boolean.getBoolean("jdk.reflect.useVarHandle");
-
         return new Object[][]{
                 new Object[]{"i", new Public(100), 100, noException},
                 new Object[]{"s", new Public("test"), "test", noException},
-                new Object[]{"s", new Object(), "test", newImpl & !useVarHandle ? mismatched_argument_type : cannot_set_final_field},
+                new Object[]{"s", new Object(), "test", cannot_set_final_field},
         };
     }
     @DataProvider(name = "writeAccess")
     private Object[][] writeAccess() {
-        boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
-        boolean useVarHandle = Boolean.getBoolean("jdk.reflect.useVarHandle");
         return new Object[][]{
                 new Object[]{"i", new Public(100), 100, 200, noException},
                 new Object[]{"s", new Public("test"), "test", "newValue", noException},
                 // ## no exception thrown
                 // new Object[]{"i", new Public(100), 100, new Object(), cannot_set_final_field},
-                new Object[]{"s", new Object(), "test", "dummy", newImpl & !useVarHandle ? mismatched_argument_type : cannot_set_final_field},
+                new Object[]{"s", new Object(), "test", "dummy", cannot_set_final_field},
         };
     }
 

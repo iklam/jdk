@@ -90,7 +90,7 @@ abstract class MethodAccessorImpl extends MagicAccessorImpl
     private MethodHandle methodAccessorInvoker() {
         MethodHandle invoker = maInvoker;
         if (invoker == null) {
-            maInvoker = invoker = MethodHandleAccessorFactory.METHOD_ACCESSOR_INVOKE.bindTo(this);
+            maInvoker = invoker = MethodHandleAccessorFactory.reflectiveInvokerFor(this);
         }
         return invoker;
     }

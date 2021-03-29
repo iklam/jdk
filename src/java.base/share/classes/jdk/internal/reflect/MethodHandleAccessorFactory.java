@@ -25,6 +25,9 @@
 
 package jdk.internal.reflect;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -34,18 +37,21 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.vm.annotation.Hidden;
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 import static java.lang.invoke.MethodType.methodType;
 
 final class MethodHandleAccessorFactory {
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
-    static boolean VERBOSE = GetBooleanAction.privilegedGetProperty("jdk.reflect.debug");
 
     static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
         // ExceptionInInitializerError may be thrown during class initialization
@@ -56,7 +62,8 @@ final class MethodHandleAccessorFactory {
             if (callerSensitive) {
                 var dmh = findDirectMethodWithLeadingCaller(method);
                 if (dmh != null) {
-                    var accessor = DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh);
+                    var mhInvoker = newMethodHandleAccessor(method, dmh, true);
+                    var accessor = DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh, mhInvoker);
                     if (VERBOSE) {
                         System.out.println(method + " dmh " + dmh);
                     }
@@ -64,11 +71,12 @@ final class MethodHandleAccessorFactory {
                 }
             }
             var dmh = getDirectMethod(method, callerSensitive);
-            var accessor = DirectMethodAccessorImpl.directMethodAccessor(method, dmh, callerSensitive);
-            if (VERBOSE) {
-                System.out.println(method + " dmh " + dmh);
+            if (callerSensitive) {
+                return DirectMethodAccessorImpl.callerSensitiveMethodAccessor(method, dmh);
+            } else {
+                var mhInvoker = newMethodHandleAccessor(method, dmh, false);
+                return DirectMethodAccessorImpl.directMethodAccessor(method, dmh, mhInvoker);
             }
-            return accessor;
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
         }
@@ -98,62 +106,30 @@ final class MethodHandleAccessorFactory {
         // so that EIIE is propagated (not wrapped with ITE)
         UNSAFE.ensureClassInitialized(field.getDeclaringClass());
         try {
+            var accessor = newVarHandleAccessor(field);
 
-            return ReflectionFactory.useVarHandle() ? varHandleAccessor(field, isReadOnly)
-                                                    : methodHandleAccessor(field, isReadOnly);
+            Class<?> type = field.getType();
+            if (type == Boolean.TYPE) {
+                return new VarHandleBooleanFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Byte.TYPE) {
+                return new VarHandleByteFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Short.TYPE) {
+                return new VarHandleShortFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Character.TYPE) {
+                return new VarHandleCharacterFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Integer.TYPE) {
+                return new VarHandleIntegerFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Long.TYPE) {
+                return new VarHandleLongFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Float.TYPE) {
+                return new VarHandleFloatFieldAccessorImpl(field, accessor, isReadOnly);
+            } else if (type == Double.TYPE) {
+                return new VarHandleDoubleFieldAccessorImpl(field, accessor, isReadOnly);
+            } else {
+                return new VarHandleObjectFieldAccessorImpl(field, accessor, isReadOnly);
+            }
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
-        }
-    }
-
-    private static FieldAccessorImpl methodHandleAccessor(Field field, boolean isReadOnly) throws IllegalAccessException {
-        MethodHandle getter = JLIA.unreflectField(field, false);
-        MethodHandle setter = isReadOnly ? null : JLIA.unreflectField(field, true);
-
-        Class<?> type = field.getType();
-        if (type == Boolean.TYPE) {
-            return new MethodHandleBooleanFieldAccessorImpl(field, getter, setter);
-        } else if (type == Byte.TYPE) {
-            return new MethodHandleByteFieldAccessorImpl(field, getter, setter);
-        } else if (type == Short.TYPE) {
-            return new MethodHandleShortFieldAccessorImpl(field, getter, setter);
-        } else if (type == Character.TYPE) {
-            return new MethodHandleCharacterFieldAccessorImpl(field, getter, setter);
-        } else if (type == Integer.TYPE) {
-            return new MethodHandleIntegerFieldAccessorImpl(field, getter, setter);
-        } else if (type == Long.TYPE) {
-            return new MethodHandleLongFieldAccessorImpl(field, getter, setter);
-        } else if (type == Float.TYPE) {
-            return new MethodHandleFloatFieldAccessorImpl(field, getter, setter);
-        } else if (type == Double.TYPE) {
-            return new MethodHandleDoubleFieldAccessorImpl(field, getter, setter);
-        } else {
-            return new MethodHandleObjectFieldAccessorImpl(field, getter, setter);
-        }
-    }
-
-    private static FieldAccessorImpl varHandleAccessor(Field field, boolean isReadOnly) throws IllegalAccessException {
-        var varHandle = JLIA.unreflectVarHandle(field);
-
-        Class<?> type = field.getType();
-        if (type == Boolean.TYPE) {
-            return new VarHandleBooleanFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Byte.TYPE) {
-            return new VarHandleByteFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Short.TYPE) {
-            return new VarHandleShortFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Character.TYPE) {
-            return new VarHandleCharacterFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Integer.TYPE) {
-            return new VarHandleIntegerFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Long.TYPE) {
-            return new VarHandleLongFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Float.TYPE) {
-            return new VarHandleFloatFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else if (type == Double.TYPE) {
-            return new VarHandleDoubleFieldAccessorImpl(field, varHandle, isReadOnly);
-        } else {
-            return new VarHandleObjectFieldAccessorImpl(field, varHandle, isReadOnly);
         }
     }
 
@@ -174,6 +150,11 @@ final class MethodHandleAccessorFactory {
         }
 
         return makeSpecializedTarget(dmh, isStatic, false);
+    }
+
+    private static final int SPECIALIZED_PARAM_COUNT = 2;
+    private static boolean isSpecialized(Method method) {
+        return method.getParameterCount() <= SPECIALIZED_PARAM_COUNT;
     }
 
     private static MethodHandle findDirectMethodWithLeadingCaller(Method method) throws IllegalAccessException {
@@ -218,49 +199,35 @@ final class MethodHandleAccessorFactory {
         // If it is a non-static method, it has a leading `this` argument.
         // Also do not count the caller class argument
         int paramCount = dmh.type().parameterCount() - (isStatic ? 0 : 1) - (hasLeadingCaller ? 1 : 0);
-        MethodType mtype;
-        switch (paramCount) {
-            // specialize for number of formal arguments <= 2 to avoid spreader
-            case 0:
-                mtype = isStatic ? (hasLeadingCaller
-                                        ? methodType(Object.class, Class.class)
-                                        : methodType(Object.class))
-                                 : (hasLeadingCaller
-                                        ? methodType(Object.class, Object.class, Class.class)
-                                        : methodType(Object.class, Object.class));
-                break;
-            case 1:
-                mtype = isStatic ? (hasLeadingCaller
-                                        ? methodType(Object.class, Class.class, Object.class)
-                                        : methodType(Object.class, Object.class))
-                                 : (hasLeadingCaller
-                                        ? methodType(Object.class, Object.class, Class.class, Object.class)
-                                        : methodType(Object.class, Object.class, Object.class));
-                break;
-
-            case 2:
-                mtype = isStatic ? (hasLeadingCaller
-                                        ? methodType(Object.class, Class.class, Object.class, Object.class)
-                                        : methodType(Object.class, Object.class, Object.class))
-                                 : (hasLeadingCaller
-                                        ? methodType(Object.class, Object.class, Class.class, Object.class, Object.class)
-                                        : methodType(Object.class, Object.class, Object.class, Object.class));
-                break;
-            default:
-                // spread the last "real" parameters (not counting leading 'this' and 'caller')
-                target = target.asSpreader(Object[].class, paramCount);
-                // the method type of the target method handle
-                mtype =  isStatic ? (hasLeadingCaller
-                                        ? methodType(Object.class, Class.class, Object[].class)
-                                        : methodType(Object.class, Object[].class))
-                                  : (hasLeadingCaller
-                                        ? methodType(Object.class, Object.class, Class.class, Object[].class)
-                                        : methodType(Object.class, Object.class, Object[].class));
-                break;
+        MethodType mtype = specializedMethodType(isStatic, hasLeadingCaller, paramCount);
+        if (paramCount > SPECIALIZED_PARAM_COUNT) {
+            // spread the last "real" parameters (not counting leading 'this' and 'caller')
+            target = target.asSpreader(Object[].class, paramCount);
         }
         return target.asType(mtype);
     }
 
+    static MethodType specializedMethodType(boolean isStatic, boolean hasLeadingCaller, int paramCount) {
+        return switch (paramCount) {
+            // specialize for number of formal arguments <= 2 to avoid spreader
+            case 0 -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class)
+                                                   : methodType(Object.class))
+                               : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class)
+                                                   : methodType(Object.class, Object.class));
+            case 1 -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class, Object.class)
+                                                   : methodType(Object.class, Object.class))
+                               : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object.class)
+                                                   : methodType(Object.class, Object.class, Object.class));
+            case 2 -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class, Object.class, Object.class)
+                                                   : methodType(Object.class, Object.class, Object.class))
+                               : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object.class, Object.class)
+                                                   : methodType(Object.class, Object.class, Object.class, Object.class));
+            default -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class, Object[].class)
+                                                    : methodType(Object.class, Object[].class))
+                                : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object[].class)
+                                                    : methodType(Object.class, Object.class, Object[].class));
+        };
+    }
     /**
      * Transforms the given dmh into a target method handle with the method type
      * {@code (Object, Object[])Object} or {@code (Object, Class, Object[])Object}
@@ -279,6 +246,75 @@ final class MethodHandleAccessorFactory {
         return target.asType(mtype);
     }
 
+    private static final String FIELD_CLASS_NAME_PREFIX = "jdk/internal/reflect/FieldAccessorImpl_";
+    private static final String METHOD_CLASS_NAME_PREFIX = "jdk/internal/reflect/MethodAccessorImpl_";
+    // Used to ensure that each spun class name is unique
+    private static final AtomicInteger counter = new AtomicInteger();
+
+    /**
+     * Spins a hidden class that invokes a constant VarHandle of the target field,
+     * loaded from the class data via condy, for reliable performance
+     */
+    private static MHFieldAccessor newVarHandleAccessor(Field field) throws IllegalAccessException {
+        var varHandle = JLIA.unreflectVarHandle(field);
+        var cn = className(field);
+        var builder = new ClassByteBuilder(cn, VarHandle.class);
+        var bytes = builder.buildFieldAccessor(field);
+        maybeDumpClassFile(cn, bytes);
+        try {
+            var lookup = MethodHandles.lookup().defineHiddenClassWithClassData(bytes, varHandle, true);
+            var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
+            ctor = ctor.asType(methodType(MHFieldAccessor.class));
+            return (MHFieldAccessor) ctor.invokeExact();
+        } catch (Throwable e) {
+            throw new InternalError(e);
+        }
+    }
+
+    /**
+     * Spins a hidden class that invokes a constant VarHandle of the target field,
+     * loaded from the class data via condy, for reliable performance
+     */
+    private static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle dmh, boolean hasLeadingCaller) {
+        if (!ReflectionFactory.isFastMethodInvoke()) {
+            return new MHMethodAccessorDelegate(dmh);
+        }
+
+        var cn = className(method);
+        var builder = new ClassByteBuilder(cn, MethodHandle.class);
+        var bytes = builder.buildMethodAccessor(method, dmh.type(), hasLeadingCaller);
+        maybeDumpClassFile(cn, bytes);
+        try {
+            var lookup = MethodHandles.lookup().defineHiddenClassWithClassData(bytes, dmh, true);
+            var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
+            ctor = ctor.asType(methodType(MHMethodAccessor.class));
+            return (MHMethodAccessor) ctor.invokeExact();
+        } catch (Throwable e) {
+            throw new InternalError(e);
+        }
+    }
+
+    private static String className(Field field) {
+        return FIELD_CLASS_NAME_PREFIX + field.getName() + "$$" + counter.incrementAndGet();
+    }
+    private static String className(Method method) {
+        return METHOD_CLASS_NAME_PREFIX + method.getName() + "$$" + counter.incrementAndGet();
+    }
+
+    private static void maybeDumpClassFile(String classname, byte[] bytes) {
+        if (DUMP_CLASS_FILES != null) {
+            try {
+                Path p = DUMP_CLASS_FILES.resolve(classname + ".class");
+                Files.createDirectories(p.getParent());
+                try (OutputStream os = Files.newOutputStream(p)) {
+                    os.write(bytes);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+    }
+
     // make this package-private to workaround a bug in Reflection::getCallerClass
     // that skips this class and the lookup class is ReflectionFactory instead
     // this frame is hidden not to alter the stacktrace for InvocationTargetException
@@ -288,9 +324,16 @@ final class MethodHandleAccessorFactory {
         throw new InvocationTargetException(e);
     }
 
-    static final JavaLangInvokeAccess JLIA;
-    static final MethodHandle WRAP;
-    static MethodHandle METHOD_ACCESSOR_INVOKE;
+    static MethodHandle reflectiveInvokerFor(Object obj) {
+        return METHOD_ACCESSOR_INVOKE.bindTo(obj);
+    }
+
+    private static final JavaLangInvokeAccess JLIA;
+    private static final MethodHandle WRAP;
+    private static MethodHandle METHOD_ACCESSOR_INVOKE;
+    private static final Path DUMP_CLASS_FILES;
+    static boolean VERBOSE = GetBooleanAction.privilegedGetProperty("jdk.reflect.debug");
+
     static {
         try {
             JLIA = SharedSecrets.getJavaLangInvokeAccess();
@@ -300,6 +343,12 @@ final class MethodHandleAccessorFactory {
                                                      methodType(Object.class, Object.class, Object[].class));
         } catch (NoSuchMethodException|IllegalAccessException e) {
             throw new InternalError(e);
+        }
+        String dumpPath = GetPropertyAction.privilegedGetProperty("jdk.reflect.dumpClass");
+        if (dumpPath != null) {
+            DUMP_CLASS_FILES = Path.of(dumpPath);
+        } else {
+            DUMP_CLASS_FILES = null;
         }
     }
 }

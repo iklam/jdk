@@ -30,8 +30,8 @@ import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleBooleanFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleBooleanFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -40,13 +40,13 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public boolean getBoolean(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (boolean) varHandle.get() : (boolean) varHandle.get(obj);
+            return isStatic ? accessor.getBoolean() : accessor.getBoolean(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -104,18 +104,16 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(z);
+                accessor.setBoolean(z);
             } else {
-                varHandle.set(obj, z);
+                accessor.setBoolean(obj, z);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            throwSetIllegalArgumentException(z);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

@@ -25,13 +25,26 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleObjectFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleObjectFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleObjectFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
+    }
+
+    @Override
+    public Object get(Object obj) throws IllegalArgumentException {
+        try {
+            return isStatic ? accessor.get() : accessor.get(obj);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (ClassCastException e) {
+            throw newIllegalArgumentException(obj);
+        } catch (NullPointerException e) {
+            throw newIllegalArgumentException(obj);
+        } catch (Throwable e) {
+            throw new InternalError(e);
+        }
     }
 
     public boolean getBoolean(Object obj) throws IllegalArgumentException {
@@ -73,18 +86,16 @@ class VarHandleObjectFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(value);
+                accessor.set(value);
             } else {
-                varHandle.set(obj, value);
+                accessor.set(obj, value);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            throwSetIllegalArgumentException(value);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

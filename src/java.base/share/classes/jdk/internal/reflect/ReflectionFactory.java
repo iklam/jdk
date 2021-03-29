@@ -88,7 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
-    private static boolean useVarHandle = false;
+    private static boolean fastMethodInvoke = true;
     private static boolean useCallerSensitiveAdapter = true;
 
     // true if deserialization constructor checking is disabled
@@ -189,10 +189,7 @@ public class ReflectionFactory {
         } else if (!useDirectMethodHandle && noInflation
                     && !method.getDeclaringClass().isHidden()
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())) {
-            Method csmAdapter = findCSMethodAdapter(method);
-            return csmAdapter != null
-                    ? new CsMethodAccessorAdapter(method, csmAdapter, generateMethodAccessor(csmAdapter))
-                    : generateMethodAccessor(method);
+            return generateMethodAccessor(method, findCSMethodAdapter(method));
         } else {
             NativeMethodAccessorImpl acc = callerSensitive
                     ? new NativeMethodAccessorImpl(method, findCSMethodAdapter(method))
@@ -229,16 +226,18 @@ public class ReflectionFactory {
      * Generate the MethodAccessor that invokes the given method with
      * bytecode invocation.
      */
-    static MethodAccessorImpl generateMethodAccessor(Method method) {
-        return (MethodAccessorImpl)
-                new MethodAccessorGenerator().generateMethod(
-                        method.getDeclaringClass(),
-                        method.getName(),
-                        method.getParameterTypes(),
-                        method.getReturnType(),
-                        method.getExceptionTypes(),
-                        method.getModifiers()
-                );
+    static MethodAccessorImpl generateMethodAccessor(Method method, Method csmAdapter) {
+        var m = csmAdapter != null ? csmAdapter : method;
+        var accessor = new MethodAccessorGenerator().generateMethod(
+                m.getDeclaringClass(),
+                m.getName(),
+                m.getParameterTypes(),
+                m.getReturnType(),
+                m.getExceptionTypes(),
+                m.getModifiers()
+        );
+        return csmAdapter != null ? new CsMethodAccessorAdapter(method, csmAdapter, accessor)
+                                  : (MethodAccessorImpl)accessor;
     }
 
     public ConstructorAccessor newConstructorAccessor(Constructor<?> c) {
@@ -657,8 +656,8 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
-    static boolean useVarHandle() {
-        return useVarHandle;
+    static boolean isFastMethodInvoke() {
+        return fastMethodInvoke;
     }
     static boolean useCallerSensitiveAdapter() {
         return useCallerSensitiveAdapter;
@@ -704,9 +703,9 @@ public class ReflectionFactory {
                 useCallerSensitiveAdapter = true;
             }
         }
-        val = props.getProperty("jdk.reflect.useVarHandle");
-        if (val != null && val.equals("true")) {
-            useVarHandle = true;
+        val = props.getProperty("jdk.reflect.fastMethodInvoke");
+        if (val != null && val.equals("false")) {
+            fastMethodInvoke = false;
         }
 
         disableSerialConstructorChecks =

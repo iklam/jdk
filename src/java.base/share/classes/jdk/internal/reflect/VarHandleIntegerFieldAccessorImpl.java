@@ -25,16 +25,13 @@
 
 package jdk.internal.reflect;
 
-import jdk.internal.vm.annotation.ForceInline;
-
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleIntegerFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleIntegerFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
     }
+
     public Object get(Object obj) throws IllegalArgumentException {
         return Integer.valueOf(getInt(obj));
     }
@@ -55,16 +52,15 @@ class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         throw newGetShortIllegalArgumentException();
     }
 
-    @ForceInline
     public int getInt(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (int) varHandle.get() : (int) varHandle.get(obj);
+            return isStatic ? accessor.getInt() :  accessor.getInt(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -142,18 +138,16 @@ class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(i);
+                accessor.setInt(i);
             } else {
-                varHandle.set(obj, i);
+                accessor.setInt(obj, i);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            throwSetIllegalArgumentException(i);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

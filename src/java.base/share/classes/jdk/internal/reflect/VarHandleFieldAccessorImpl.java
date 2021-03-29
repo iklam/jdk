@@ -25,35 +25,17 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 abstract class VarHandleFieldAccessorImpl extends FieldAccessorImpl {
-    protected final VarHandle varHandle;
+    protected final MHFieldAccessor accessor;
     protected final boolean isReadOnly;
     protected final boolean isStatic;
-    protected VarHandleFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+    protected VarHandleFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadOnly) {
         super(field);
-        this.varHandle = varHandle;
+        this.accessor = accessor;
         this.isReadOnly = isReadOnly;
         this.isStatic = Modifier.isStatic(field.getModifiers());
     }
-
-    @Override
-    public Object get(Object obj) throws IllegalArgumentException {
-        try {
-            return isStatic ? varHandle.get() : varHandle.get(obj);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (Throwable e) {
-            throw new InternalError(e);
-        }
-    }
-
-    abstract public void set(Object obj, Object value) throws IllegalAccessException;
 }

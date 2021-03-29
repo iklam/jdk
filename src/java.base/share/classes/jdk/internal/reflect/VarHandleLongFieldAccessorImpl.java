@@ -25,13 +25,11 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleLongFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleLongFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
     }
     public Object get(Object obj) throws IllegalArgumentException {
         return Long.valueOf(getLong(obj));
@@ -59,13 +57,13 @@ class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public long getLong(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (long) varHandle.get() : (long) varHandle.get(obj);
+            return isStatic ? accessor.getLong() : accessor.getLong(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -149,18 +147,16 @@ class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(l);
+                accessor.setLong(l);
             } else {
-                varHandle.set(obj, l);
+                accessor.setLong(obj, l);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            throwSetIllegalArgumentException(l);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

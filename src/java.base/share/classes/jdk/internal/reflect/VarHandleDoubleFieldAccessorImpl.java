@@ -25,13 +25,11 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleDoubleFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadyOnly) {
-        super(field, varHandle, isReadyOnly);
+    VarHandleDoubleFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
+        super(field, accessor, isReadyOnly);
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -68,13 +66,13 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public double getDouble(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? (double) varHandle.get() : (double) varHandle.get(obj);
+            return isStatic ? accessor.getDouble() : accessor.getDouble(obj);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -170,19 +168,16 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         }
         try {
             if (isStatic) {
-                varHandle.set(d);
+                accessor.setDouble(d);
             } else {
-                varHandle.set(obj, d);
+                accessor.setDouble(obj, d);
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (ClassCastException e) {
             throw newIllegalArgumentException(obj);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (WrongMethodTypeException e) {
-            e.printStackTrace();
-            throwSetIllegalArgumentException(d);
+            throw newIllegalArgumentException(obj);
         } catch (Throwable e) {
             throw new InternalError(e);
         }

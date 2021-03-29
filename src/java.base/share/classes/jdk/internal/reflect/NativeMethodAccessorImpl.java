@@ -109,9 +109,7 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
                     && generated == 0
                     && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
-                MethodAccessorImpl acc = csmAdapter != null
-                            ? new CsMethodAccessorAdapter(method, csmAdapter, generateMethodAccessor(csmAdapter))
-                            : generateMethodAccessor(method);
+                MethodAccessorImpl acc = generateMethodAccessor(method, csmAdapter);
                 parent.setDelegate(acc);
             }
         } catch (Throwable t) {
