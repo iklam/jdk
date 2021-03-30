@@ -35,6 +35,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -48,20 +49,21 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Thread)
 @Fork(value = 1, warmups = 0)
 public class ReflectionSpeedBenchmark {
-
     static final Method staticMethodConst;
     static final Method instanceMethodConts;
     static final Method classForName1argConst;
     static final Method classForName3argConst;
     static final Field staticFieldConst;
     static final Field instanceFieldConst;
+    static final Constructor<?> ctorConst;
 
     static Method staticMethodVar;
     static Method instanceMethodVar;
     static Method classForName1argVar;
     static Method classForName3argVar;
-    static final Field staticFieldVar;
-    static final Field instanceFieldVar;
+    static Field staticFieldVar;
+    static Field instanceFieldVar;
+    static Constructor<?> ctorVar;
 
     static {
         try {
@@ -71,6 +73,7 @@ public class ReflectionSpeedBenchmark {
             classForName3argVar = classForName3argConst = Class.class.getMethod("forName", String.class, boolean.class, ClassLoader.class);
             staticFieldVar = staticFieldConst = ReflectionSpeedBenchmark.class.getDeclaredField("staticFoo");
             instanceFieldVar = instanceFieldConst = ReflectionSpeedBenchmark.class.getDeclaredField("foo");
+            ctorVar = ctorConst = Foo.class.getDeclaredConstructor();
         } catch (NoSuchMethodException|NoSuchFieldException e) {
             throw new NoSuchMethodError(e.getMessage());
         }
@@ -78,8 +81,10 @@ public class ReflectionSpeedBenchmark {
 
     public static int staticFoo;
     public int foo;
-
     private int a, b;
+    static class Foo {
+        public Foo() {};
+    }
 
     @Setup(Level.Iteration)
     public void setup() {
@@ -93,6 +98,11 @@ public class ReflectionSpeedBenchmark {
 
     public int sumInstance(int a, int b) {
         return a + b;
+    }
+
+    @Benchmark
+    public Foo newInstance() {
+        return new Foo();
     }
 
     @Benchmark
