@@ -25,13 +25,15 @@
 
 package jdk.internal.reflect;
 
+import jdk.internal.misc.VM;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 
 final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
     private final MethodHandle target;      // target method handle bound to the declaring class of the method
-    DirectConstructorAccessorImpl(Constructor<?> ctor, MethodHandle target) {
+    DirectConstructorAccessorImpl(MethodHandle target) {
         this.target = target;
     }
 
@@ -45,10 +47,36 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
             throw new IllegalArgumentException("argument type mismatch", e);
         } catch (NullPointerException e) {
             throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (Error|RuntimeException e) {
+        } catch (Error | RuntimeException e) {
             throw e;
         } catch (Throwable e) {
             throw new InvocationTargetException(e);
         }
+    }
+
+    static ConstructorAccessorImpl constructorAccessor(Constructor<?> ctor, MethodHandle target) {
+        return new DirectConstructorAccessorImpl(target);
+    }
+
+    static ConstructorAccessorImpl nativeAccessor(Constructor<?> ctor) {
+        assert !VM.isJavaLangInvokeInited();
+        return new NativeAccessor(ctor);
+    }
+
+    /**
+     * Invoke the constructor via native VM reflection
+     */
+    static class NativeAccessor extends ConstructorAccessorImpl {
+        private final Constructor<?> ctor;
+        NativeAccessor(Constructor<?> ctor) {
+            this.ctor = ctor;
+        }
+
+        @Override
+        public Object newInstance(Object[] args) throws InstantiationException, InvocationTargetException {
+            return newInstance0(ctor, args);
+        }
+        private static native Object newInstance0(Constructor<?> c, Object[] args)
+                    throws InstantiationException, InvocationTargetException;
     }
 }

@@ -27,6 +27,7 @@ package jdk.internal.reflect;
 
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.VM;
 import jdk.internal.vm.annotation.ForceInline;
 
 import java.lang.invoke.MethodHandle;
@@ -37,8 +38,10 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Set;
 
+import static jdk.internal.reflect.ReflectionFactory.findCSMethodAdapter;
+
 class DirectMethodAccessorImpl extends MethodAccessorImpl {
-    static MethodAccessorImpl directMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
+    static MethodAccessorImpl methodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
         return new DirectMethodAccessorImpl(method, mhInvoker);
     }
 
@@ -52,6 +55,12 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
      */
     static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target, MHMethodAccessor mhInvoker) {
         return new CallerSensitiveWithLeadingCaller(original, mhInvoker);
+    }
+
+    static MethodAccessorImpl nativeAccessor(Method method, boolean callerSensitive) {
+        assert !VM.isJavaLangInvokeInited() || Modifier.isNative(method.getModifiers());
+        return callerSensitive ? new NativeAccessor(method, findCSMethodAdapter(method))
+                : new NativeAccessor(method);
     }
 
     protected final Method method;
@@ -69,7 +78,8 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     @ForceInline
     public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
         if (MethodHandleAccessorFactory.VERBOSE) {
-            System.out.println("invoke " + method + " with target " + obj + " args " + Arrays.deepToString(args));
+            System.out.println("invoke " + method.getDeclaringClass().getName() + "::" + method.getName()
+                    + " with target " + obj + " args " + Arrays.deepToString(args));
         }
         checkReceiver(obj);
         checkArgumentCount(args);
@@ -259,6 +269,57 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 throw new InvocationTargetException(e);
             }
         }
+    }
+
+    /**
+     * Invoke the method via native VM reflection
+     */
+    static class NativeAccessor extends MethodAccessorImpl {
+        private final Method method;
+        private final Method csmAdapter;
+        private final boolean callerSensitive;
+        NativeAccessor(Method method) {
+            assert !Reflection.isCallerSensitive(method);
+            this.method = method;
+            this.csmAdapter = null;
+            this.callerSensitive = false;
+        }
+
+        NativeAccessor(Method method, Method csmAdapter) {
+            assert Reflection.isCallerSensitive(method);
+            this.method = method;
+            this.csmAdapter = csmAdapter;
+            this.callerSensitive = true;
+        }
+
+        @Override
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            assert csmAdapter == null;
+            return invoke0(method, obj, args);
+        }
+
+        @Override
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
+            assert callerSensitive;
+
+            if (csmAdapter != null) {
+                Object[] newArgs = new Object[csmAdapter.getParameterCount()];
+                newArgs[0] = caller;
+                if (args != null) {
+                    System.arraycopy(args, 0, newArgs, 1, args.length);
+                }
+                return invoke0(csmAdapter, obj, newArgs);
+            } else if (ReflectionFactory.useCallerSensitiveAdapter()) {
+                // invoke the caller-sensitive method through an injected invoker,
+                // a nestmate of the caller class, acting as the caller
+                return super.invoke(caller, obj, args);
+            } else {
+                // ignore the caller sensitive adaptor for performance testing
+                return invoke(obj, args);
+            }
+        }
+
+        private static native Object invoke0(Method m, Object obj, Object[] args);
     }
 }
 

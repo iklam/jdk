@@ -67,12 +67,10 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public double getDouble(Object obj) throws IllegalArgumentException {
         try {
             return isStatic ? accessor.getDouble() : accessor.getDouble(obj);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newGetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -82,6 +80,7 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throws IllegalArgumentException, IllegalAccessException
     {
         if (isReadOnly) {
+            ensureObj(obj);     // throw NPE if obj is null on instance field
             throwFinalFieldIllegalAccessException(value);
         }
         if (value == null) {
@@ -164,6 +163,7 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         throws IllegalArgumentException, IllegalAccessException
     {
         if (isReadOnly) {
+            ensureObj(obj);     // throw NPE if obj is null on instance field
             throwFinalFieldIllegalAccessException(d);
         }
         try {
@@ -172,12 +172,10 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             } else {
                 accessor.setDouble(obj, d);
             }
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newSetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }

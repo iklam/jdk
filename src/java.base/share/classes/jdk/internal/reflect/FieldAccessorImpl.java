@@ -135,8 +135,8 @@ abstract class FieldAccessorImpl extends MagicAccessorImpl
                                                          String attemptedValue)
             throws IllegalAccessException {
         throw new IllegalAccessException(getSetMessage(attemptedType, attemptedValue));
-
     }
+
     protected void throwFinalFieldIllegalAccessException(Object o) throws IllegalAccessException {
         throwFinalFieldIllegalAccessException(o != null ? o.getClass().getName() : "", "");
     }
@@ -223,13 +223,19 @@ abstract class FieldAccessorImpl extends MagicAccessorImpl
         return err;
     }
 
+    protected String getMessage(boolean getter, String attemptedType) {
+        String err = "Can not " + (getter ? "get" : "set");
+        if (Modifier.isStatic(field.getModifiers()))
+            err += " static";
+        if (Modifier.isFinal(field.getModifiers()))
+            err += " final";
+        err += " " + field.getType().getName() + " field " + getQualifiedFieldName() + " on " + attemptedType;
+        return err;
+    }
+
     protected void throwSetIllegalArgumentException(String attemptedType,
                                                     String attemptedValue) {
         throw new IllegalArgumentException(getSetMessage(attemptedType,attemptedValue));
-    }
-
-    protected IllegalArgumentException newIllegalArgumentException(Object o) {
-        return new IllegalArgumentException(getSetMessage(o != null ? o.getClass().getName() : "", ""));
     }
 
     protected void throwSetIllegalArgumentException(Object o) {

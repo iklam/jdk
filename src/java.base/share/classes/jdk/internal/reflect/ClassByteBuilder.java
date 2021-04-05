@@ -26,7 +26,6 @@
 package jdk.internal.reflect;
 
 import java.lang.invoke.MethodType;
-import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -85,7 +84,6 @@ public class ClassByteBuilder extends ClassWriter {
         if (mtype.lastParameterType() == Object[].class) {
             addInvokeMethod(mtype);
         } else {
-
             addSpecializedInvokeMethod(mtype, isStatic, hasLeadingCaller, paramCount);
         }
         visitEnd();

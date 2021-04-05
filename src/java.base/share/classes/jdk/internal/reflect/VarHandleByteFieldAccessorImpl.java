@@ -43,12 +43,10 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public byte getByte(Object obj) throws IllegalArgumentException {
         try {
             return isStatic ? accessor.getByte() : accessor.getByte(obj);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newGetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -81,6 +79,7 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public void set(Object obj, Object value)
             throws IllegalArgumentException, IllegalAccessException
     {
+        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(value);
         }
@@ -103,6 +102,7 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public void setByte(Object obj, byte b)
         throws IllegalArgumentException, IllegalAccessException
     {
+        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(b);
         }
@@ -112,12 +112,10 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             } else {
                 accessor.setByte(obj, b);
             }
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newSetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }

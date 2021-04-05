@@ -38,4 +38,28 @@ abstract class VarHandleFieldAccessorImpl extends FieldAccessorImpl {
         this.isReadOnly = isReadOnly;
         this.isStatic = Modifier.isStatic(field.getModifiers());
     }
+
+    protected void ensureObj(Object o) {
+        // for compatibility, check the receiver object first
+        // throw NullPointerException if o is null
+        if (!isStatic && !field.getDeclaringClass().isAssignableFrom(o.getClass())) {
+            throwSetIllegalArgumentException(o);
+        }
+    }
+
+    /**
+     * IllegalArgumentException because Field::get on the specified object, which
+     * is not an instance of the class or interface declaring the underlying method
+     */
+    protected IllegalArgumentException newGetIllegalArgumentException(Class<?> type) {
+        return new IllegalArgumentException(getMessage(true, type.getName()));
+    }
+
+    /**
+     * IllegalArgumentException because Field::set on the specified object, which
+     * is not an instance of the class or interface declaring the underlying method
+     */
+    protected IllegalArgumentException newSetIllegalArgumentException(Class<?> type) {
+        return new IllegalArgumentException(getMessage(false, type.getName()));
+    }
 }

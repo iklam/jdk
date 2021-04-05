@@ -376,7 +376,7 @@ class InvokerBytecodeGenerator {
         MethodVisitor mv = cw.visitMethod(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
         mv.visitCode();
         mv.visitLdcInsn(Type.getType("L" + className + ";"));
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MethodHandleNatives",
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/invoke/MethodHandles",
                            "classData", "(Ljava/lang/Class;)Ljava/lang/Object;", false);
         // we should optimize one single element case that does not need to create a List
         mv.visitTypeInsn(Opcodes.CHECKCAST, "java/util/List");

@@ -1805,13 +1805,39 @@ abstract class MethodHandleImpl {
             }
 
             @Override
-            public MethodHandle unreflectConstructor(Constructor<?> ctor) throws IllegalAccessException {
-                return IMPL_LOOKUP.unreflectConstructor(ctor);
+            public VarHandle filterValue(VarHandle target, MethodHandle filterToTarget, MethodHandle filterFromTarget) {
+                return VarHandles.filterValue(target, filterToTarget, filterFromTarget);
             }
 
             @Override
-            public MethodHandle unreflectField(Field field, boolean isSetter) throws IllegalAccessException {
-                return isSetter ? IMPL_LOOKUP.unreflectSetter(field) : IMPL_LOOKUP.unreflectGetter(field);
+            public VarHandle filterCoordinates(VarHandle target, int pos, MethodHandle... filters) {
+                return VarHandles.filterCoordinates(target, pos, filters);
+            }
+
+            @Override
+            public VarHandle dropCoordinates(VarHandle target, int pos, Class<?>... valueTypes) {
+                return VarHandles.dropCoordinates(target, pos, valueTypes);
+            }
+
+            @Override
+            public VarHandle permuteCoordinates(VarHandle target, List<Class<?>> newCoordinates, int... reorder) {
+                return VarHandles.permuteCoordinates(target, newCoordinates, reorder);
+            }
+
+            @Override
+            public VarHandle collectCoordinates(VarHandle target, int pos, MethodHandle filter) {
+                return VarHandles.collectCoordinates(target, pos, filter);
+            }
+
+            @Override
+            public VarHandle insertCoordinates(VarHandle target, int pos, Object... values) {
+                return VarHandles.insertCoordinates(target, pos, values);
+            }
+
+
+            @Override
+            public MethodHandle unreflectConstructor(Constructor<?> ctor) throws IllegalAccessException {
+                return IMPL_LOOKUP.unreflectConstructor(ctor);
             }
 
             @Override
@@ -1844,34 +1870,11 @@ abstract class MethodHandleImpl {
             }
 
             @Override
-            public VarHandle filterValue(VarHandle target, MethodHandle filterToTarget, MethodHandle filterFromTarget) {
-                return VarHandles.filterValue(target, filterToTarget, filterFromTarget);
+            public Lookup defineHiddenClassWithClassData(Lookup caller, String name, byte[] bytes, Object classData, boolean initialize) {
+                // skip name and access flags validation
+                return caller.makeHiddenClassDefiner(name, bytes, Set.of()).defineClassAsLookup(initialize, classData);
             }
 
-            @Override
-            public VarHandle filterCoordinates(VarHandle target, int pos, MethodHandle... filters) {
-                return VarHandles.filterCoordinates(target, pos, filters);
-            }
-
-            @Override
-            public VarHandle dropCoordinates(VarHandle target, int pos, Class<?>... valueTypes) {
-                return VarHandles.dropCoordinates(target, pos, valueTypes);
-            }
-
-            @Override
-            public VarHandle permuteCoordinates(VarHandle target, List<Class<?>> newCoordinates, int... reorder) {
-                return VarHandles.permuteCoordinates(target, newCoordinates, reorder);
-            }
-
-            @Override
-            public VarHandle collectCoordinates(VarHandle target, int pos, MethodHandle filter) {
-                return VarHandles.collectCoordinates(target, pos, filter);
-            }
-
-            @Override
-            public VarHandle insertCoordinates(VarHandle target, int pos, Object... values) {
-                return VarHandles.insertCoordinates(target, pos, values);
-            }
         });
     }
 

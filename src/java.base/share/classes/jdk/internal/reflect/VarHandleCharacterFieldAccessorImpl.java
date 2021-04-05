@@ -47,12 +47,10 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public char getChar(Object obj) throws IllegalArgumentException {
         try {
             return isStatic ? accessor.getChar() : accessor.getChar(obj);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newGetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -82,6 +80,7 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throws IllegalArgumentException, IllegalAccessException
     {
         if (isReadOnly) {
+            ensureObj(obj);     // throw NPE if obj is null on instance field
             throwFinalFieldIllegalAccessException(value);
         }
         if (value == null) {
@@ -110,6 +109,7 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
         throws IllegalArgumentException, IllegalAccessException
     {
         if (isReadOnly) {
+            ensureObj(obj);     // throw NPE if obj is null on instance field
             throwFinalFieldIllegalAccessException(c);
         }
         try {
@@ -118,12 +118,10 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             } else {
                 accessor.setChar(obj, c);
             }
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newSetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }

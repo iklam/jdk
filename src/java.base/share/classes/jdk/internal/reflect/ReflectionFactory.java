@@ -88,7 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
-    private static boolean fastMethodInvoke = true;
+    private static boolean fastMethodHandleInvoke = false;
     private static boolean useCallerSensitiveAdapter = true;
 
     // true if deserialization constructor checking is disabled
@@ -168,7 +168,15 @@ public class ReflectionFactory {
         }
         boolean isFinal = Modifier.isFinal(field.getModifiers());
         boolean isReadOnly = isFinal && (!override || langReflectAccess.isTrustedFinalField(field));
-        if (useDirectMethodHandle && VM.isModuleSystemInited()) {
+        if (useDirectMethodHandle) {
+            // VM will complete the java.lang.invoke initialization after System::initPhase1
+            // completes.  So method handles are ready for use when initPhase2 begins.
+            // TODO: re-examine if the Field implementation using Unsafe should be kept
+            // for early startup use
+            if (!VM.isJavaLangInvokeInited()) {
+                throw new InternalError(field.getDeclaringClass() + "::" + field.getName() +
+                        " cannot be accessed reflectively before initPhase2");
+            }
             return MethodHandleAccessorFactory.newFieldAccessor(field, isReadOnly);
         } else {
             return UnsafeFieldAccessorFactory.newFieldAccessor(field, isReadOnly);
@@ -184,7 +192,7 @@ public class ReflectionFactory {
             method = root;
         }
 
-        if (useDirectMethodHandle && VM.isModuleSystemInited()) {
+        if (useDirectMethodHandle) {
             return MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
         } else if (!useDirectMethodHandle && noInflation
                     && !method.getDeclaringClass().isHidden()
@@ -228,16 +236,15 @@ public class ReflectionFactory {
      */
     static MethodAccessorImpl generateMethodAccessor(Method method, Method csmAdapter) {
         var m = csmAdapter != null ? csmAdapter : method;
-        var accessor = new MethodAccessorGenerator().generateMethod(
-                m.getDeclaringClass(),
-                m.getName(),
-                m.getParameterTypes(),
-                m.getReturnType(),
-                m.getExceptionTypes(),
-                m.getModifiers()
-        );
+        var accessor = (MethodAccessorImpl)new MethodAccessorGenerator()
+                .generateMethod(m.getDeclaringClass(),
+                                m.getName(),
+                                m.getParameterTypes(),
+                                m.getReturnType(),
+                                m.getExceptionTypes(),
+                                m.getModifiers());
         return csmAdapter != null ? new CsMethodAccessorAdapter(method, csmAdapter, accessor)
-                                  : (MethodAccessorImpl)accessor;
+                                  : accessor;
     }
 
     public ConstructorAccessor newConstructorAccessor(Constructor<?> c) {
@@ -258,27 +265,30 @@ public class ReflectionFactory {
             c = root;
         }
 
-        if (useDirectMethodHandle && VM.isModuleSystemInited()) {
+
+        if (useDirectMethodHandle) {
             return MethodHandleAccessorFactory.newConstructorAccessor(c);
-        } else if (!useDirectMethodHandle && noInflation
-                && !c.getDeclaringClass().isHidden()
-                && !ReflectUtil.isVMAnonymousClass(c.getDeclaringClass())) {
-            // Bootstrapping issue: since we use Class.newInstance() in
-            // the ConstructorAccessor generation process, we have to
-            // break the cycle here.
-            if (Reflection.isSubclassOf(declaringClass,
-                    ConstructorAccessorImpl.class)) {
-                return new BootstrapConstructorAccessorImpl(c);
-            }
-            return new MethodAccessorGenerator().generateConstructor(c.getDeclaringClass(),
-                                                                     c.getParameterTypes(),
-                                                                     c.getExceptionTypes(),
-                                                                     c.getModifiers());
         } else {
-            NativeConstructorAccessorImpl acc = new NativeConstructorAccessorImpl(c);
-            DelegatingConstructorAccessorImpl res = new DelegatingConstructorAccessorImpl(acc);
-            acc.setParent(res);
-            return res;
+            if (noInflation
+                    && !c.getDeclaringClass().isHidden()
+                    && !ReflectUtil.isVMAnonymousClass(c.getDeclaringClass())) {
+                // Bootstrapping issue: since we use Class.newInstance() in
+                // the ConstructorAccessor generation process, we have to
+                // break the cycle here.
+                if (Reflection.isSubclassOf(declaringClass,
+                        ConstructorAccessorImpl.class)) {
+                    return new BootstrapConstructorAccessorImpl(c);
+                }
+                return new MethodAccessorGenerator().generateConstructor(c.getDeclaringClass(),
+                        c.getParameterTypes(),
+                        c.getExceptionTypes(),
+                        c.getModifiers());
+            } else {
+                NativeConstructorAccessorImpl acc = new NativeConstructorAccessorImpl(c);
+                DelegatingConstructorAccessorImpl res = new DelegatingConstructorAccessorImpl(acc);
+                acc.setParent(res);
+                return res;
+            }
         }
     }
 
@@ -656,8 +666,8 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
-    static boolean isFastMethodInvoke() {
-        return fastMethodInvoke;
+    static boolean spinMHAccessorClass() {
+        return fastMethodHandleInvoke;
     }
     static boolean useCallerSensitiveAdapter() {
         return useCallerSensitiveAdapter;
@@ -703,9 +713,9 @@ public class ReflectionFactory {
                 useCallerSensitiveAdapter = true;
             }
         }
-        val = props.getProperty("jdk.reflect.fastMethodInvoke");
-        if (val != null && val.equals("false")) {
-            fastMethodInvoke = false;
+        val = props.getProperty("jdk.reflect.fastMethodHandleInvoke");
+        if (val != null) {
+            fastMethodHandleInvoke = Boolean.valueOf(val);
         }
 
         disableSerialConstructorChecks =

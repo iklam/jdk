@@ -39,11 +39,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.Unsafe;
+import jdk.internal.misc.VM;
 import jdk.internal.vm.annotation.Hidden;
 import sun.security.action.GetBooleanAction;
 import sun.security.action.GetPropertyAction;
@@ -54,6 +56,10 @@ final class MethodHandleAccessorFactory {
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
     static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
+        if (!VM.isJavaLangInvokeInited() || Modifier.isNative(method.getModifiers())) {
+            return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
+        }
+
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
         // so that EIIE is propagated (not wrapped with ITE)
@@ -75,7 +81,7 @@ final class MethodHandleAccessorFactory {
                 return DirectMethodAccessorImpl.callerSensitiveMethodAccessor(method, dmh);
             } else {
                 var mhInvoker = newMethodHandleAccessor(method, dmh, false);
-                return DirectMethodAccessorImpl.directMethodAccessor(method, dmh, mhInvoker);
+                return DirectMethodAccessorImpl.methodAccessor(method, dmh, mhInvoker);
             }
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
@@ -83,6 +89,10 @@ final class MethodHandleAccessorFactory {
     }
 
     static ConstructorAccessorImpl newConstructorAccessor(Constructor<?> ctor) {
+        if (!VM.isJavaLangInvokeInited()) {
+            return DirectConstructorAccessorImpl.nativeAccessor(ctor);
+        }
+
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
         // so that EIIE is propagated (not wrapped with ITE)
@@ -94,7 +104,7 @@ final class MethodHandleAccessorFactory {
                     WRAP.asType(methodType(mh.type().returnType(), Throwable.class)));
             target = target.asSpreader(Object[].class, paramCount)
                            .asType(methodType(Object.class, Object[].class));
-            return new DirectConstructorAccessorImpl(ctor, target);
+            return DirectConstructorAccessorImpl.constructorAccessor(ctor, target);
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
         }
@@ -152,14 +162,11 @@ final class MethodHandleAccessorFactory {
         return makeSpecializedTarget(dmh, isStatic, false);
     }
 
-    private static final int SPECIALIZED_PARAM_COUNT = 2;
-    private static boolean isSpecialized(Method method) {
-        return method.getParameterCount() <= SPECIALIZED_PARAM_COUNT;
-    }
-
     private static MethodHandle findDirectMethodWithLeadingCaller(Method method) throws IllegalAccessException {
         String name = method.getName();
-        MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes()).insertParameterTypes(0, Class.class);
+        // insert the leading Class parameter
+        MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes())
+                                .insertParameterTypes(0, Class.class);
         boolean isStatic = Modifier.isStatic(method.getModifiers());
         MethodHandle dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), name, mtype)
                                     : JLIA.findVirtual(method.getDeclaringClass(), name, mtype);
@@ -207,6 +214,7 @@ final class MethodHandleAccessorFactory {
         return target.asType(mtype);
     }
 
+    private static final int SPECIALIZED_PARAM_COUNT = 2;
     static MethodType specializedMethodType(boolean isStatic, boolean hasLeadingCaller, int paramCount) {
         return switch (paramCount) {
             // specialize for number of formal arguments <= 2 to avoid spreader
@@ -246,23 +254,17 @@ final class MethodHandleAccessorFactory {
         return target.asType(mtype);
     }
 
-    private static final String FIELD_CLASS_NAME_PREFIX = "jdk/internal/reflect/FieldAccessorImpl_";
-    private static final String METHOD_CLASS_NAME_PREFIX = "jdk/internal/reflect/MethodAccessorImpl_";
-    // Used to ensure that each spun class name is unique
-    private static final AtomicInteger counter = new AtomicInteger();
-
     /**
      * Spins a hidden class that invokes a constant VarHandle of the target field,
      * loaded from the class data via condy, for reliable performance
      */
     private static MHFieldAccessor newVarHandleAccessor(Field field) throws IllegalAccessException {
         var varHandle = JLIA.unreflectVarHandle(field);
-        var cn = className(field);
-        var builder = new ClassByteBuilder(cn, VarHandle.class);
-        var bytes = builder.buildFieldAccessor(field);
-        maybeDumpClassFile(cn, bytes);
+        var name = classNamePrefix(field);
+        var cn = name + "$$" + counter.getAndIncrement();
+        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(cn, field));
         try {
-            var lookup = MethodHandles.lookup().defineHiddenClassWithClassData(bytes, varHandle, true);
+            var lookup = JLIA.defineHiddenClassWithClassData(LOOKUP, cn, bytes, varHandle, true);
             var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
             ctor = ctor.asType(methodType(MHFieldAccessor.class));
             return (MHFieldAccessor) ctor.invokeExact();
@@ -272,20 +274,20 @@ final class MethodHandleAccessorFactory {
     }
 
     /**
-     * Spins a hidden class that invokes a constant VarHandle of the target field,
-     * loaded from the class data via condy, for reliable performance
+     * Spins a hidden class that invokes a constant MethodHandle of the target method handle,
+     * loaded from the class data via condy, for reliable performance.
+     *
+     * Due to the overhead of class loading, this is not the default.
      */
-    private static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle dmh, boolean hasLeadingCaller) {
-        if (!ReflectionFactory.isFastMethodInvoke()) {
-            return new MHMethodAccessorDelegate(dmh);
+    private static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
+        if (!ReflectionFactory.spinMHAccessorClass()) {
+            return new MHMethodAccessorDelegate(target);
         }
-
-        var cn = className(method);
-        var builder = new ClassByteBuilder(cn, MethodHandle.class);
-        var bytes = builder.buildMethodAccessor(method, dmh.type(), hasLeadingCaller);
-        maybeDumpClassFile(cn, bytes);
+        var name = classNamePrefix(method, target.type(), hasLeadingCaller);
+        var cn = name + "$$" + counter.getAndIncrement();
+        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(cn, method, target.type(), hasLeadingCaller));
         try {
-            var lookup = MethodHandles.lookup().defineHiddenClassWithClassData(bytes, dmh, true);
+            var lookup = JLIA.defineHiddenClassWithClassData(LOOKUP, cn, bytes, target, true);
             var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
             ctor = ctor.asType(methodType(MHMethodAccessor.class));
             return (MHMethodAccessor) ctor.invokeExact();
@@ -294,13 +296,62 @@ final class MethodHandleAccessorFactory {
         }
     }
 
-    private static String className(Field field) {
-        return FIELD_CLASS_NAME_PREFIX + field.getName() + "$$" + counter.incrementAndGet();
+    private static final ConcurrentHashMap<String, byte[]> ACCESSOR_CLASSFILES = new ConcurrentHashMap<>();
+    private static final String FIELD_CLASS_NAME_PREFIX = "jdk/internal/reflect/FieldAccessorImpl_";
+    private static final String METHOD_CLASS_NAME_PREFIX = "jdk/internal/reflect/MethodAccessorImpl_";
+    // Used to ensure that each spun class name is unique
+    private static final AtomicInteger counter = new AtomicInteger();
+
+    private static String classNamePrefix(Field field) {
+        var isStatic = Modifier.isStatic(field.getModifiers());
+        var type = field.getType();
+        var desc = type.isPrimitive() ? type.descriptorString() : "L";
+        return FIELD_CLASS_NAME_PREFIX + (isStatic ? desc : "L" + desc);
     }
-    private static String className(Method method) {
-        return METHOD_CLASS_NAME_PREFIX + method.getName() + "$$" + counter.incrementAndGet();
+    private static String classNamePrefix(Method method, MethodType mtype, boolean hasLeadingCaller) {
+        var isStatic = Modifier.isStatic(method.getModifiers());
+        var methodTypeName = methodTypeName(isStatic, hasLeadingCaller, mtype);
+        return METHOD_CLASS_NAME_PREFIX + methodTypeName;
     }
 
+    /**
+     * Returns a string to represent the specialized method type.
+     */
+    private static String methodTypeName(boolean isStatic, boolean hasLeadingCaller, MethodType mtype) {
+        StringBuilder sb = new StringBuilder();
+        int pIndex = 0;
+        if (!isStatic) {
+            sb.append("L");
+            pIndex++;
+        }
+        if (hasLeadingCaller) {
+            sb.append("Class");
+            pIndex++;
+        }
+        for (;pIndex < mtype.parameterCount(); pIndex++) {
+            Class<?> ptype = mtype.parameterType(pIndex);
+            if (ptype == Object[].class) {
+                sb.append("A");
+            } else {
+                assert ptype == Object.class;
+                sb.append("L");
+            }
+        }
+        return sb.toString();
+    }
+
+    private static byte[] spinByteCode(String cn, Field field) {
+        var builder = new ClassByteBuilder(cn, VarHandle.class);
+        var bytes = builder.buildFieldAccessor(field);
+        maybeDumpClassFile(cn, bytes);
+        return bytes;
+    }
+    private static byte[] spinByteCode(String cn, Method method, MethodType mtype, boolean hasLeadingCaller) {
+        var builder = new ClassByteBuilder(cn, MethodHandle.class);
+        var bytes = builder.buildMethodAccessor(method, mtype, hasLeadingCaller);
+        maybeDumpClassFile(cn, bytes);
+        return bytes;
+    }
     private static void maybeDumpClassFile(String classname, byte[] bytes) {
         if (DUMP_CLASS_FILES != null) {
             try {
@@ -328,16 +379,18 @@ final class MethodHandleAccessorFactory {
         return METHOD_ACCESSOR_INVOKE.bindTo(obj);
     }
 
+    private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
     private static final JavaLangInvokeAccess JLIA;
     private static final MethodHandle WRAP;
     private static MethodHandle METHOD_ACCESSOR_INVOKE;
     private static final Path DUMP_CLASS_FILES;
+
     static boolean VERBOSE = GetBooleanAction.privilegedGetProperty("jdk.reflect.debug");
 
     static {
         try {
             JLIA = SharedSecrets.getJavaLangInvokeAccess();
-            WRAP = MethodHandles.lookup().findStatic(MethodHandleAccessorFactory.class, "wrap",
+            WRAP = LOOKUP.findStatic(MethodHandleAccessorFactory.class, "wrap",
                                                      methodType(Object.class, Throwable.class));
             METHOD_ACCESSOR_INVOKE = JLIA.findVirtual(MethodAccessorImpl.class, "invoke",
                                                      methodType(Object.class, Object.class, Object[].class));

@@ -26,18 +26,19 @@
  * @bug 6824466
  * @modules java.base/jdk.internal.reflect
  * @summary Test compliance of ConstructorAccessor and MethodAccessor implementations
- * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodInvoke=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodHandleInvoke=true -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
+ */
+/*
+ * @test
+ * @modules java.base/jdk.internal.reflect
+ * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodHandleInvoke=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
 /*
  * @test
  * @modules java.base/jdk.internal.reflect
  * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
  */
-/*
- * @test
- * @modules java.base/jdk.internal.reflect
- * @run testng/othervm --add-exports java.base/jdk.internal.reflect=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.fastMethodInvoke=false -XX:-ShowCodeDetailsInExceptionMessages MethodHandleAccessorsTest
- */
+
 
 import jdk.internal.reflect.ConstructorAccessor;
 import jdk.internal.reflect.FieldAccessor;
@@ -49,7 +50,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.IntUnaryOperator;
@@ -366,6 +366,9 @@ public class MethodHandleAccessorsTest {
             new IllegalArgumentException("argument type mismatch"),
             new IllegalArgumentException("object is not an instance of declaring class"),
     };
+    private static final Throwable[] cannot_get_final_field = new Throwable[] {
+            new IllegalArgumentException("Can not get final")
+    };
     private static final Throwable[] cannot_set_final_field = new Throwable[] {
             new IllegalArgumentException("Can not set final")
     };
@@ -421,6 +424,7 @@ public class MethodHandleAccessorsTest {
              new Object[] {"private_static_I",  null, emptyArgs, 42, noException},
              new Object[] {"private_V",         inst, emptyArgs, null, noException},
              new Object[] {"private_I",         inst, emptyArgs, 42, noException},
+             new Object[] {"public_V",          null, null, null, null_target},
         };
     }
 
@@ -548,10 +552,13 @@ public class MethodHandleAccessorsTest {
 
     @DataProvider(name = "readAccess")
     private Object[][] readAccess() {
+        boolean newImpl = Boolean.getBoolean("jdk.reflect.useDirectMethodHandle");
         return new Object[][]{
                 new Object[]{"i", new Public(100), 100, noException},
                 new Object[]{"s", new Public("test"), "test", noException},
-                new Object[]{"s", new Object(), "test", cannot_set_final_field},
+                new Object[]{"s", new Object(), "test",
+                    newImpl ? cannot_get_final_field : cannot_set_final_field},
+                new Object[]{"s", null, "test", null_target},
         };
     }
     @DataProvider(name = "writeAccess")
@@ -562,6 +569,7 @@ public class MethodHandleAccessorsTest {
                 // ## no exception thrown
                 // new Object[]{"i", new Public(100), 100, new Object(), cannot_set_final_field},
                 new Object[]{"s", new Object(), "test", "dummy", cannot_set_final_field},
+                new Object[]{"s", null, "test", "dummy", null_target},
         };
     }
 
@@ -571,12 +579,15 @@ public class MethodHandleAccessorsTest {
         f.setAccessible(true);
         doTest(f, target, expectedValue, expectedExpections);
     }
+
     @Test(dataProvider = "writeAccess")
     public void testFieldWriteAccess(String name, Object target, Object oldValue, Object newValue, Throwable[] expectedExpections) throws Exception {
         Field f = Public.class.getDeclaredField(name);
         f.setAccessible(true);
         doTest(f, target, oldValue, newValue, expectedExpections);
     }
+
+    // test static final field with read-only access
     @Test
     public void testStaticFinalFields() throws Exception {
         Field f = Public.class.getDeclaredField("STATIC_FINAL");
@@ -584,8 +595,6 @@ public class MethodHandleAccessorsTest {
 
         try {
             f.setInt(null, 100);
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        }
+        } catch (IllegalAccessException e) { }
     }
 }

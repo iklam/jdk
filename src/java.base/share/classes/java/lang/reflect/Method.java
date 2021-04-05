@@ -26,6 +26,7 @@
 package java.lang.reflect;
 
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.VM;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.MethodAccessor;
 import jdk.internal.reflect.Reflection;
@@ -706,7 +707,9 @@ public final class Method extends Executable {
         } else {
             // Otherwise fabricate one and propagate it up to the root
             tmp = reflectionFactory.newMethodAccessor(this, isCallerSensitive());
-            setMethodAccessor(tmp);
+            // set the method accessor only if it's not using native implementation
+            if (VM.isJavaLangInvokeInited())
+                setMethodAccessor(tmp);
         }
 
         return tmp;

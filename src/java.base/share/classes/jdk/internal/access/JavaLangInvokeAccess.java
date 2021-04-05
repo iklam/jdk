@@ -28,11 +28,11 @@ package jdk.internal.access;
 import jdk.internal.invoke.NativeEntryPoint;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.ByteOrder;
 import java.util.List;
 import java.util.Map;
@@ -137,9 +137,14 @@ public interface JavaLangInvokeAccess {
     MethodHandle nativeMethodHandle(NativeEntryPoint nep, MethodHandle fallback);
 
     MethodHandle unreflectConstructor(Constructor<?> ctor) throws IllegalAccessException;
-    MethodHandle unreflectField(Field field, boolean isSetter) throws IllegalAccessException;
     MethodHandle findVirtual(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
     MethodHandle findStatic(Class<?> defc, String name, MethodType type) throws IllegalAccessException;
     MethodHandle reflectiveInvoker(Class<?> caller);
     VarHandle unreflectVarHandle(Field field) throws IllegalAccessException;
+
+    /**
+     * Defines a hidden class of the given name and bytees with class data.
+     * The given bytes is trusted.
+     */
+    Lookup defineHiddenClassWithClassData(Lookup caller, String name, byte[] bytes, Object classData, boolean initialize);
 }

@@ -25,66 +25,71 @@
 
 package jdk.internal.reflect;
 
+import jdk.internal.vm.annotation.Hidden;
+
 import java.lang.invoke.MethodHandle;
 
+/**
+ * Delegate the invocation directly to the target method handle.
+ */
 class MHMethodAccessorDelegate implements MHMethodAccessor {
     private final MethodHandle target;
     MHMethodAccessorDelegate(MethodHandle target) {
         this.target = target;
     }
     // non-specialized non-static and static methods
-    public Object invoke(Object obj, Object[] args) throws Throwable {
+    @Hidden public Object invoke(Object obj, Object[] args) throws Throwable {
         return target.invokeExact(obj, args);
     }
-    public Object invoke(Object[] args) throws Throwable {
+    @Hidden public Object invoke(Object[] args) throws Throwable {
         return target.invokeExact(args);
     }
-    public Object invoke(Object obj, Class<?> caller, Object[] args) throws Throwable {
+    @Hidden public Object invoke(Object obj, Class<?> caller, Object[] args) throws Throwable {
         return target.invokeExact(obj, caller, args);
     }
-    public Object invoke(Class<?> caller, Object[] args) throws Throwable {
+    @Hidden public Object invoke(Class<?> caller, Object[] args) throws Throwable {
         return target.invokeExact(caller, args);
     }
 
     // specialized version for instance method
-    public Object invoke(Object obj) throws Throwable {
+    @Hidden public Object invoke(Object obj) throws Throwable {
         return target.invokeExact(obj);
     }
-    public Object invoke(Object obj, Object arg1) throws Throwable {
+    @Hidden public Object invoke(Object obj, Object arg1) throws Throwable {
         return target.invokeExact(obj, arg1);
     }
-    public Object invoke(Object obj, Object arg1, Object arg2) throws Throwable {
+    @Hidden public Object invoke(Object obj, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(obj, arg1, arg2);
     }
-    public Object invoke(Object obj, Class<?> caller) throws Throwable {
+    @Hidden public Object invoke(Object obj, Class<?> caller) throws Throwable {
         return target.invokeExact(obj, caller);
     }
-    public Object invoke(Object obj, Class<?> caller, Object arg1) throws Throwable {
+    @Hidden public Object invoke(Object obj, Class<?> caller, Object arg1) throws Throwable {
         return target.invokeExact(obj, caller, arg1);
     }
-    public Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2) throws Throwable {
+    @Hidden public Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(obj, caller, arg1, arg2);
     }
 
     // specialized version for static method
-    public Object invoke() throws Throwable {
+    @Hidden public Object invoke() throws Throwable {
         return target.invokeExact();
     }
     // the method of the same signature already defined
-    // public Object invoke(Object arg1) throws Throwable {
+    // @Hidden public Object invoke(Object arg1) throws Throwable {
     //    return target.invokeExact();
     // }
-    // public Object invoke(Object arg1, Object arg2) throws Throwable {
+    // @Hidden public Object invoke(Object arg1, Object arg2) throws Throwable {
     //    return target.invokeExact();
     // }
 
-    public Object invoke(Class<?> caller) throws Throwable {
+    @Hidden public Object invoke(Class<?> caller) throws Throwable {
         return target.invokeExact(caller);
     }
-    public Object invoke(Class<?> caller, Object arg1) throws Throwable {
+    @Hidden public Object invoke(Class<?> caller, Object arg1) throws Throwable {
         return target.invokeExact(caller, arg1);
     }
-    public Object invoke(Class<?> caller, Object arg1, Object arg2) throws Throwable {
+    @Hidden public Object invoke(Class<?> caller, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(caller, arg1, arg2);
     }
 }

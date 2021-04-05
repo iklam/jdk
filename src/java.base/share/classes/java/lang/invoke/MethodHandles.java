@@ -65,6 +65,7 @@ import java.util.stream.Stream;
 import static java.lang.invoke.LambdaForm.BasicType.V_TYPE;
 import static java.lang.invoke.MethodHandleImpl.Intrinsic;
 import static java.lang.invoke.MethodHandleNatives.Constants.*;
+import static java.lang.invoke.MethodHandleStatics.UNSAFE;
 import static java.lang.invoke.MethodHandleStatics.newIllegalArgumentException;
 import static java.lang.invoke.MethodType.methodType;
 
@@ -337,7 +338,7 @@ public class MethodHandles {
              throw new IllegalAccessException(caller + " does not have ORIGINAL access");
          }
 
-         Object classdata = MethodHandleNatives.classData(caller.lookupClass());
+         Object classdata = classData(caller.lookupClass());
          if (classdata == null) return null;
 
          try {
@@ -347,6 +348,17 @@ public class MethodHandles {
          } catch (Throwable e) {
              throw new InternalError(e);
          }
+    }
+
+    /*
+     * Returns the class data set by the VM in the Class::classData field.
+     *
+     * This is also invoked by LambdaForms as it cannot use condy via
+     * MethodHandles::classData due to bootstrapping issue.
+     */
+    static Object classData(Class<?> c) {
+        UNSAFE.ensureClassInitialized(c);
+        return SharedSecrets.getJavaLangAccess().classData(c);
     }
 
     /**

@@ -27,7 +27,6 @@ package jdk.internal.reflect;
 
 import java.lang.reflect.*;
 import jdk.internal.misc.Unsafe;
-import jdk.internal.misc.VM;
 import sun.reflect.misc.ReflectUtil;
 
 import static jdk.internal.reflect.ReflectionFactory.generateMethodAccessor;
@@ -96,26 +95,21 @@ class NativeMethodAccessorImpl extends MethodAccessorImpl {
     }
 
     private void maybeSwapDelegate(Method method) {
-        try {
-            if (VM.isModuleSystemInited()
-                    && ReflectionFactory.useDirectMethodHandle()
-                    && generated == 0
-                    && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
-                MethodAccessorImpl acc = MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
-                parent.setDelegate(acc);
-            } else if (!ReflectionFactory.useDirectMethodHandle()
-                    && ++numInvocations > ReflectionFactory.inflationThreshold()
-                    && !method.getDeclaringClass().isHidden()
-                    && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
-                    && generated == 0
-                    && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
+        assert !ReflectionFactory.useDirectMethodHandle();
+
+        if (++numInvocations > ReflectionFactory.inflationThreshold()
+                && !method.getDeclaringClass().isHidden()
+                && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())
+                && generated == 0
+                && U.compareAndSetInt(this, GENERATED_OFFSET, 0, 1)) {
+            try {
                 MethodAccessorImpl acc = generateMethodAccessor(method, csmAdapter);
                 parent.setDelegate(acc);
+            } catch (Throwable t) {
+                // Throwable happens in generateMethod, restore generated to 0
+                generated = 0;
+                throw t;
             }
-        } catch (Throwable t) {
-            // Throwable happens in generateMethod, restore generated to 0
-            generated = 0;
-            throw t;
         }
     }
 

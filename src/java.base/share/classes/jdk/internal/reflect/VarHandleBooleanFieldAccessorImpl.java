@@ -25,8 +25,6 @@
 
 package jdk.internal.reflect;
 
-import java.lang.invoke.VarHandle;
-import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Field;
 
 class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
@@ -39,14 +37,13 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     }
 
     public boolean getBoolean(Object obj) throws IllegalArgumentException {
+        ensureObj(obj);
         try {
             return isStatic ? accessor.getBoolean() : accessor.getBoolean(obj);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newGetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }
@@ -83,6 +80,7 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public void set(Object obj, Object value)
             throws IllegalArgumentException, IllegalAccessException
     {
+        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(value);
         }
@@ -99,6 +97,7 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
     public void setBoolean(Object obj, boolean z)
         throws IllegalArgumentException, IllegalAccessException
     {
+        ensureObj(obj);
         if (isReadOnly) {
             throwFinalFieldIllegalAccessException(z);
         }
@@ -108,12 +107,10 @@ class VarHandleBooleanFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             } else {
                 accessor.setBoolean(obj, z);
             }
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
-            throw newIllegalArgumentException(obj);
-        } catch (NullPointerException e) {
-            throw newIllegalArgumentException(obj);
+            throw newSetIllegalArgumentException(obj.getClass());
         } catch (Throwable e) {
             throw new InternalError(e);
         }

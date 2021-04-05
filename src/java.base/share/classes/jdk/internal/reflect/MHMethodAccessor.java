@@ -25,6 +25,15 @@
 
 package jdk.internal.reflect;
 
+/**
+ * Defines the invoke method for Method::invoke(Object obj, Object[] args)
+ * and other variants for example taking a caller class parameter and
+ * specialized for the methods whose have <= 2 formal parameters.
+ *
+ * The static methods are also specialized to drop the receiver parameter.
+ *
+ * See MethodHandleAccessorFactory for the specialization.
+ */
 public interface MHMethodAccessor {
     // non-specialized non-static and static methods
     default Object invoke(Object obj, Object[] args) throws Throwable {
