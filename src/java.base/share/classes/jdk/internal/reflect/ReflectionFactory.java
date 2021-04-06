@@ -209,27 +209,6 @@ public class ReflectionFactory {
     }
 
     /**
-     * Returns an alternate reflective Method instance for the given method
-     * intended for reflection to invoke, if present.
-     *
-     * A trusted method can define an alternate implementation for a method `foo`
-     * with a leading caller class argument that will be invoked reflectively.
-     */
-    static Method findCSMethodAdapter(Method method) {
-        if (!Reflection.isCallerSensitive(method)) return null;
-
-        int paramCount = method.getParameterCount();
-        Class<?>[] ptypes = new Class<?>[paramCount+1];
-        ptypes[0] = Class.class;
-        System.arraycopy(method.getParameterTypes(), 0, ptypes, 1, paramCount);
-        try {
-            return method.getDeclaringClass().getDeclaredMethod(method.getName(), ptypes);
-        } catch (NoSuchMethodException ex) {
-            return null;
-        }
-    }
-
-    /**
      * Generate the MethodAccessor that invokes the given method with
      * bytecode invocation.
      */

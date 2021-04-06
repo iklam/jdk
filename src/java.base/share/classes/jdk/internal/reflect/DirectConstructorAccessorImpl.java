@@ -28,34 +28,56 @@ package jdk.internal.reflect;
 import jdk.internal.misc.VM;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Arrays;
+
+import static jdk.internal.reflect.AccessorUtils.argAt;
+import static jdk.internal.reflect.AccessorUtils.checkArgumentCount;
+import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
 
 final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
-    private final MethodHandle target;      // target method handle bound to the declaring class of the method
-    DirectConstructorAccessorImpl(MethodHandle target) {
+    private final Constructor<?> ctor;
+    private final MethodHandle target;
+    private final int paramCount;
+    DirectConstructorAccessorImpl(Constructor<?> ctor, MethodHandle target) {
+        this.ctor = ctor;
         this.target = target;
+        this.paramCount = ctor.getParameterCount();
     }
 
     @Override
     public Object newInstance(Object[] args) throws InstantiationException, InvocationTargetException {
+        if (MethodHandleAccessorFactory.VERBOSE) {
+            System.out.println("newInstance on " + ctor.getDeclaringClass().getName()
+                    + " with args " + Arrays.deepToString(args));
+        }
+        checkArgumentCount(paramCount, args);
         try {
-            return target.invokeExact(args);
-        } catch (InvocationTargetException e) {
-            throw e;
-        } catch (ClassCastException e) {
-            throw new IllegalArgumentException("argument type mismatch", e);
+            return switch (paramCount) {
+                case 0 ->  target.invokeExact();
+                case 1 ->  target.invokeExact(argAt(args, 0));
+                case 2 ->  target.invokeExact(argAt(args, 0), argAt(args, 1));
+                default -> target.invokeExact(args);
+            };
+        } catch (ClassCastException|WrongMethodTypeException e) {
+            if (isIllegalArgument(this.getClass(), e))
+                throw new IllegalArgumentException("argument type mismatch", e);
+            else
+                throw new InvocationTargetException(e);
         } catch (NullPointerException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        } catch (Error | RuntimeException e) {
-            throw e;
+            if (isIllegalArgument(this.getClass(), e))
+                throw new IllegalArgumentException(e);
+            else
+                throw new InvocationTargetException(e);
         } catch (Throwable e) {
             throw new InvocationTargetException(e);
         }
     }
 
     static ConstructorAccessorImpl constructorAccessor(Constructor<?> ctor, MethodHandle target) {
-        return new DirectConstructorAccessorImpl(target);
+        return new DirectConstructorAccessorImpl(ctor, target);
     }
 
     static ConstructorAccessorImpl nativeAccessor(Constructor<?> ctor) {

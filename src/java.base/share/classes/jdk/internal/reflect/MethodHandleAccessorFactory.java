@@ -39,6 +39,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -69,11 +70,7 @@ final class MethodHandleAccessorFactory {
                 var dmh = findDirectMethodWithLeadingCaller(method);
                 if (dmh != null) {
                     var mhInvoker = newMethodHandleAccessor(method, dmh, true);
-                    var accessor = DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh, mhInvoker);
-                    if (VERBOSE) {
-                        System.out.println(method + " dmh " + dmh);
-                    }
-                    return accessor;
+                    return DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh, mhInvoker);
                 }
             }
             var dmh = getDirectMethod(method, callerSensitive);
@@ -99,11 +96,19 @@ final class MethodHandleAccessorFactory {
         UNSAFE.ensureClassInitialized(ctor.getDeclaringClass());
         try {
             MethodHandle mh = JLIA.unreflectConstructor(ctor);
+            MethodHandle target = mh.asFixedArity();
+
             int paramCount = mh.type().parameterCount();
-            MethodHandle target = MethodHandles.catchException(mh, Throwable.class,
-                    WRAP.asType(methodType(mh.type().returnType(), Throwable.class)));
-            target = target.asSpreader(Object[].class, paramCount)
-                           .asType(methodType(Object.class, Object[].class));
+            if (ctor.isVarArgs() && ctor.getParameterCount() == 1) {
+                target = mh.asType(methodType(Object.class, Object.class));
+            } else {
+                MethodType mtype = specializedMethodTypeForConstructor(paramCount);
+                if (paramCount > SPECIALIZED_PARAM_COUNT) {
+                    // spread the parameters only for the non-specialized case
+                    target = target.asSpreader(Object[].class, paramCount);
+                }
+                target = target.asType(mtype);
+            }
             return DirectConstructorAccessorImpl.constructorAccessor(ctor, target);
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
@@ -173,6 +178,28 @@ final class MethodHandleAccessorFactory {
         return dmh != null ? makeSpecializedTarget(dmh, isStatic, true) : null;
     }
 
+
+    /**
+     * Returns an alternate reflective Method instance for the given method
+     * intended for reflection to invoke, if present.
+     *
+     * A trusted method can define an alternate implementation for a method `foo`
+     * with a leading caller class argument that will be invoked reflectively.
+     */
+    static Method findCSMethodAdapter(Method method) {
+        if (!Reflection.isCallerSensitive(method)) return null;
+
+        int paramCount = method.getParameterCount();
+        Class<?>[] ptypes = new Class<?>[paramCount+1];
+        ptypes[0] = Class.class;
+        System.arraycopy(method.getParameterTypes(), 0, ptypes, 1, paramCount);
+        try {
+            return method.getDeclaringClass().getDeclaredMethod(method.getName(), ptypes);
+        } catch (NoSuchMethodException ex) {
+            return null;
+        }
+    }
+
     /**
      * Transform the given dmh to a specialized target method handle.
      *
@@ -214,7 +241,7 @@ final class MethodHandleAccessorFactory {
         return target.asType(mtype);
     }
 
-    private static final int SPECIALIZED_PARAM_COUNT = 2;
+    static final int SPECIALIZED_PARAM_COUNT = 2;
     static MethodType specializedMethodType(boolean isStatic, boolean hasLeadingCaller, int paramCount) {
         return switch (paramCount) {
             // specialize for number of formal arguments <= 2 to avoid spreader
@@ -236,6 +263,16 @@ final class MethodHandleAccessorFactory {
                                                     : methodType(Object.class, Object.class, Object[].class));
         };
     }
+
+    static MethodType specializedMethodTypeForConstructor(int paramCount) {
+        return switch (paramCount) {
+            case 0 -> methodType(Object.class);
+            case 1 -> methodType(Object.class, Object.class);
+            case 2 -> methodType(Object.class, Object.class, Object.class);
+            default -> methodType(Object.class, Object[].class);
+        };
+    }
+
     /**
      * Transforms the given dmh into a target method handle with the method type
      * {@code (Object, Object[])Object} or {@code (Object, Class, Object[])Object}
