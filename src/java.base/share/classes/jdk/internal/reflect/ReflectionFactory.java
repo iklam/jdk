@@ -194,17 +194,17 @@ public class ReflectionFactory {
 
         if (useDirectMethodHandle) {
             return MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
-        } else if (!useDirectMethodHandle && noInflation
+        } else {
+            if (!useDirectMethodHandle && noInflation
                     && !method.getDeclaringClass().isHidden()
                     && !ReflectUtil.isVMAnonymousClass(method.getDeclaringClass())) {
-            return generateMethodAccessor(method, findCSMethodAdapter(method));
-        } else {
-            NativeMethodAccessorImpl acc = callerSensitive
-                    ? new NativeMethodAccessorImpl(method, findCSMethodAdapter(method))
-                    : new NativeMethodAccessorImpl(method);
-            DelegatingMethodAccessorImpl res = new DelegatingMethodAccessorImpl(acc);
-            acc.setParent(res);
-            return res;
+                return generateMethodAccessor(method);
+            } else {
+                NativeMethodAccessorImpl acc = new NativeMethodAccessorImpl(method);
+                DelegatingMethodAccessorImpl res = new DelegatingMethodAccessorImpl(acc);
+                acc.setParent(res);
+                return res;
+            }
         }
     }
 
@@ -216,7 +216,6 @@ public class ReflectionFactory {
      * with a leading caller class argument that will be invoked reflectively.
      */
     static Method findCSMethodAdapter(Method method) {
-        if (!useCallerSensitiveAdapter) return null;
         if (!Reflection.isCallerSensitive(method)) return null;
 
         int paramCount = method.getParameterCount();
@@ -234,15 +233,18 @@ public class ReflectionFactory {
      * Generate the MethodAccessor that invokes the given method with
      * bytecode invocation.
      */
+    static MethodAccessorImpl generateMethodAccessor(Method method) {
+        return (MethodAccessorImpl)new MethodAccessorGenerator()
+                .generateMethod(method.getDeclaringClass(),
+                                method.getName(),
+                                method.getParameterTypes(),
+                                method.getReturnType(),
+                                method.getExceptionTypes(),
+                                method.getModifiers());
+    }
+
     static MethodAccessorImpl generateMethodAccessor(Method method, Method csmAdapter) {
-        var m = csmAdapter != null ? csmAdapter : method;
-        var accessor = (MethodAccessorImpl)new MethodAccessorGenerator()
-                .generateMethod(m.getDeclaringClass(),
-                                m.getName(),
-                                m.getParameterTypes(),
-                                m.getReturnType(),
-                                m.getExceptionTypes(),
-                                m.getModifiers());
+        var accessor = generateMethodAccessor(csmAdapter != null ? csmAdapter : method);
         return csmAdapter != null ? new CsMethodAccessorAdapter(method, csmAdapter, accessor)
                                   : accessor;
     }
@@ -669,9 +671,6 @@ public class ReflectionFactory {
     static boolean spinMHAccessorClass() {
         return fastMethodHandleInvoke;
     }
-    static boolean useCallerSensitiveAdapter() {
-        return useCallerSensitiveAdapter;
-    }
 
     /** We have to defer full initialization of this class until after
         the static initializer is run since java.lang.reflect.Method's
@@ -705,13 +704,6 @@ public class ReflectionFactory {
         val = props.getProperty("jdk.reflect.useDirectMethodHandle");
         if (val != null && val.equals("false")) {
             useDirectMethodHandle = false;
-            useCallerSensitiveAdapter = false;
-
-            // turn off explicitly for performance testing
-            val = props.getProperty("jdk.reflect.useCallerSensitiveAdapter");
-            if (val != null && val.equals("true")) {
-                useCallerSensitiveAdapter = true;
-            }
         }
         val = props.getProperty("jdk.reflect.fastMethodHandleInvoke");
         if (val != null) {

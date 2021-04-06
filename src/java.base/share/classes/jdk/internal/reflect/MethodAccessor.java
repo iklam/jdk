@@ -38,8 +38,6 @@ public interface MethodAccessor {
     public Object invoke(Object obj, Object[] args)
         throws IllegalArgumentException, InvocationTargetException;
 
-    default Object invoke(Class<?> caller, Object obj, Object[] args)
-            throws IllegalArgumentException, InvocationTargetException {
-        return invoke(obj, args);
-    }
+    public Object invoke(Class<?> caller, Object obj, Object[] args)
+            throws IllegalArgumentException, InvocationTargetException;
 }

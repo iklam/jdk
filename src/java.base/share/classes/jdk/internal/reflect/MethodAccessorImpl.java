@@ -25,9 +25,6 @@
 
 package jdk.internal.reflect;
 
-import jdk.internal.access.SharedSecrets;
-
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.InvocationTargetException;
 
 /** <P> Package-private implementation of the MethodAccessor interface
@@ -49,49 +46,8 @@ abstract class MethodAccessorImpl extends MagicAccessorImpl
     public abstract Object invoke(Object obj, Object[] args)
         throws IllegalArgumentException, InvocationTargetException;
 
-    /**
-     * When Method::invoke on a caller-sensitive method is to be invoked
-     * and no adapter method with a leading caller class argument is defined,
-     * the caller-sensitive method must be invoked via an invoker injected
-     * which has the following signature:
-     *     reflect_invoke_V(MethodHandle mh, Object target, Object[] args)
-     *
-     * The stack frames calling the method `csm` through reflection will
-     * look like this:
-     *     target.csm(args)
-     *     NativeMethodAccesssorImpl::invoke(target, args)
-     *     MethodAccessImpl::invoke(target, args)
-     *     InjectedInvoker::reflect_invoke_V(vamh, target, args);
-     *     method::invoke(target, args)
-     *     p.Foo::m
-     *
-     * An injected invoker class is a hidden class which has the same
-     * defining class loader, runtime package, and protection domain
-     * as the given caller class.
-     *
-     * This method is needed by NativeMethodAccessorImpl and the generated
-     * MethodAccessor.   The caller-sensitive method will call
-     * Reflection::getCallerClass to get the caller class.
-     */
-    @Override
     public Object invoke(Class<?> caller, Object obj, Object[] args)
             throws IllegalArgumentException, InvocationTargetException {
-        var invoker = SharedSecrets.getJavaLangInvokeAccess().reflectiveInvoker(caller);
-        try {
-            return invoker.invokeExact(methodAccessorInvoker(), obj, args);
-        } catch (InvocationTargetException | RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            throw new InternalError(e);
-        }
-    }
-
-    private MethodHandle maInvoker;
-    private MethodHandle methodAccessorInvoker() {
-        MethodHandle invoker = maInvoker;
-        if (invoker == null) {
-            maInvoker = invoker = MethodHandleAccessorFactory.reflectiveInvokerFor(this);
-        }
-        return invoker;
+        return invoke(obj, args);
     }
 }

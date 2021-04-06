@@ -41,7 +41,7 @@
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass
- * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Djdk.reflect.useCallerSensitiveAdapter=true -Dsun.reflect.noInflation=false GetCallerClassTest
+ * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Dsun.reflect.noInflation=false GetCallerClassTest
  */
 
 /*
@@ -50,7 +50,7 @@
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass
- * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Djdk.reflect.useCallerSensitiveAdapter=true -Dsun.reflect.noInflation=true GetCallerClassTest
+ * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=false -Dsun.reflect.noInflation=true GetCallerClassTest
  */
 
 import boot.GetCallerClass;
@@ -215,8 +215,15 @@ public class GetCallerClassTest {
     private static final Object[] EMPTY_ARRAY = new Object[0];
 
     private void testCallerSensitiveMethodsUsingMethodHandlesAndReflection() {
-        System.out.println();
+        // In the old implementation, the caller returned is java.lang.invoke.Method
+        // since it looks up the caller through stack walking.
+        // The new implementation uses the special calling sequence and Method::invoke
+        // defines an adapter method such that the stack walking is done only once
+        // using the same caller class.
+        boolean newImpl = Boolean.valueOf(System.getProperty("jdk.reflect.useDirectMethodHandle", "true"));
+        Class<?> expectedCaller = newImpl ? GetCallerClassTest.class : Method.class;
 
+        System.out.println();
         try {
             MethodHandle methodInvokeMh = MethodHandles
                 .lookup()
@@ -225,23 +232,35 @@ public class GetCallerClassTest {
             Class<?> caller;
 
             caller = (Class<?>) methodInvokeMh.invoke(gccCl.getDeclaredMethod("getCallerClass"), gcc, EMPTY_ARRAY);
-            if (caller != GetCallerClassTest.class) {
+            if (caller != expectedCaller) {
                 throw new RuntimeException("mismatched caller: " + caller);
             }
 
             caller = (Class<?>) methodInvokeMh.invoke(gccCl.getDeclaredMethod("getCallerClassStatic"), null, EMPTY_ARRAY);
-            if (caller != GetCallerClassTest.class) {
+            if (caller != expectedCaller) {
                 throw new RuntimeException("mismatched caller: " + caller);
             }
 
             caller = (Class<?>) methodInvokeMh.invoke(gccCl.getDeclaredMethod("getCallerClassNoAlt"), gcc, EMPTY_ARRAY);
-            if (!caller.isNestmateOf(GetCallerClassTest.class)) {
-                throw new RuntimeException("mismatched caller: " + caller);
+            if (newImpl) {
+                if (!caller.isNestmateOf(GetCallerClassTest.class)) {
+                    throw new RuntimeException("mismatched caller: " + caller);
+                }
+            } else {
+                if (caller != expectedCaller) {
+                    throw new RuntimeException("mismatched caller: " + caller);
+                }
             }
 
             caller = (Class<?>) methodInvokeMh.invoke(gccCl.getDeclaredMethod("getCallerClassStaticNoAlt"), null, EMPTY_ARRAY);
-            if (!caller.isNestmateOf(GetCallerClassTest.class)) {
-                throw new RuntimeException("mismatched caller: " + caller);
+            if (newImpl) {
+                if (!caller.isNestmateOf(GetCallerClassTest.class)) {
+                    throw new RuntimeException("mismatched caller: " + caller);
+                }
+            } else {
+                if (caller != expectedCaller) {
+                    throw new RuntimeException("mismatched caller: " + caller);
+                }
             }
         } catch (RuntimeException | Error e) {
             throw e;

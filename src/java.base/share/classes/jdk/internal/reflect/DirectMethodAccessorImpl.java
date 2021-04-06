@@ -60,7 +60,7 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     static MethodAccessorImpl nativeAccessor(Method method, boolean callerSensitive) {
         assert !VM.isJavaLangInvokeInited() || Modifier.isNative(method.getModifiers());
         return callerSensitive ? new NativeAccessor(method, findCSMethodAdapter(method))
-                : new NativeAccessor(method);
+                               : new NativeAccessor(method);
     }
 
     protected final Method method;
@@ -309,14 +309,49 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                     System.arraycopy(args, 0, newArgs, 1, args.length);
                 }
                 return invoke0(csmAdapter, obj, newArgs);
-            } else if (ReflectionFactory.useCallerSensitiveAdapter()) {
-                // invoke the caller-sensitive method through an injected invoker,
-                // a nestmate of the caller class, acting as the caller
-                return super.invoke(caller, obj, args);
             } else {
-                // ignore the caller sensitive adaptor for performance testing
-                return invoke(obj, args);
+                /*
+                 * When Method::invoke on a caller-sensitive method is to be invoked
+                 * and no adapter method with a leading caller class argument is defined,
+                 * the caller-sensitive method must be invoked via an invoker injected
+                 * which has the following signature:
+                 *     reflect_invoke_V(MethodHandle mh, Object target, Object[] args)
+                 *
+                 * The stack frames calling the method `csm` through reflection will
+                 * look like this:
+                 *     target.csm(args)
+                 *     NativeMethodAccesssorImpl::invoke(target, args)
+                 *     MethodAccessImpl::invoke(target, args)
+                 *     InjectedInvoker::reflect_invoke_V(vamh, target, args);
+                 *     method::invoke(target, args)
+                 *     p.Foo::m
+                 *
+                 * An injected invoker class is a hidden class which has the same
+                 * defining class loader, runtime package, and protection domain
+                 * as the given caller class.
+                 *
+                 * This method is needed by NativeMethodAccessorImpl and the generated
+                 * MethodAccessor.   The caller-sensitive method will call
+                 * Reflection::getCallerClass to get the caller class.
+                 */
+                var invoker = SharedSecrets.getJavaLangInvokeAccess().reflectiveInvoker(caller);
+                try {
+                    return invoker.invokeExact(methodAccessorInvoker(), obj, args);
+                } catch (InvocationTargetException|RuntimeException|Error e) {
+                    throw e;
+                } catch (Throwable e) {
+                    throw new InternalError(e);
+                }
             }
+        }
+
+        private MethodHandle maInvoker;
+        private MethodHandle methodAccessorInvoker() {
+            MethodHandle invoker = maInvoker;
+            if (invoker == null) {
+                maInvoker = invoker = MethodHandleAccessorFactory.reflectiveInvokerFor(this);
+            }
+            return invoker;
         }
 
         private static native Object invoke0(Method m, Object obj, Object[] args);
