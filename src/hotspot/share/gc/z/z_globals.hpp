@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 #define SHARE_GC_Z_Z_GLOBALS_HPP
 
 #include "runtime/globals_shared.hpp"
-#include "utilities/macros.hpp"
 
 #define GC_Z_FLAGS(develop,                                                 \
                    develop_pd,                                              \

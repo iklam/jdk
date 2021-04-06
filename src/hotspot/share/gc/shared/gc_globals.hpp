@@ -30,9 +30,6 @@
 #if INCLUDE_EPSILONGC
 #include "gc/epsilon/epsilon_globals.hpp"
 #endif
-#if INCLUDE_G1GC
-#include "gc/g1/g1_globals.hpp"
-#endif
 #if INCLUDE_PARALLELGC
 #include "gc/parallel/parallel_globals.hpp"
 #endif
@@ -52,15 +49,6 @@
                  constraint)                                                \
                                                                             \
   EPSILONGC_ONLY(GC_EPSILON_FLAGS(                                          \
-    develop,                                                                \
-    develop_pd,                                                             \
-    product,                                                                \
-    product_pd,                                                             \
-    notproduct,                                                             \
-    range,                                                                  \
-    constraint))                                                            \
-                                                                            \
-  G1GC_ONLY(GC_G1_FLAGS(                                                    \
     develop,                                                                \
     develop_pd,                                                             \
     product,                                                                \

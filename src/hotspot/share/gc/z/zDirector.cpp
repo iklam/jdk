@@ -23,12 +23,12 @@
 
 #include "precompiled.hpp"
 #include "gc/shared/gc_globals.hpp"
-#include "gc/z/z_globals.hpp"
 #include "gc/z/zCollectedHeap.hpp"
 #include "gc/z/zDirector.hpp"
 #include "gc/z/zHeap.inline.hpp"
 #include "gc/z/zHeuristics.hpp"
 #include "gc/z/zStat.hpp"
+#include "gc/z/z_globals.hpp"
 #include "logging/log.hpp"
 
 const double ZDirector::one_in_1000 = 3.290527;

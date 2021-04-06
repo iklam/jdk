@@ -30,7 +30,11 @@
 #include "gc/shared/tlab_globals.hpp"
 #include "runtime/flags/debug_globals.hpp"
 #include "runtime/globals.hpp"
+#include "utilities/macros.hpp"
 
+#if INCLUDE_G1GC
+#include "gc/g1/g1_globals.hpp"
+#endif
 #if INCLUDE_ZGC
 #include "gc/z/z_globals.hpp"
 #endif
@@ -134,6 +138,15 @@
     notproduct,               \
     range,                    \
     constraint)               \
+                              \
+  G1GC_ONLY(GC_G1_FLAGS(      \
+    develop,                  \
+    develop_pd,               \
+    product,                  \
+    product_pd,               \
+    notproduct,               \
+    range,                    \
+    constraint))              \
                               \
   ZGC_ONLY(GC_Z_FLAGS(        \
     develop,                  \

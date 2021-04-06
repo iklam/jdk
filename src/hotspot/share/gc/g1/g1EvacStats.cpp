@@ -24,11 +24,11 @@
 
 #include "precompiled.hpp"
 #include "gc/g1/g1EvacStats.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/shared/gcId.hpp"
 #include "gc/shared/gc_globals.hpp"
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
-#include "runtime/globals.hpp"
 
 void G1EvacStats::log_plab_allocation() {
   PLABStats::log_plab_allocation();

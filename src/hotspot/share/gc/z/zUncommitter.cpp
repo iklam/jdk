@@ -23,11 +23,11 @@
 
 #include "precompiled.hpp"
 #include "gc/shared/gc_globals.hpp"
-#include "gc/z/z_globals.hpp"
 #include "gc/z/zHeap.inline.hpp"
 #include "gc/z/zLock.inline.hpp"
 #include "gc/z/zStat.hpp"
 #include "gc/z/zUncommitter.hpp"
+#include "gc/z/z_globals.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "logging/log.hpp"
 

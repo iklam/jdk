@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
 #define SHARE_GC_G1_SPARSEPRT_HPP
 
 #include "gc/g1/g1CollectedHeap.hpp"
+#include "gc/g1/g1_globals.hpp"
 #include "gc/g1/heapRegion.hpp"
 #include "gc/shared/cardTableBarrierSet.hpp"
 #include "memory/allocation.hpp"

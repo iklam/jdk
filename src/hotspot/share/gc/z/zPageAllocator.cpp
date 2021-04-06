@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,7 +24,6 @@
 #include "precompiled.hpp"
 #include "gc/shared/gcLogPrecious.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
-#include "gc/z/z_globals.hpp"
 #include "gc/z/zArray.inline.hpp"
 #include "gc/z/zCollectedHeap.hpp"
 #include "gc/z/zFuture.inline.hpp"
@@ -39,9 +38,9 @@
 #include "gc/z/zUncommitter.hpp"
 #include "gc/z/zUnmapper.hpp"
 #include "gc/z/zWorkers.hpp"
+#include "gc/z/z_globals.hpp"
 #include "jfr/jfrEvents.hpp"
 #include "logging/log.hpp"
-#include "runtime/globals.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
 #include "utilities/debug.hpp"
