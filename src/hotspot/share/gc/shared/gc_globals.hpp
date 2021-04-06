@@ -42,9 +42,6 @@
 #if INCLUDE_SHENANDOAHGC
 #include "gc/shenandoah/shenandoah_globals.hpp"
 #endif
-#if INCLUDE_ZGC
-#include "gc/z/z_globals.hpp"
-#endif
 
 #define GC_FLAGS(develop,                                                   \
                  develop_pd,                                                \
@@ -91,15 +88,6 @@
     constraint))                                                            \
                                                                             \
   SHENANDOAHGC_ONLY(GC_SHENANDOAH_FLAGS(                                    \
-    develop,                                                                \
-    develop_pd,                                                             \
-    product,                                                                \
-    product_pd,                                                             \
-    notproduct,                                                             \
-    range,                                                                  \
-    constraint))                                                            \
-                                                                            \
-  ZGC_ONLY(GC_Z_FLAGS(                                                      \
     develop,                                                                \
     develop_pd,                                                             \
     product,                                                                \

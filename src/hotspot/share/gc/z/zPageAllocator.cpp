@@ -24,6 +24,7 @@
 #include "precompiled.hpp"
 #include "gc/shared/gcLogPrecious.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
+#include "gc/z/z_globals.hpp"
 #include "gc/z/zArray.inline.hpp"
 #include "gc/z/zCollectedHeap.hpp"
 #include "gc/z/zFuture.inline.hpp"
