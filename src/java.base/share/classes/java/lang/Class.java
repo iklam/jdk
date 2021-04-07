@@ -375,6 +375,7 @@ public final class Class<T> implements java.io.Serializable,
         return forName0(className, true, ClassLoader.getClassLoader(caller), caller);
     }
 
+    // Caller-sensitive adapter method for reflective invocation
     private static Class<?> forName(Class<?> caller, String className)
             throws ClassNotFoundException {
         return forName0(className, true, ClassLoader.getClassLoader(caller), caller);
@@ -459,11 +460,23 @@ public final class Class<T> implements java.io.Serializable,
             // Reflective call to get caller class is only needed if a security manager
             // is present.  Avoid the overhead of making this call otherwise.
             caller = Reflection.getCallerClass();
+        }
+        return forName(caller, name, initialize, loader);
+    }
+
+    // Caller-sensitive adapter method for reflective invocation
+    private static Class<?> forName(Class<?> caller, String name, boolean initialize, ClassLoader loader)
+            throws ClassNotFoundException
+    {
+        SecurityManager sm = System.getSecurityManager();
+        if (sm != null) {
+            // Reflective call to get caller class is only needed if a security manager
+            // is present.  Avoid the overhead of making this call otherwise.
             if (loader == null) {
                 ClassLoader ccl = ClassLoader.getClassLoader(caller);
                 if (ccl != null) {
                     sm.checkPermission(
-                        SecurityConstants.GET_CLASSLOADER_PERMISSION);
+                            SecurityConstants.GET_CLASSLOADER_PERMISSION);
                 }
             }
         }
@@ -525,13 +538,22 @@ public final class Class<T> implements java.io.Serializable,
      */
     @CallerSensitive
     public static Class<?> forName(Module module, String name) {
+        Class<?> caller = null;
+        SecurityManager sm = System.getSecurityManager();
+        if (sm != null) {
+            caller = Reflection.getCallerClass();
+        }
+        return forName(caller, module, name);
+    }
+
+    // Caller-sensitive adapter method for reflective invocation
+    private static Class<?> forName(Class<?> caller, Module module, String name) {
         Objects.requireNonNull(module);
         Objects.requireNonNull(name);
 
         ClassLoader cl;
         SecurityManager sm = System.getSecurityManager();
         if (sm != null) {
-            Class<?> caller = Reflection.getCallerClass();
             if (caller != null && caller.getModule() != module) {
                 // if caller is null, Class.forName is the last java frame on the stack.
                 // java.base has all permissions

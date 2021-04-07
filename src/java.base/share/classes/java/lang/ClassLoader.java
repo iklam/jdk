@@ -1616,6 +1616,7 @@ public abstract class ClassLoader {
         return ParallelLoaders.register(Reflection.getCallerClass().asSubclass(ClassLoader.class));
     }
 
+    // Caller-sensitive adapter method for reflective invocation
     private static boolean registerAsParallelCapable(Class<?> caller) {
         return ParallelLoaders.register(caller.asSubclass(ClassLoader.class));
     }
