@@ -100,7 +100,7 @@ public class VerifyStackTrace {
             "2: VerifyStackTrace$Handle.execute(VerifyStackTrace.java:147)\n" +
             "3: VerifyStackTrace$Handle.run(VerifyStackTrace.java:160)\n" +
             "4: VerifyStackTrace.invoke(VerifyStackTrace.java:190)\n" +
-            "5: java.base/jdk.internal.reflect.DirectMethodAccessorImpl.invoke(DirectMethodAccessorImpl.java:94)\n" +
+            "5: java.base/jdk.internal.reflect.DirectMethodAccessorImpl$StaticMethodAccessor.invoke(DirectMethodAccessorImpl.java:94)\n" +
             "6: java.base/java.lang.reflect.Method.invoke(Method.java:520)\n" +
             "7: VerifyStackTrace$1.run(VerifyStackTrace.java:220)\n" +
             "8: java.base/java.security.AccessController.doPrivileged(AccessController.java:310)\n" +
@@ -137,14 +137,15 @@ public class VerifyStackTrace {
             "8: java.base/java.lang.invoke.LambdaForm$DMH/0x0000000801002000.invokeStatic(LambdaForm$DMH)\n" +
             "9: java.base/java.lang.invoke.LambdaForm$MH/0x0000000801003000.invoke(LambdaForm$MH)\n" +
             "10: java.base/java.lang.invoke.Invokers$Holder.invokeExact_MT(Invokers$Holder)\n" +
-            "11: java.base/jdk.internal.reflect.MethodAccessorImpl_L$$2/0x0000000801004000.invoke(Unknown Source)\n" +
-            "12: java.base/jdk.internal.reflect.DirectMethodAccessorImpl.invoke(DirectMethodAccessorImpl.java:77)\n" +
-            "13: java.base/java.lang.reflect.Method.invoke(Method.java:573)\n" +
-            "14: VerifyStackTrace$1.run(VerifyStackTrace.java:292)\n" +
-            "15: java.base/java.security.AccessController.executePrivileged(AccessController.java:753)\n" +
-            "16: java.base/java.security.AccessController.doPrivileged(AccessController.java:312)\n" +
-            "17: VerifyStackTrace.test(VerifyStackTrace.java:301)\n" +
-            "18: VerifyStackTrace.main(VerifyStackTrace.java:254)\n";
+            "11: java.base/jdk.internal.reflect.MHMethodAccessorDelegate.invoke(MHMethodAccessorDelegate.java:56)\n" +
+            "12: java.base/jdk.internal.reflect.DirectMethodAccessorImpl$StaticMHMethodAccessor.invokeImpl(DirectMethodAccessorImpl.java:211)\n" +
+            "13: java.base/jdk.internal.reflect.DirectMethodAccessorImpl$StaticMethodAccessor.invoke(DirectMethodAccessorImpl.java:122)\n" +
+            "14: java.base/java.lang.reflect.Method.invoke(Method.java:573)\n" +
+            "15: VerifyStackTrace$1.run(VerifyStackTrace.java:292)\n" +
+            "16: java.base/java.security.AccessController.executePrivileged(AccessController.java:753)\n" +
+            "17: java.base/java.security.AccessController.doPrivileged(AccessController.java:312)\n" +
+            "18: VerifyStackTrace.test(VerifyStackTrace.java:301)\n" +
+            "19: VerifyStackTrace.main(VerifyStackTrace.java:254)\n";
         private final String expected2 =
                 "1: VerifyStackTrace.lambda$test$1(VerifyStackTrace.java:250)\n" +
                 "2: VerifyStackTrace$$Lambda$1/0x0000000801001848.run(Unknown Source)\n" +
@@ -156,7 +157,7 @@ public class VerifyStackTrace {
                 "8: java.base/java.lang.invoke.LambdaForm$DMH/0x0000000801002000.invokeStatic(LambdaForm$DMH)\n" +
                 "9: java.base/java.lang.invoke.LambdaForm$MH/0x0000000801003000.invoke(LambdaForm$MH)\n" +
                 "10: java.base/java.lang.invoke.Invokers$Holder.invokeExact_MT(Invokers$Holder)\n" +
-                "11: java.base/jdk.internal.reflect.MHMethodAccessorDelegate.invoke(MHMethodAccessorDelegate.java:53)\n" +
+                "11: java.base/jdk.internal.reflect.DirectMethodAccessorImpl.invokeImpl(DirectMethodAccessorImpl.java:125)\n" +
                 "12: java.base/jdk.internal.reflect.DirectMethodAccessorImpl.invoke(DirectMethodAccessorImpl.java:80)\n" +
                 "13: java.base/java.lang.reflect.Method.invoke(Method.java:573)\n" +
                 "14: VerifyStackTrace$1.run(VerifyStackTrace.java:262)\n" +
@@ -167,9 +168,7 @@ public class VerifyStackTrace {
 
         @Override public StackWalker walker() { return walker;}
         @Override public String description() { return description;}
-        @Override public String expected()    { return spinMHAccessorClass ? expected1 : expected2;}
-
-        static final boolean spinMHAccessorClass = Boolean.getBoolean("jdk.reflect.fastMethodHandleInvoke");
+        @Override public String expected()    { return expected1;}
     }
 
     static final class TestCase4 extends TestCase3 {

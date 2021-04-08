@@ -88,8 +88,7 @@ public class ReflectionFactory {
     private static boolean noInflation        = false;
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
-    private static boolean fastMethodHandleInvoke = false;
-    private static boolean useCallerSensitiveAdapter = true;
+    private static String invocationType = "adaptive";
 
     // true if deserialization constructor checking is disabled
     private static boolean disableSerialConstructorChecks = false;
@@ -652,8 +651,8 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
-    static boolean fastMethodHandleInvoke() {
-        return fastMethodHandleInvoke;
+    static String invocationType() {
+        return invocationType;
     }
 
     /** We have to defer full initialization of this class until after
@@ -689,9 +688,12 @@ public class ReflectionFactory {
         if (val != null && val.equals("false")) {
             useDirectMethodHandle = false;
         }
-        val = props.getProperty("jdk.reflect.fastMethodHandleInvoke");
+        val = props.getProperty("jdk.reflect.invocationType");
         if (val != null) {
-            fastMethodHandleInvoke = Boolean.valueOf(val);
+            if (!val.equals("direct") && !val.equals("adaptive") && !val.equals("fast")) {
+                throw new IllegalArgumentException("must be direct, fast or adaptive");
+            }
+            invocationType = val;
         }
 
         disableSerialConstructorChecks =

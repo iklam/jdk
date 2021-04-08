@@ -62,12 +62,12 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
                 default -> target.invokeExact(args);
             };
         } catch (ClassCastException|WrongMethodTypeException e) {
-            if (isIllegalArgument(this.getClass(), e))
+            if (isIllegalArgument(e))
                 throw new IllegalArgumentException("argument type mismatch", e);
             else
                 throw new InvocationTargetException(e);
         } catch (NullPointerException e) {
-            if (isIllegalArgument(this.getClass(), e))
+            if (isIllegalArgument(e))
                 throw new IllegalArgumentException(e);
             else
                 throw new InvocationTargetException(e);

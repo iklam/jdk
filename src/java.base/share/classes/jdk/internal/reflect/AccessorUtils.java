@@ -47,7 +47,7 @@ public class AccessorUtils {
         return null;
     }
 
-    static boolean isIllegalArgument(Class<?> implClass, RuntimeException e) {
+    static boolean isIllegalArgument(RuntimeException e) {
         StackTraceElement[] stackTrace = e.getStackTrace();
         if (stackTrace.length == 0) {
             return false;       // would this happen?
@@ -63,7 +63,7 @@ public class AccessorUtils {
         for (; i < stackTrace.length; i++) {
             frame = stackTrace[i];
             String cname = frame.getClassName();
-            if (cname.equals(implClass.getName())) {
+            if (ACCESSOR_IMPL_CLASSES.contains(cname)) {
                 // it's illegal argument if this exception is thrown from implClass
                 return true;
             }
@@ -88,5 +88,13 @@ public class AccessorUtils {
             "jdk.internal.reflect",
             "sun.invoke.util"
     );
-
+    private static Set<String> ACCESSOR_IMPL_CLASSES = Set.of(
+            DirectMethodAccessorImpl.class.getName(),
+            DirectMethodAccessorImpl.StaticMethodAccessor.class.getName(),
+            DirectMethodAccessorImpl.InstanceMethodAccessor.class.getName(),
+            DirectMethodAccessorImpl.StaticMethodAccessorWithLeadingCaller.class.getName(),
+            DirectMethodAccessorImpl.InstanceMethodAccessorWithLeadingCaller.class.getName(),
+            DirectMethodAccessorImpl.CallerSensitiveWithInvoker.class.getName(),
+            DirectConstructorAccessorImpl.class.getName()
+    );
 }

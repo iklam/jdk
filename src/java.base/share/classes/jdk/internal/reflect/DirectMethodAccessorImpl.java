@@ -27,9 +27,11 @@ package jdk.internal.reflect;
 
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.misc.Unsafe;
 import jdk.internal.misc.VM;
+import jdk.internal.vm.annotation.DontInline;
 import jdk.internal.vm.annotation.ForceInline;
+import jdk.internal.vm.annotation.Hidden;
+import jdk.internal.vm.annotation.Stable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -45,13 +47,28 @@ import static jdk.internal.reflect.AccessorUtils.argAt;
 import static jdk.internal.reflect.AccessorUtils.checkArgumentCount;
 import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
 
-class DirectMethodAccessorImpl extends MethodAccessorImpl {
+abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
     static MethodAccessorImpl methodAccessor(Method method, MethodHandle target) {
-        return new DirectMethodAccessorImpl(method, target);
+        if (MethodHandleAccessorFactory.VERBOSE) {
+            System.out.println(ReflectionFactory.invocationType() + " for " + method);
+        }
+        boolean isStatic = Modifier.isStatic(method.getModifiers());
+        return switch (ReflectionFactory.invocationType()) {
+            case "direct"   -> isStatic ? new StaticMethodAccessor(method, target)
+                                        : new InstanceMethodAccessor(method, target);
+            case "adaptive" -> isStatic ? new StaticAdaptiveMethodAccessor(method, target)
+                                        : new InstanceAdaptiveMethodAccessor(method, target);
+            case "fast"     -> {
+                var mhInvoker = MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
+                yield  isStatic ? new StaticMHMethodAccessor(method, target, mhInvoker)
+                                : new InstanceMHMethodAccessor(method, target, mhInvoker);
+            }
+            default -> throw new InternalError("unexpected invocation type: " + ReflectionFactory.invocationType());
+        };
     }
 
     static MethodAccessorImpl callerSensitiveMethodAccessor(Method method, MethodHandle dmh) {
-        return new CallerSensitiveWithInvoker(dmh, method);
+        return new CallerSensitiveWithInvoker(method, dmh);
     }
 
     /**
@@ -59,7 +76,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
      * for the given original method.
      */
     static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target) {
-        return new CallerSensitiveWithLeadingCaller(original, target);
+        boolean isStatic = Modifier.isStatic(original.getModifiers());
+
+        return isStatic ? new StaticMethodAccessorWithLeadingCaller(original, target)
+                        : new InstanceMethodAccessorWithLeadingCaller(original, target);
     }
 
     static MethodAccessorImpl nativeAccessor(Method method, boolean callerSensitive) {
@@ -69,89 +89,214 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     }
 
     protected final Method method;
-    protected final MethodHandle target;
     protected final boolean isStatic;
     protected final int paramCount;
-    protected volatile MHMethodAccessor mhInvoker;
-    // make this package-private to workaround a bug in Reflection::getCallerClass
-    // that skips this class and the lookup class becomes MethodHandleAccessorFactory instead
-    protected volatile int swapped;
-    private DirectMethodAccessorImpl(Method method, MethodHandle target) {
+    @Stable
+    protected final MethodHandle target;
+
+    DirectMethodAccessorImpl(Method method, MethodHandle target) {
         this.method = method;
         this.target = target;
-        this.mhInvoker = ReflectionFactory.fastMethodHandleInvoke()
-                            ? spinMHMethodAccessor(target)
-                            : new MHMethodAccessorDelegate(target);
-        this.swapped = ReflectionFactory.fastMethodHandleInvoke() ? 1 : 0;
         this.isStatic = Modifier.isStatic(method.getModifiers());
         this.paramCount = method.getParameterCount();
     }
 
-    @Override
-    @ForceInline
-    public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
-        if (MethodHandleAccessorFactory.VERBOSE) {
-            System.out.println("invoke " + method.getDeclaringClass().getName() + "::" + method.getName()
-                    + " with target " + obj + " args " + Arrays.deepToString(args));
-        }
-        if (!isStatic) {
-            Objects.requireNonNull(obj);
-        }
-        checkArgumentCount(paramCount, args);
-        try {
-            var mhInvoker = mhInvoker();
-            return switch (paramCount) {
-                case 0 ->  isStatic ? mhInvoker.invoke()
-                                    : mhInvoker.invoke(obj);
-                case 1 ->  isStatic ? mhInvoker.invoke(argAt(args, 0))
-                                    : mhInvoker.invoke(obj, argAt(args, 0));
-                case 2 ->  isStatic ? mhInvoker.invoke(argAt(args, 0), argAt(args, 1))
-                                    : mhInvoker.invoke(obj, argAt(args, 0), argAt(args, 1));
-                default -> isStatic ? mhInvoker.invoke(args)
-                                    : mhInvoker.invoke(obj, args);
-            };
-        } catch (ClassCastException|WrongMethodTypeException e) {
-            if (isIllegalArgument(this.getClass(), e))
-                throw new IllegalArgumentException("argument type mismatch", e);
-            else
-                throw new InvocationTargetException(e);
-        } catch (NullPointerException e) {
-            if (isIllegalArgument(this.getClass(), e))
-                throw new IllegalArgumentException(e);
-            else
-                throw new InvocationTargetException(e);
-        } catch (Throwable e) {
-            throw new InvocationTargetException(e);
-        }
-    }
-
-    private static final VarHandle SWAPPED_VH;
-    static {
-        try {
-            SWAPPED_VH = MethodHandles.lookup().findVarHandle(DirectMethodAccessorImpl.class, "swapped", int.class);
-        } catch (ReflectiveOperationException e) {
-            throw new InternalError(e);
-        }
-    }
-
-    private int numInvocations;
-    protected MHMethodAccessor mhInvoker() {
-        var invoker = mhInvoker;
-        if (++numInvocations > ReflectionFactory.inflationThreshold()
-                && swapped == 0
-                && SWAPPED_VH.compareAndSet(this, 0, 1)) {
-            mhInvoker = invoker = spinMHMethodAccessor(target);
-        }
-        return invoker;
-    }
-
-    protected MHMethodAccessor spinMHMethodAccessor(MethodHandle target) {
+    protected MHMethodAccessor spinMHMethodAccessor() {
         return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
     }
 
-    static class CallerSensitiveWithLeadingCaller extends DirectMethodAccessorImpl {
-        private CallerSensitiveWithLeadingCaller(Method original, MethodHandle target) {
-            super(original, target);
+    static class StaticMethodAccessor extends DirectMethodAccessorImpl {
+        private StaticMethodAccessor(Method method, MethodHandle target) {
+            super(method, target);
+        }
+        @Override
+        @ForceInline
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println(this.getClass().getSimpleName() + " "
+                        + method.getDeclaringClass().getName() + "::" + method.getName()
+                        + " with target " + obj + " args " + Arrays.deepToString(args));
+            }
+            checkArgumentCount(paramCount, args);
+            try {
+                return invokeImpl(args);
+            } catch (ClassCastException | WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (NullPointerException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
+            }
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Object[] args) throws Throwable {
+            return switch (paramCount) {
+                case 0 -> target.invokeExact();
+                case 1 -> target.invokeExact(argAt(args, 0));
+                case 2 -> target.invokeExact(argAt(args, 0), argAt(args, 1));
+                default -> target.invokeExact(args);
+            };
+        }
+    }
+
+    static class InstanceMethodAccessor extends DirectMethodAccessorImpl {
+        private InstanceMethodAccessor(Method method, MethodHandle target) {
+            super(method, target);
+        }
+        @Override
+        @ForceInline
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println(this.getClass().getSimpleName() + " "
+                        + method.getDeclaringClass().getName() + "::" + method.getName()
+                        + " with target " + obj + " args " + Arrays.deepToString(args));
+            }
+            Objects.requireNonNull(obj);
+            checkArgumentCount(paramCount, args);
+            try {
+                return invokeImpl(obj, args);
+            } catch (ClassCastException | WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (NullPointerException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
+            }
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Object obj, Object[] args) throws Throwable {
+            return switch (paramCount) {
+                case 0 -> target.invokeExact(obj);
+                case 1 -> target.invokeExact(obj, argAt(args, 0));
+                case 2 -> target.invokeExact(obj, argAt(args, 0), argAt(args, 1));
+                default -> target.invokeExact(obj, args);
+            };
+        }
+    }
+
+    static class StaticMHMethodAccessor extends StaticMethodAccessor {
+        protected @Stable final MHMethodAccessor mhInvoker;
+        StaticMHMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
+            super(method, target);
+            this.mhInvoker = mhInvoker;
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            return mhInvoker;
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Object[] args) throws Throwable {
+            var mhInvoker = mhInvoker();
+            return switch (paramCount) {
+                case 0 -> mhInvoker.invoke();
+                case 1 -> mhInvoker.invoke(argAt(args, 0));
+                case 2 -> mhInvoker.invoke(argAt(args, 0), argAt(args, 1));
+                default -> mhInvoker.invoke(args);
+            };
+        }
+    }
+
+    static class InstanceMHMethodAccessor extends InstanceMethodAccessor {
+        protected @Stable final MHMethodAccessor mhInvoker;
+        InstanceMHMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
+            super(method, target);
+            this.mhInvoker = mhInvoker;
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            return mhInvoker;
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Object obj, Object[] args) throws Throwable {
+            var mhInvoker = mhInvoker();
+            return switch (paramCount) {
+                case 0 -> mhInvoker.invoke(obj);
+                case 1 -> mhInvoker.invoke(obj, argAt(args, 0));
+                case 2 -> mhInvoker.invoke(obj, argAt(args, 0), argAt(args, 1));
+                default -> mhInvoker.invoke(obj, args);
+            };
+        }
+    }
+
+    static class InstanceAdaptiveMethodAccessor extends InstanceMHMethodAccessor {
+        private @Stable MHMethodAccessor fastInvoker;
+        private int numInvocations;
+
+        InstanceAdaptiveMethodAccessor(Method method, MethodHandle target) {
+            super(method, target, new MHMethodAccessorDelegate(target));
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            var invoker = fastInvoker;
+            if (invoker != null) {
+                return invoker;
+            }
+            return slowInvoker();
+        }
+
+        @DontInline
+        private MHMethodAccessor slowInvoker() {
+            var invoker = mhInvoker;
+            if (++numInvocations > ReflectionFactory.inflationThreshold()) {
+                fastInvoker = invoker = MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
+            }
+            return invoker;
+        }
+    }
+
+    static class StaticAdaptiveMethodAccessor extends StaticMHMethodAccessor {
+        private @Stable MHMethodAccessor fastInvoker;
+        private int numInvocations;
+
+        private StaticAdaptiveMethodAccessor(Method method, MethodHandle target) {
+            super(method, target, new MHMethodAccessorDelegate(target));
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            var invoker = fastInvoker;
+            if (invoker != null) {
+                return invoker;
+            }
+            return slowInvoker();
+        }
+
+        @DontInline
+        private MHMethodAccessor slowInvoker() {
+            var invoker = mhInvoker;
+            if (++numInvocations > ReflectionFactory.inflationThreshold()) {
+                fastInvoker = invoker = spinMHMethodAccessor();
+            }
+            return invoker;
+        }
+    }
+
+    static class InstanceMethodAccessorWithLeadingCaller extends DirectMethodAccessorImpl {
+        InstanceMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
+            super(method, target);
         }
 
         @Override
@@ -163,31 +308,20 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         @ForceInline
         public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
             if (MethodHandleAccessorFactory.VERBOSE) {
-                System.out.println("caller " + caller.getName() + " target " + obj + " args " + Arrays.deepToString(args));
+                System.out.println(this.getClass().getSimpleName() + " caller " + caller.getName()
+                        + " target " + obj + " args " + Arrays.deepToString(args));
             }
-            if (!isStatic) {
-                Objects.requireNonNull(obj);
-            }
+            Objects.requireNonNull(obj);
             checkArgumentCount(paramCount, args);
             try {
-                var mhInvoker = mhInvoker();
-                return switch (paramCount) {
-                    case 0 ->  isStatic ? mhInvoker.invoke(caller)
-                                        : mhInvoker.invoke(obj, caller);
-                    case 1 ->  isStatic ? mhInvoker.invoke(caller, argAt(args, 0))
-                                        : mhInvoker.invoke(obj, caller, argAt(args, 0));
-                    case 2 ->  isStatic ? mhInvoker.invoke(caller, argAt(args, 0), argAt(args, 1))
-                                        : mhInvoker.invoke(obj, caller, argAt(args, 0), argAt(args, 1));
-                    default -> isStatic ? mhInvoker.invoke(caller, args)
-                                        : mhInvoker.invoke(obj, caller, args);
-                };
+                return invokeImpl(caller, obj, args);
             } catch (ClassCastException|WrongMethodTypeException e) {
-                if (isIllegalArgument(this.getClass(), e))
+                if (isIllegalArgument(e))
                     throw new IllegalArgumentException("argument type mismatch", e);
                 else
                     throw new InvocationTargetException(e);
             } catch (NullPointerException e) {
-                if (isIllegalArgument(this.getClass(), e))
+                if (isIllegalArgument(e))
                     throw new IllegalArgumentException(e);
                 else
                     throw new InvocationTargetException(e);
@@ -196,8 +330,62 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             }
         }
 
-        protected MHMethodAccessor spinMHMethodAccessor(MethodHandle target) {
-            return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, true);
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Class<?> caller, Object obj, Object[] args) throws Throwable {
+            return switch (paramCount) {
+                case 0 -> target.invokeExact(obj, caller);
+                case 1 -> target.invokeExact(obj, caller, argAt(args, 0));
+                case 2 -> target.invokeExact(obj, caller, argAt(args, 0), argAt(args, 1));
+                default -> target.invokeExact(obj, caller, args);
+            };
+        }
+    }
+
+    static class StaticMethodAccessorWithLeadingCaller extends DirectMethodAccessorImpl {
+        StaticMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
+            super(method, target);
+        }
+
+        @Override
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            throw new InternalError("caller sensitive method invoked without explicit caller: " + method);
+        }
+
+        @Override
+        @ForceInline
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println(this.getClass().getSimpleName() + " caller " + caller.getName()
+                        + " target " + obj + " args " + Arrays.deepToString(args));
+            }
+            checkArgumentCount(paramCount, args);
+            try {
+                return invokeImpl(caller, args);
+            } catch (ClassCastException|WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (NullPointerException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
+            }
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Class<?> caller, Object[] args) throws Throwable {
+            return switch (paramCount) {
+                case 0 -> target.invokeExact(caller);
+                case 1 -> target.invokeExact(caller, argAt(args, 0));
+                case 2 -> target.invokeExact(caller, argAt(args, 0), argAt(args, 1));
+                default -> target.invokeExact(caller, args);
+            };
         }
     }
 
@@ -213,10 +401,8 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
      */
     static class CallerSensitiveWithInvoker extends DirectMethodAccessorImpl {
         private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
-        private final MethodHandle target;      // target method handle
-        private CallerSensitiveWithInvoker(MethodHandle target, Method method) {
-            super(method, null);
-            this.target = target;
+        private CallerSensitiveWithInvoker(Method method, MethodHandle target) {
+            super(method, target);
         }
 
         @Override
@@ -228,7 +414,8 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         @ForceInline
         public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
             if (MethodHandleAccessorFactory.VERBOSE) {
-                System.out.println("target " + obj + " args " + Arrays.deepToString(args));
+                System.out.println(this.getClass().getSimpleName() + " caller " + caller.getName()
+                        + " target " + obj + " args " + Arrays.deepToString(args));
             }
             if (!isStatic) {
                 Objects.requireNonNull(obj);
@@ -239,12 +426,12 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 // invoke the target method handle via an invoker
                 return invoker.invokeExact(target, obj, args);
             } catch (ClassCastException|WrongMethodTypeException e) {
-                if (isIllegalArgument(this.getClass(), e))
+                if (isIllegalArgument(e))
                     throw new IllegalArgumentException("argument type mismatch", e);
                 else
                     throw new InvocationTargetException(e);
             } catch (NullPointerException e) {
-                if (isIllegalArgument(this.getClass(), e))
+                if (isIllegalArgument(e))
                     throw new IllegalArgumentException(e);
                 else
                     throw new InvocationTargetException(e);
