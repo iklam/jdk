@@ -27,10 +27,13 @@ package jdk.internal.reflect;
 
 import jdk.internal.access.JavaLangInvokeAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.Unsafe;
 import jdk.internal.misc.VM;
 import jdk.internal.vm.annotation.ForceInline;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -41,11 +44,10 @@ import java.util.Objects;
 import static jdk.internal.reflect.AccessorUtils.argAt;
 import static jdk.internal.reflect.AccessorUtils.checkArgumentCount;
 import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
-import static jdk.internal.reflect.MethodHandleAccessorFactory.findCSMethodAdapter;
 
 class DirectMethodAccessorImpl extends MethodAccessorImpl {
-    static MethodAccessorImpl methodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
-        return new DirectMethodAccessorImpl(method, mhInvoker);
+    static MethodAccessorImpl methodAccessor(Method method, MethodHandle target) {
+        return new DirectMethodAccessorImpl(method, target);
     }
 
     static MethodAccessorImpl callerSensitiveMethodAccessor(Method method, MethodHandle dmh) {
@@ -56,8 +58,8 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
      * Target method handle is the adapter method with the leading caller class
      * for the given original method.
      */
-    static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target, MHMethodAccessor mhInvoker) {
-        return new CallerSensitiveWithLeadingCaller(original, mhInvoker);
+    static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target) {
+        return new CallerSensitiveWithLeadingCaller(original, target);
     }
 
     static MethodAccessorImpl nativeAccessor(Method method, boolean callerSensitive) {
@@ -67,12 +69,20 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
     }
 
     protected final Method method;
-    protected final MHMethodAccessor mhInvoker;
+    protected final MethodHandle target;
     protected final boolean isStatic;
     protected final int paramCount;
-    private DirectMethodAccessorImpl(Method method, MHMethodAccessor mhInvoker) {
+    protected volatile MHMethodAccessor mhInvoker;
+    // make this package-private to workaround a bug in Reflection::getCallerClass
+    // that skips this class and the lookup class becomes MethodHandleAccessorFactory instead
+    protected volatile int swapped;
+    private DirectMethodAccessorImpl(Method method, MethodHandle target) {
         this.method = method;
-        this.mhInvoker = mhInvoker;
+        this.target = target;
+        this.mhInvoker = ReflectionFactory.fastMethodHandleInvoke()
+                            ? spinMHMethodAccessor(target)
+                            : new MHMethodAccessorDelegate(target);
+        this.swapped = ReflectionFactory.fastMethodHandleInvoke() ? 1 : 0;
         this.isStatic = Modifier.isStatic(method.getModifiers());
         this.paramCount = method.getParameterCount();
     }
@@ -89,6 +99,7 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
         checkArgumentCount(paramCount, args);
         try {
+            var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 ->  isStatic ? mhInvoker.invoke()
                                     : mhInvoker.invoke(obj);
@@ -114,10 +125,33 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
+    private static final VarHandle SWAPPED_VH;
+    static {
+        try {
+            SWAPPED_VH = MethodHandles.lookup().findVarHandle(DirectMethodAccessorImpl.class, "swapped", int.class);
+        } catch (ReflectiveOperationException e) {
+            throw new InternalError(e);
+        }
+    }
+
+    private int numInvocations;
+    protected MHMethodAccessor mhInvoker() {
+        var invoker = mhInvoker;
+        if (++numInvocations > ReflectionFactory.inflationThreshold()
+                && swapped == 0
+                && SWAPPED_VH.compareAndSet(this, 0, 1)) {
+            mhInvoker = invoker = spinMHMethodAccessor(target);
+        }
+        return invoker;
+    }
+
+    protected MHMethodAccessor spinMHMethodAccessor(MethodHandle target) {
+        return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
+    }
 
     static class CallerSensitiveWithLeadingCaller extends DirectMethodAccessorImpl {
-        private CallerSensitiveWithLeadingCaller(Method original, MHMethodAccessor mhInvoker) {
-            super(original, mhInvoker);
+        private CallerSensitiveWithLeadingCaller(Method original, MethodHandle target) {
+            super(original, target);
         }
 
         @Override
@@ -136,6 +170,7 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             }
             checkArgumentCount(paramCount, args);
             try {
+                var mhInvoker = mhInvoker();
                 return switch (paramCount) {
                     case 0 ->  isStatic ? mhInvoker.invoke(caller)
                                         : mhInvoker.invoke(obj, caller);
@@ -159,6 +194,10 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
             }
+        }
+
+        protected MHMethodAccessor spinMHMethodAccessor(MethodHandle target) {
+            return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, true);
         }
     }
 
@@ -254,6 +293,8 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 }
                 return invoke0(csmAdapter, obj, newArgs);
             } else {
+                assert VM.isJavaLangInvokeInited();
+
                 /*
                  * When Method::invoke on a caller-sensitive method is to be invoked
                  * and no adapter method with a leading caller class argument is defined,
@@ -299,6 +340,27 @@ class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
 
         private static native Object invoke0(Method m, Object obj, Object[] args);
+    }
+
+    /**
+     * Returns an alternate reflective Method instance for the given method
+     * intended for reflection to invoke, if present.
+     *
+     * A trusted method can define an alternate implementation for a method `foo`
+     * with a leading caller class argument that will be invoked reflectively.
+     */
+    private static Method findCSMethodAdapter(Method method) {
+        if (!Reflection.isCallerSensitive(method)) return null;
+
+        int paramCount = method.getParameterCount();
+        Class<?>[] ptypes = new Class<?>[paramCount+1];
+        ptypes[0] = Class.class;
+        System.arraycopy(method.getParameterTypes(), 0, ptypes, 1, paramCount);
+        try {
+            return method.getDeclaringClass().getDeclaredMethod(method.getName(), ptypes);
+        } catch (NoSuchMethodException ex) {
+            return null;
+        }
     }
 }
 

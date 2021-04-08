@@ -39,7 +39,6 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -57,28 +56,28 @@ final class MethodHandleAccessorFactory {
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
     static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
-        if (!VM.isJavaLangInvokeInited() || Modifier.isNative(method.getModifiers())) {
+        assert VM.isJavaLangInvokeInited();
+        if (Modifier.isNative(method.getModifiers())) {
             return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
         }
 
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
         // so that EIIE is propagated (not wrapped with ITE)
-        UNSAFE.ensureClassInitialized(method.getDeclaringClass());
+        ensureClassInitialized(method.getDeclaringClass());
+
         try {
             if (callerSensitive) {
                 var dmh = findDirectMethodWithLeadingCaller(method);
                 if (dmh != null) {
-                    var mhInvoker = newMethodHandleAccessor(method, dmh, true);
-                    return DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh, mhInvoker);
+                    return DirectMethodAccessorImpl.callerSensitiveAdapter(method, dmh);
                 }
             }
             var dmh = getDirectMethod(method, callerSensitive);
             if (callerSensitive) {
                 return DirectMethodAccessorImpl.callerSensitiveMethodAccessor(method, dmh);
             } else {
-                var mhInvoker = newMethodHandleAccessor(method, dmh, false);
-                return DirectMethodAccessorImpl.methodAccessor(method, dmh, mhInvoker);
+                return DirectMethodAccessorImpl.methodAccessor(method, dmh);
             }
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
@@ -86,29 +85,23 @@ final class MethodHandleAccessorFactory {
     }
 
     static ConstructorAccessorImpl newConstructorAccessor(Constructor<?> ctor) {
-        if (!VM.isJavaLangInvokeInited()) {
-            return DirectConstructorAccessorImpl.nativeAccessor(ctor);
-        }
+        assert VM.isJavaLangInvokeInited();
 
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
         // so that EIIE is propagated (not wrapped with ITE)
-        UNSAFE.ensureClassInitialized(ctor.getDeclaringClass());
+        ensureClassInitialized(ctor.getDeclaringClass());
+
         try {
             MethodHandle mh = JLIA.unreflectConstructor(ctor);
-            MethodHandle target = mh.asFixedArity();
-
             int paramCount = mh.type().parameterCount();
-            if (ctor.isVarArgs() && ctor.getParameterCount() == 1) {
-                target = mh.asType(methodType(Object.class, Object.class));
-            } else {
-                MethodType mtype = specializedMethodTypeForConstructor(paramCount);
-                if (paramCount > SPECIALIZED_PARAM_COUNT) {
-                    // spread the parameters only for the non-specialized case
-                    target = target.asSpreader(Object[].class, paramCount);
-                }
-                target = target.asType(mtype);
+            MethodHandle target = mh.asFixedArity();
+            MethodType mtype = specializedMethodTypeForConstructor(paramCount);
+            if (paramCount > SPECIALIZED_PARAM_COUNT) {
+                // spread the parameters only for the non-specialized case
+                target = target.asSpreader(Object[].class, paramCount);
             }
+            target = target.asType(mtype);
             return DirectConstructorAccessorImpl.constructorAccessor(ctor, target);
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
@@ -116,13 +109,9 @@ final class MethodHandleAccessorFactory {
     }
 
     static FieldAccessorImpl newFieldAccessor(Field field, boolean isReadOnly) {
-        // ExceptionInInitializerError may be thrown during class initialization
-        // Ensure class initialized outside the invocation of method handle
-        // so that EIIE is propagated (not wrapped with ITE)
-        UNSAFE.ensureClassInitialized(field.getDeclaringClass());
+        assert VM.isJavaLangInvokeInited();
         try {
             var accessor = newVarHandleAccessor(field);
-
             Class<?> type = field.getType();
             if (type == Boolean.TYPE) {
                 return new VarHandleBooleanFieldAccessorImpl(field, accessor, isReadOnly);
@@ -158,12 +147,6 @@ final class MethodHandleAccessorFactory {
             // as Method::invoke i.e. (Object, Object[])Object
             return makeTarget(dmh, isStatic, false);
         }
-        if (method.isVarArgs() && method.getParameterCount() == 1) {
-            MethodType type = isStatic  ? methodType(Object.class, Object.class)
-                                        : methodType(Object.class, Object.class, Object.class);
-            return dmh.asFixedArity().asType(type);
-        }
-
         return makeSpecializedTarget(dmh, isStatic, false);
     }
 
@@ -173,31 +156,10 @@ final class MethodHandleAccessorFactory {
         MethodType mtype = methodType(method.getReturnType(), method.getParameterTypes())
                                 .insertParameterTypes(0, Class.class);
         boolean isStatic = Modifier.isStatic(method.getModifiers());
+
         MethodHandle dmh = isStatic ? JLIA.findStatic(method.getDeclaringClass(), name, mtype)
                                     : JLIA.findVirtual(method.getDeclaringClass(), name, mtype);
         return dmh != null ? makeSpecializedTarget(dmh, isStatic, true) : null;
-    }
-
-
-    /**
-     * Returns an alternate reflective Method instance for the given method
-     * intended for reflection to invoke, if present.
-     *
-     * A trusted method can define an alternate implementation for a method `foo`
-     * with a leading caller class argument that will be invoked reflectively.
-     */
-    static Method findCSMethodAdapter(Method method) {
-        if (!Reflection.isCallerSensitive(method)) return null;
-
-        int paramCount = method.getParameterCount();
-        Class<?>[] ptypes = new Class<?>[paramCount+1];
-        ptypes[0] = Class.class;
-        System.arraycopy(method.getParameterTypes(), 0, ptypes, 1, paramCount);
-        try {
-            return method.getDeclaringClass().getDeclaredMethod(method.getName(), ptypes);
-        } catch (NoSuchMethodException ex) {
-            return null;
-        }
     }
 
     /**
@@ -295,7 +257,8 @@ final class MethodHandleAccessorFactory {
      * Spins a hidden class that invokes a constant VarHandle of the target field,
      * loaded from the class data via condy, for reliable performance
      */
-    private static MHFieldAccessor newVarHandleAccessor(Field field) throws IllegalAccessException {
+    static MHFieldAccessor newVarHandleAccessor(Field field) throws IllegalAccessException {
+        // the declaring class of the field has been initialized
         var varHandle = JLIA.unreflectVarHandle(field);
         var name = classNamePrefix(field);
         var cn = name + "$$" + counter.getAndIncrement();
@@ -316,10 +279,7 @@ final class MethodHandleAccessorFactory {
      *
      * Due to the overhead of class loading, this is not the default.
      */
-    private static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
-        if (!ReflectionFactory.spinMHAccessorClass()) {
-            return new MHMethodAccessorDelegate(target);
-        }
+    static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
         var name = classNamePrefix(method, target.type(), hasLeadingCaller);
         var cn = name + "$$" + counter.getAndIncrement();
         byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(cn, method, target.type(), hasLeadingCaller));
@@ -416,6 +376,16 @@ final class MethodHandleAccessorFactory {
         return METHOD_ACCESSOR_INVOKE.bindTo(obj);
     }
 
+    /**
+     * Ensures the given class is initialized.  If this is called from <clinit>,
+     * this method returns but defc's class initialization is not completed.
+     */
+    static void ensureClassInitialized(Class<?> defc) {
+        if (UNSAFE.shouldBeInitialized(defc)) {
+            UNSAFE.ensureClassInitialized(defc);
+        }
+    }
+
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
     private static final JavaLangInvokeAccess JLIA;
     private static final MethodHandle WRAP;
@@ -428,9 +398,9 @@ final class MethodHandleAccessorFactory {
         try {
             JLIA = SharedSecrets.getJavaLangInvokeAccess();
             WRAP = LOOKUP.findStatic(MethodHandleAccessorFactory.class, "wrap",
-                                                     methodType(Object.class, Throwable.class));
+                                     methodType(Object.class, Throwable.class));
             METHOD_ACCESSOR_INVOKE = JLIA.findVirtual(MethodAccessorImpl.class, "invoke",
-                                                     methodType(Object.class, Object.class, Object[].class));
+                                                      methodType(Object.class, Object.class, Object[].class));
         } catch (NoSuchMethodException|IllegalAccessException e) {
             throw new InternalError(e);
         }

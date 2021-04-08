@@ -193,6 +193,9 @@ public class ReflectionFactory {
         }
 
         if (useDirectMethodHandle) {
+            if (!VM.isJavaLangInvokeInited()) {
+                return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
+            }
             return MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
         } else {
             if (!useDirectMethodHandle && noInflation
@@ -246,8 +249,10 @@ public class ReflectionFactory {
             c = root;
         }
 
-
         if (useDirectMethodHandle) {
+            if (!VM.isJavaLangInvokeInited()) {
+                return DirectConstructorAccessorImpl.nativeAccessor(c);
+            }
             return MethodHandleAccessorFactory.newConstructorAccessor(c);
         } else {
             if (noInflation
@@ -647,7 +652,7 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
-    static boolean spinMHAccessorClass() {
+    static boolean fastMethodHandleInvoke() {
         return fastMethodHandleInvoke;
     }
 

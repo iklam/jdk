@@ -25,7 +25,6 @@
 
 package jdk.internal.reflect;
 
-import java.lang.reflect.Method;
 import java.util.Set;
 
 import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
