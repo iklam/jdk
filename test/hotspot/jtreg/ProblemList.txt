@@ -38,6 +38,13 @@
 #
 #############################################################################
 
+# JDK-6824466 to be investigated
+
+compiler/ciReplay/TestVMNoCompLevel.java 6824466 generic-all
+compiler/ciReplay/TestServerVM.java 6824466 generic-all
+
+#############################################################################
+
 # :hotspot_compiler
 
 compiler/ciReplay/TestSAServer.java 8029528 generic-all
