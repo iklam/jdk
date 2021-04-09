@@ -262,7 +262,7 @@ final class MethodHandleAccessorFactory {
         var varHandle = JLIA.unreflectVarHandle(field);
         var name = classNamePrefix(field);
         var cn = name + "$$" + counter.getAndIncrement();
-        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(cn, field));
+        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(name, field));
         try {
             var lookup = JLIA.defineHiddenClassWithClassData(LOOKUP, cn, bytes, varHandle, true);
             var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
@@ -282,7 +282,7 @@ final class MethodHandleAccessorFactory {
     static MHMethodAccessor newMethodHandleAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
         var name = classNamePrefix(method, target.type(), hasLeadingCaller);
         var cn = name + "$$" + counter.getAndIncrement();
-        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(cn, method, target.type(), hasLeadingCaller));
+        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(name, method, target.type(), hasLeadingCaller));
         try {
             var lookup = JLIA.defineHiddenClassWithClassData(LOOKUP, cn, bytes, target, true);
             var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
