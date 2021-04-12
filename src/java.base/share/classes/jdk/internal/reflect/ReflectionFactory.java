@@ -89,6 +89,7 @@ public class ReflectionFactory {
     private static int     inflationThreshold = 15;
     private static boolean useDirectMethodHandle = true;
     private static String invocationType = "adaptive";
+    private static boolean useNativeAccessorOnly = false;  // for testing only
 
     // true if deserialization constructor checking is disabled
     private static boolean disableSerialConstructorChecks = false;
@@ -651,6 +652,10 @@ public class ReflectionFactory {
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
     }
+    static boolean useNativeAccessorOnly() {
+        return useNativeAccessorOnly;
+    }
+
     static String invocationType() {
         return invocationType;
     }
@@ -694,6 +699,10 @@ public class ReflectionFactory {
                 throw new IllegalArgumentException("must be direct, fast or adaptive");
             }
             invocationType = val;
+        }
+        val = props.getProperty("jdk.reflect.useNativeAccessorOnly");
+        if (val != null && val.equals("true")) {
+            useNativeAccessorOnly = true;
         }
 
         disableSerialConstructorChecks =

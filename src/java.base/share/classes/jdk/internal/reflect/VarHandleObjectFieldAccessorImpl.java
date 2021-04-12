@@ -25,17 +25,59 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleObjectFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleObjectFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleObjectFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleObjectFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract Object getValue(Object obj);
+    abstract void setValue(Object obj, Object value) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleObjectFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        Object getValue(Object obj) {
+            return accessor().get();
+        }
+
+        void setValue(Object obj, Object value) throws Throwable {
+            accessor().set(value);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleObjectFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        Object getValue(Object obj) {
+            return accessor().get(obj);
+        }
+
+        void setValue(Object obj, Object value) throws Throwable {
+            accessor().set(obj, value);
+        }
+
     }
 
     @Override
     public Object get(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.get() : accessor.get(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -84,11 +126,7 @@ class VarHandleObjectFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(value);
         }
         try {
-            if (isStatic) {
-                accessor.set(value);
-            } else {
-                accessor.set(obj, value);
-            }
+            setValue(obj, value);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

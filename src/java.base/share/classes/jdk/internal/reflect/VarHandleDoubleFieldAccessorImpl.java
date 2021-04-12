@@ -25,11 +25,52 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleDoubleFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleDoubleFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract double getValue(Object obj);
+    abstract void setValue(Object obj, double d) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleDoubleFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        double getValue(Object obj) {
+            return accessor().getDouble();
+        }
+
+        void setValue(Object obj, double d) throws Throwable {
+            accessor().setDouble(d);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleDoubleFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        double getValue(Object obj) {
+            return accessor().getDouble(obj);
+        }
+
+        void setValue(Object obj, double d) throws Throwable {
+            accessor().setDouble(obj, d);
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -66,7 +107,7 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public double getDouble(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getDouble() : accessor.getDouble(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -167,11 +208,7 @@ class VarHandleDoubleFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(d);
         }
         try {
-            if (isStatic) {
-                accessor.setDouble(d);
-            } else {
-                accessor.setDouble(obj, d);
-            }
+            setValue(obj, d);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

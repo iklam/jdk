@@ -25,26 +25,52 @@
 
 package jdk.internal.reflect;
 
+import jdk.internal.vm.annotation.DontInline;
+import jdk.internal.vm.annotation.ForceInline;
+import jdk.internal.vm.annotation.Stable;
+
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
 abstract class VarHandleFieldAccessorImpl extends FieldAccessorImpl {
-    protected final MHFieldAccessor accessor;
     protected final boolean isReadOnly;
-    protected final boolean isStatic;
-    protected VarHandleFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadOnly) {
+    private final VarHandle varHandle;
+    private @Stable final MHFieldAccessor accessor;
+    private @Stable MHFieldAccessor fastAccessor;
+    private int numAccesses;
+
+    protected VarHandleFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
         super(field);
-        this.accessor = accessor;
         this.isReadOnly = isReadOnly;
-        this.isStatic = Modifier.isStatic(field.getModifiers());
+        this.varHandle = varHandle;
+        this.accessor = new MHFieldAccessorDelegate(varHandle);
     }
 
     protected void ensureObj(Object o) {
         // for compatibility, check the receiver object first
         // throw NullPointerException if o is null
-        if (!isStatic && !field.getDeclaringClass().isAssignableFrom(o.getClass())) {
+            if (!field.getDeclaringClass().isAssignableFrom(o.getClass())) {
             throwSetIllegalArgumentException(o);
         }
+    }
+
+    @ForceInline
+    final MHFieldAccessor accessor() {
+        var accessor = fastAccessor;
+        if (accessor != null) {
+            return accessor;
+        }
+        return slowAccessor();
+    }
+
+    @DontInline
+    final MHFieldAccessor slowAccessor() {
+        var accessor = this.accessor;
+        if (++numAccesses > ReflectionFactory.inflationThreshold()) {
+            this.fastAccessor = accessor = MethodHandleAccessorFactory.newVarHandleAccessor(field, varHandle);
+        }
+        return accessor;
     }
 
     /**
@@ -62,4 +88,6 @@ abstract class VarHandleFieldAccessorImpl extends FieldAccessorImpl {
     protected IllegalArgumentException newSetIllegalArgumentException(Class<?> type) {
         return new IllegalArgumentException(getMessage(false, type.getName()));
     }
+
+
 }

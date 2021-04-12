@@ -32,7 +32,7 @@ import java.lang.invoke.MethodHandle;
 /**
  * Delegate the invocation directly to the target method handle.
  */
-class MHMethodAccessorDelegate implements MHMethodAccessor {
+final class MHMethodAccessorDelegate implements MHMethodAccessor {
     private final MethodHandle target;
     MHMethodAccessorDelegate(MethodHandle target) {
         this.target = target;

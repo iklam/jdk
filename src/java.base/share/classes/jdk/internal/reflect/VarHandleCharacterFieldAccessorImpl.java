@@ -25,11 +25,52 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleCharacterFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleCharacterFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract char getValue(Object obj);
+    abstract void setValue(Object obj, char c) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleCharacterFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        char getValue(Object obj) {
+            return accessor().getChar();
+        }
+
+        void setValue(Object obj, char c) throws Throwable {
+            accessor().setChar(c);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleCharacterFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        char getValue(Object obj) {
+            return accessor().getChar(obj);
+        }
+
+        void setValue(Object obj, char c) throws Throwable {
+            accessor().setChar(obj, c);
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -46,7 +87,7 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public char getChar(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getChar() : accessor.getChar(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -113,11 +154,7 @@ class VarHandleCharacterFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(c);
         }
         try {
-            if (isStatic) {
-                accessor.setChar(c);
-            } else {
-                accessor.setChar(obj, c);
-            }
+            setValue(obj, c);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

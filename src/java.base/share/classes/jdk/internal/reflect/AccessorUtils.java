@@ -29,6 +29,9 @@ import java.util.Set;
 
 import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
 
+/**
+ * Utility methods used by DirectMethodAccessorImpl and DirectConstructorImpl
+ */
 public class AccessorUtils {
     static void checkArgumentCount(int paramCount, Object[] args) {
         // only check argument count for specialized forms
@@ -92,8 +95,10 @@ public class AccessorUtils {
             DirectMethodAccessorImpl.class.getName(),
             DirectMethodAccessorImpl.StaticMethodAccessor.class.getName(),
             DirectMethodAccessorImpl.InstanceMethodAccessor.class.getName(),
-            DirectMethodAccessorImpl.StaticMethodAccessorWithLeadingCaller.class.getName(),
-            DirectMethodAccessorImpl.InstanceMethodAccessorWithLeadingCaller.class.getName(),
+            DirectMethodAccessorImpl.StaticAdaptiveMethodAccessor.class.getName(),
+            DirectMethodAccessorImpl.InstanceAdaptiveMethodAccessor.class.getName(),
+            DirectMethodAccessorImpl.StaticAdaptiveMethodAccessorWithLeadingCaller.class.getName(),
+            DirectMethodAccessorImpl.InstanceAdapterMethodAccessorWithLeadingCaller.class.getName(),
             DirectMethodAccessorImpl.CallerSensitiveWithInvoker.class.getName(),
             DirectConstructorAccessorImpl.class.getName()
     );

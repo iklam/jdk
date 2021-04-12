@@ -134,18 +134,18 @@ public class ReflectionSpeedBenchmark {
     }
 
     @Benchmark
-    public int staticReflectiveConst() {
+    public Object staticReflectiveConst() {
         try {
-            return (int) staticMethodConst.invoke(null, a, b);
+            return staticMethodConst.invoke(null, a, b);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new AssertionError(e);
         }
     }
 
     @Benchmark
-    public int instanceReflectiveConst() {
+    public Object instanceReflectiveConst() {
         try {
-            return (int) instanceMethodConts.invoke(this, a, b);
+            return instanceMethodConts.invoke(this, a, b);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new AssertionError(e);
         }
@@ -154,7 +154,7 @@ public class ReflectionSpeedBenchmark {
     @Benchmark
     public int staticReflectiveGetterConst() {
         try {
-            return (int) staticFieldConst.get(null);
+            return staticFieldConst.getInt(null);
         } catch (IllegalAccessException e) {
             throw new AssertionError(e);
         }
@@ -163,7 +163,7 @@ public class ReflectionSpeedBenchmark {
     @Benchmark
     public int instanceReflectiveGetterConst() {
         try {
-            return (int) instanceFieldConst.get(this);
+            return instanceFieldConst.getInt(this);
         } catch (IllegalAccessException e) {
             throw new AssertionError(e);
         }
@@ -204,18 +204,18 @@ public class ReflectionSpeedBenchmark {
         }
     }
     @Benchmark
-    public int staticReflectiveVar() {
+    public Object staticReflectiveVar() {
         try {
-            return (int) staticMethodVar.invoke(null, a, b);
+            return staticMethodVar.invoke(null, a, b);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new AssertionError(e);
         }
     }
 
     @Benchmark
-    public int instanceReflectiveVar() {
+    public Object instanceReflectiveVar() {
         try {
-            return (int) instanceMethodVar.invoke(this, a, b);
+            return instanceMethodVar.invoke(this, a, b);
         } catch (IllegalAccessException | InvocationTargetException e) {
             throw new AssertionError(e);
         }
@@ -224,7 +224,7 @@ public class ReflectionSpeedBenchmark {
     @Benchmark
     public int staticReflectiveGetterVar() {
         try {
-            return (int) staticFieldVar.get(null);
+            return staticFieldVar.getInt(null);
         } catch (IllegalAccessException e) {
             throw new AssertionError(e);
         }
@@ -233,7 +233,7 @@ public class ReflectionSpeedBenchmark {
     @Benchmark
     public int instanceReflectiveGetterVar() {
         try {
-            return (int) instanceFieldVar.get(this);
+            return instanceFieldVar.getInt(this);
         } catch (IllegalAccessException e) {
             throw new AssertionError(e);
         }

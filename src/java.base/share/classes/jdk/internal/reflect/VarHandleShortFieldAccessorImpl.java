@@ -25,12 +25,54 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleShortFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleShortFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleShortFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
     }
+
+    VarHandleShortFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract short getValue(Object obj);
+    abstract void setValue(Object obj, short s) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleShortFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        short getValue(Object obj) {
+            return accessor().getShort();
+        }
+
+        void setValue(Object obj, short s) throws Throwable {
+            accessor().setShort(s);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleShortFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        short getValue(Object obj) {
+            return accessor().getShort(obj);
+        }
+
+        void setValue(Object obj, short s) throws Throwable {
+            accessor().setShort(obj, s);
+        }
+    }
+
     public Object get(Object obj) throws IllegalArgumentException {
         return Short.valueOf(getShort(obj));
     }
@@ -49,7 +91,7 @@ class VarHandleShortFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public short getShort(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getShort() : accessor.getShort(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -122,11 +164,7 @@ class VarHandleShortFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(s);
         }
         try {
-            if (isStatic) {
-                accessor.setShort(s);
-            } else {
-                accessor.setShort(obj, s);
-            }
+            setValue(obj, s);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

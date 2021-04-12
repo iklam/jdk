@@ -25,11 +25,52 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleIntegerFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleIntegerFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract int getValue(Object obj);
+    abstract void setValue(Object obj, int i) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleIntegerFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        int getValue(Object obj) {
+            return accessor().getInt();
+        }
+
+        void setValue(Object obj, int i) throws Throwable {
+            accessor().setInt(i);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleIntegerFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        int getValue(Object obj) {
+            return accessor().getInt(obj);
+        }
+
+        void setValue(Object obj, int i) throws Throwable {
+            accessor().setInt(obj, i);
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -54,7 +95,7 @@ class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public int getInt(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getInt() : accessor.getInt(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -137,11 +178,7 @@ class VarHandleIntegerFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(i);
         }
         try {
-            if (isStatic) {
-                accessor.setInt(i);
-            } else {
-                accessor.setInt(obj, i);
-            }
+            setValue(obj, i);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

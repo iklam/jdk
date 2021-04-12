@@ -25,11 +25,52 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleByteFieldAccessorImpl(Field field,  MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleByteFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract byte getValue(Object obj);
+    abstract void setValue(Object obj, byte b) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleByteFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        byte getValue(Object obj) {
+            return accessor().getByte();
+        }
+
+        void setValue(Object obj, byte b) throws Throwable {
+            accessor().setByte(b);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleByteFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        byte getValue(Object obj) {
+            return accessor().getByte(obj);
+        }
+
+        void setValue(Object obj, byte b) throws Throwable {
+            accessor().setByte(obj, b);
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -42,7 +83,7 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public byte getByte(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getByte() : accessor.getByte(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -107,11 +148,7 @@ final class VarHandleByteFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(b);
         }
         try {
-            if (isStatic) {
-                accessor.setByte(b);
-            } else {
-                accessor.setByte(obj, b);
-            }
+            setValue(obj, b);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

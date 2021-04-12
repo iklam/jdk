@@ -25,11 +25,52 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleFloatFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleFloatFieldAccessorImpl(Field field, MHFieldAccessor accessor,boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleFloatFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
+    }
+
+    VarHandleFloatFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract float getValue(Object obj);
+    abstract void setValue(Object obj, float f) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleFloatFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        float getValue(Object obj) {
+            return accessor().getFloat();
+        }
+
+        void setValue(Object obj, float f) throws Throwable {
+            accessor().setFloat(f);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleFloatFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        float getValue(Object obj) {
+            return accessor().getFloat(obj);
+        }
+
+        void setValue(Object obj, float f) throws Throwable {
+            accessor().setFloat(obj, f);
+        }
     }
 
     public Object get(Object obj) throws IllegalArgumentException {
@@ -62,7 +103,7 @@ class VarHandleFloatFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public float getFloat(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getFloat() : accessor.getFloat(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -157,11 +198,7 @@ class VarHandleFloatFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(f);
         }
         try {
-            if (isStatic) {
-                accessor.setFloat(f);
-            } else {
-                accessor.setFloat(obj, f);
-            }
+            setValue(obj, f);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {

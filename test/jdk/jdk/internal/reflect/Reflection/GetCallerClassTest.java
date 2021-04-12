@@ -37,7 +37,16 @@
 
 /*
  * @test
- * @summary - using NativeMethodAccessorImpl
+ * @summary Verify the new NativeAccessor
+ * @modules java.base/jdk.internal.reflect
+ * @build SetupGetCallerClass boot.GetCallerClass
+ * @run driver SetupGetCallerClass
+ * @run main/othervm -Xbootclasspath/a:bcp -Djdk.reflect.useDirectMethodHandle=true -Djdk.reflect.useNativeAccessorOnly=true GetCallerClassTest
+ */
+
+/*
+ * @test
+ * @summary Verify NativeMethodAccessorImpl
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass
@@ -46,7 +55,7 @@
 
 /*
  * @test
- * @summary - using generated MethodAccessor
+ * @summary Verify the old generated MethodAccessor
  * @modules java.base/jdk.internal.reflect
  * @build SetupGetCallerClass boot.GetCallerClass
  * @run driver SetupGetCallerClass

@@ -57,7 +57,7 @@ final class MethodHandleAccessorFactory {
 
     static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
         assert VM.isJavaLangInvokeInited();
-        if (Modifier.isNative(method.getModifiers())) {
+        if (Modifier.isNative(method.getModifiers()) || ReflectionFactory.useNativeAccessorOnly()) {
             return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
         }
 
@@ -111,26 +111,27 @@ final class MethodHandleAccessorFactory {
     static FieldAccessorImpl newFieldAccessor(Field field, boolean isReadOnly) {
         assert VM.isJavaLangInvokeInited();
         try {
-            var accessor = newVarHandleAccessor(field);
+            // the declaring class of the field has been initialized
+            var varHandle = JLIA.unreflectVarHandle(field);
             Class<?> type = field.getType();
             if (type == Boolean.TYPE) {
-                return new VarHandleBooleanFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleBooleanFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Byte.TYPE) {
-                return new VarHandleByteFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleByteFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Short.TYPE) {
-                return new VarHandleShortFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleShortFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Character.TYPE) {
-                return new VarHandleCharacterFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleCharacterFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Integer.TYPE) {
-                return new VarHandleIntegerFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleIntegerFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Long.TYPE) {
-                return new VarHandleLongFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleLongFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Float.TYPE) {
-                return new VarHandleFloatFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleFloatFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else if (type == Double.TYPE) {
-                return new VarHandleDoubleFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleDoubleFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             } else {
-                return new VarHandleObjectFieldAccessorImpl(field, accessor, isReadOnly);
+                return VarHandleObjectFieldAccessorImpl.fieldAccessor(field, varHandle, isReadOnly);
             }
         } catch (IllegalAccessException e) {
             throw new InternalError(e);
@@ -257,9 +258,7 @@ final class MethodHandleAccessorFactory {
      * Spins a hidden class that invokes a constant VarHandle of the target field,
      * loaded from the class data via condy, for reliable performance
      */
-    static MHFieldAccessor newVarHandleAccessor(Field field) throws IllegalAccessException {
-        // the declaring class of the field has been initialized
-        var varHandle = JLIA.unreflectVarHandle(field);
+    static MHFieldAccessor newVarHandleAccessor(Field field, VarHandle varHandle) {
         var name = classNamePrefix(field);
         var cn = name + "$$" + counter.getAndIncrement();
         byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(name, field));
@@ -372,10 +371,6 @@ final class MethodHandleAccessorFactory {
         throw new InvocationTargetException(e);
     }
 
-    static MethodHandle reflectiveInvokerFor(Object obj) {
-        return METHOD_ACCESSOR_INVOKE.bindTo(obj);
-    }
-
     /**
      * Ensures the given class is initialized.  If this is called from <clinit>,
      * this method returns but defc's class initialization is not completed.
@@ -389,7 +384,6 @@ final class MethodHandleAccessorFactory {
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
     private static final JavaLangInvokeAccess JLIA;
     private static final MethodHandle WRAP;
-    private static MethodHandle METHOD_ACCESSOR_INVOKE;
     private static final Path DUMP_CLASS_FILES;
 
     static boolean VERBOSE = GetBooleanAction.privilegedGetProperty("jdk.reflect.debug");
@@ -399,8 +393,6 @@ final class MethodHandleAccessorFactory {
             JLIA = SharedSecrets.getJavaLangInvokeAccess();
             WRAP = LOOKUP.findStatic(MethodHandleAccessorFactory.class, "wrap",
                                      methodType(Object.class, Throwable.class));
-            METHOD_ACCESSOR_INVOKE = JLIA.findVirtual(MethodAccessorImpl.class, "invoke",
-                                                      methodType(Object.class, Object.class, Object[].class));
         } catch (NoSuchMethodException|IllegalAccessException e) {
             throw new InternalError(e);
         }

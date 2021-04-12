@@ -35,7 +35,6 @@ import jdk.internal.vm.annotation.Stable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.lang.invoke.WrongMethodTypeException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -43,72 +42,101 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Objects;
 
-import static jdk.internal.reflect.AccessorUtils.argAt;
-import static jdk.internal.reflect.AccessorUtils.checkArgumentCount;
-import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
+import static java.lang.invoke.MethodType.methodType;
+import static jdk.internal.reflect.AccessorUtils.*;
 
 abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
+    /**
+     * Creates a MethodAccessorImpl for a non-native and non-caller-sensitive method.
+     */
     static MethodAccessorImpl methodAccessor(Method method, MethodHandle target) {
-        if (MethodHandleAccessorFactory.VERBOSE) {
-            System.out.println(ReflectionFactory.invocationType() + " for " + method);
-        }
+        assert !Modifier.isNative(method.getModifiers()) && !Reflection.isCallerSensitive(method);
+
         boolean isStatic = Modifier.isStatic(method.getModifiers());
         return switch (ReflectionFactory.invocationType()) {
-            case "direct"   -> isStatic ? new StaticMethodAccessor(method, target)
-                                        : new InstanceMethodAccessor(method, target);
+            // Default is the adaptive accessor method.
+            // The direct and fast method accessor are for performance experimentation.
             case "adaptive" -> isStatic ? new StaticAdaptiveMethodAccessor(method, target)
                                         : new InstanceAdaptiveMethodAccessor(method, target);
+            case "direct"   -> isStatic ? new StaticMethodAccessor(method, target)
+                                        : new InstanceMethodAccessor(method, target);
             case "fast"     -> {
                 var mhInvoker = MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
-                yield  isStatic ? new StaticMHMethodAccessor(method, target, mhInvoker)
-                                : new InstanceMHMethodAccessor(method, target, mhInvoker);
+                yield  isStatic ? new StaticMethodAccessor(method, target, mhInvoker, false)
+                                : new InstanceMethodAccessor(method, target, mhInvoker, false);
             }
             default -> throw new InternalError("unexpected invocation type: " + ReflectionFactory.invocationType());
         };
     }
 
+    /**
+     * Creates a MethodAccessorImpl for a caller-sensitive method.
+     */
     static MethodAccessorImpl callerSensitiveMethodAccessor(Method method, MethodHandle dmh) {
+        assert Reflection.isCallerSensitive(method);
         return new CallerSensitiveWithInvoker(method, dmh);
     }
 
     /**
-     * Target method handle is the adapter method with the leading caller class
-     * for the given original method.
+     * Creates MethodAccessorImpl for the adapter method for a caller-sensitive method.
+     * The given target method handle is the adapter method with the leading caller class
+     * parameter.
      */
     static MethodAccessorImpl callerSensitiveAdapter(Method original, MethodHandle target) {
+        assert Reflection.isCallerSensitive(original);
+
         boolean isStatic = Modifier.isStatic(original.getModifiers());
 
-        return isStatic ? new StaticMethodAccessorWithLeadingCaller(original, target)
-                        : new InstanceMethodAccessorWithLeadingCaller(original, target);
+        // for CSM adapter method with the leading caller class parameter
+        // creates the adaptive method accessor only.
+        return isStatic ? new StaticAdaptiveMethodAccessorWithLeadingCaller(original, target)
+                        : new InstanceAdapterMethodAccessorWithLeadingCaller(original, target);
     }
 
+    /**
+     * Creates MethodAccessorImpl that invokes the given method via VM native reflection
+     * support.  This is used for native methods.  It can be used for java methods
+     * during early VM startup.
+     */
     static MethodAccessorImpl nativeAccessor(Method method, boolean callerSensitive) {
-        assert !VM.isJavaLangInvokeInited() || Modifier.isNative(method.getModifiers());
         return callerSensitive ? new NativeAccessor(method, findCSMethodAdapter(method))
                                : new NativeAccessor(method);
     }
 
     protected final Method method;
-    protected final boolean isStatic;
     protected final int paramCount;
-    @Stable
-    protected final MethodHandle target;
+    protected final boolean hasLeadingCaller;
+    @Stable protected final MethodHandle target;
+    @Stable protected final MHMethodAccessor invoker;
 
-    DirectMethodAccessorImpl(Method method, MethodHandle target) {
+    DirectMethodAccessorImpl(Method method, MethodHandle target, MHMethodAccessor invoker, boolean hasLeadingCaller) {
         this.method = method;
         this.target = target;
-        this.isStatic = Modifier.isStatic(method.getModifiers());
+        this.invoker = invoker;
         this.paramCount = method.getParameterCount();
+        this.hasLeadingCaller = hasLeadingCaller;
     }
 
-    protected MHMethodAccessor spinMHMethodAccessor() {
-        return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
+    @ForceInline
+    MHMethodAccessor mhInvoker() {
+        return invoker;
+    }
+
+    MHMethodAccessor spinMHMethodAccessor() {
+        return MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, hasLeadingCaller);
     }
 
     static class StaticMethodAccessor extends DirectMethodAccessorImpl {
-        private StaticMethodAccessor(Method method, MethodHandle target) {
-            super(method, target);
+        StaticMethodAccessor(Method method, MethodHandle target) {
+            this(method, target, new MHMethodAccessorDelegate(target), false);
         }
+        StaticMethodAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            this(method, target, new MHMethodAccessorDelegate(target), hasLeadingCaller);
+        }
+        StaticMethodAccessor(Method method, MethodHandle target, MHMethodAccessor invoker, boolean hasLeadingCaller) {
+            super(method, target, invoker, hasLeadingCaller);
+        }
+
         @Override
         @ForceInline
         public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
@@ -138,19 +166,27 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
         @Hidden
         @ForceInline
         Object invokeImpl(Object[] args) throws Throwable {
+            var mhInvoker = mhInvoker();
             return switch (paramCount) {
-                case 0 -> target.invokeExact();
-                case 1 -> target.invokeExact(argAt(args, 0));
-                case 2 -> target.invokeExact(argAt(args, 0), argAt(args, 1));
-                default -> target.invokeExact(args);
+                case 0 -> mhInvoker.invoke();
+                case 1 -> mhInvoker.invoke(argAt(args, 0));
+                case 2 -> mhInvoker.invoke(argAt(args, 0), argAt(args, 1));
+                default -> mhInvoker.invoke(args);
             };
         }
     }
 
     static class InstanceMethodAccessor extends DirectMethodAccessorImpl {
-        private InstanceMethodAccessor(Method method, MethodHandle target) {
-            super(method, target);
+        InstanceMethodAccessor(Method method, MethodHandle target) {
+            this(method, target, new MHMethodAccessorDelegate(target), false);
         }
+        InstanceMethodAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            this(method, target, new MHMethodAccessorDelegate(target), hasLeadingCaller);
+        }
+        InstanceMethodAccessor(Method method, MethodHandle target, MHMethodAccessor invoker, boolean hasLeadingCaller) {
+            super(method, target, invoker, hasLeadingCaller);
+        }
+
         @Override
         @ForceInline
         public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
@@ -181,55 +217,6 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
         @Hidden
         @ForceInline
         Object invokeImpl(Object obj, Object[] args) throws Throwable {
-            return switch (paramCount) {
-                case 0 -> target.invokeExact(obj);
-                case 1 -> target.invokeExact(obj, argAt(args, 0));
-                case 2 -> target.invokeExact(obj, argAt(args, 0), argAt(args, 1));
-                default -> target.invokeExact(obj, args);
-            };
-        }
-    }
-
-    static class StaticMHMethodAccessor extends StaticMethodAccessor {
-        protected @Stable final MHMethodAccessor mhInvoker;
-        StaticMHMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
-            super(method, target);
-            this.mhInvoker = mhInvoker;
-        }
-
-        @ForceInline
-        MHMethodAccessor mhInvoker() {
-            return mhInvoker;
-        }
-
-        @Hidden
-        @ForceInline
-        Object invokeImpl(Object[] args) throws Throwable {
-            var mhInvoker = mhInvoker();
-            return switch (paramCount) {
-                case 0 -> mhInvoker.invoke();
-                case 1 -> mhInvoker.invoke(argAt(args, 0));
-                case 2 -> mhInvoker.invoke(argAt(args, 0), argAt(args, 1));
-                default -> mhInvoker.invoke(args);
-            };
-        }
-    }
-
-    static class InstanceMHMethodAccessor extends InstanceMethodAccessor {
-        protected @Stable final MHMethodAccessor mhInvoker;
-        InstanceMHMethodAccessor(Method method, MethodHandle target, MHMethodAccessor mhInvoker) {
-            super(method, target);
-            this.mhInvoker = mhInvoker;
-        }
-
-        @ForceInline
-        MHMethodAccessor mhInvoker() {
-            return mhInvoker;
-        }
-
-        @Hidden
-        @ForceInline
-        Object invokeImpl(Object obj, Object[] args) throws Throwable {
             var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 -> mhInvoker.invoke(obj);
@@ -240,12 +227,15 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
-    static class InstanceAdaptiveMethodAccessor extends InstanceMHMethodAccessor {
+    static class StaticAdaptiveMethodAccessor extends StaticMethodAccessor {
         private @Stable MHMethodAccessor fastInvoker;
         private int numInvocations;
 
-        InstanceAdaptiveMethodAccessor(Method method, MethodHandle target) {
-            super(method, target, new MHMethodAccessorDelegate(target));
+        StaticAdaptiveMethodAccessor(Method method, MethodHandle target) {
+            this(method, target, false);
+        }
+        StaticAdaptiveMethodAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            super(method, target, hasLeadingCaller);
         }
 
         @ForceInline
@@ -259,34 +249,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
 
         @DontInline
         private MHMethodAccessor slowInvoker() {
-            var invoker = mhInvoker;
-            if (++numInvocations > ReflectionFactory.inflationThreshold()) {
-                fastInvoker = invoker = MethodHandleAccessorFactory.newMethodHandleAccessor(method, target, false);
-            }
-            return invoker;
-        }
-    }
-
-    static class StaticAdaptiveMethodAccessor extends StaticMHMethodAccessor {
-        private @Stable MHMethodAccessor fastInvoker;
-        private int numInvocations;
-
-        private StaticAdaptiveMethodAccessor(Method method, MethodHandle target) {
-            super(method, target, new MHMethodAccessorDelegate(target));
-        }
-
-        @ForceInline
-        MHMethodAccessor mhInvoker() {
-            var invoker = fastInvoker;
-            if (invoker != null) {
-                return invoker;
-            }
-            return slowInvoker();
-        }
-
-        @DontInline
-        private MHMethodAccessor slowInvoker() {
-            var invoker = mhInvoker;
+            var invoker = this.invoker;
             if (++numInvocations > ReflectionFactory.inflationThreshold()) {
                 fastInvoker = invoker = spinMHMethodAccessor();
             }
@@ -294,9 +257,93 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
         }
     }
 
-    static class InstanceMethodAccessorWithLeadingCaller extends DirectMethodAccessorImpl {
-        InstanceMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
-            super(method, target);
+    static class InstanceAdaptiveMethodAccessor extends InstanceMethodAccessor {
+        private @Stable MHMethodAccessor fastInvoker;
+        private int numInvocations;
+
+        InstanceAdaptiveMethodAccessor(Method method, MethodHandle target) {
+            this(method, target, false);
+        }
+        InstanceAdaptiveMethodAccessor(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            super(method, target, hasLeadingCaller);
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            var invoker = fastInvoker;
+            if (invoker != null) {
+                return invoker;
+            }
+            return slowInvoker();
+        }
+
+        @DontInline
+        private MHMethodAccessor slowInvoker() {
+            var invoker = this.invoker;
+            if (++numInvocations > ReflectionFactory.inflationThreshold()) {
+                fastInvoker = invoker = spinMHMethodAccessor();
+            }
+            return invoker;
+        }
+    }
+
+    static class StaticAdaptiveMethodAccessorWithLeadingCaller extends StaticAdaptiveMethodAccessor {
+        StaticAdaptiveMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
+            this(method, target, true);
+        }
+        StaticAdaptiveMethodAccessorWithLeadingCaller(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            super(method, target, hasLeadingCaller);
+        }
+
+        @Override
+        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
+            throw new InternalError("caller sensitive method invoked without explicit caller: " + method);
+        }
+
+        @Override
+        @ForceInline
+        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
+            if (MethodHandleAccessorFactory.VERBOSE) {
+                System.out.println(this.getClass().getSimpleName() + " caller " + caller.getName()
+                        + " target " + obj + " args " + Arrays.deepToString(args));
+            }
+            checkArgumentCount(paramCount, args);
+            try {
+                return invokeImpl(caller, args);
+            } catch (ClassCastException|WrongMethodTypeException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException("argument type mismatch", e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (NullPointerException e) {
+                if (isIllegalArgument(e))
+                    throw new IllegalArgumentException(e);
+                else
+                    throw new InvocationTargetException(e);
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
+            }
+        }
+
+        @Hidden
+        @ForceInline
+        Object invokeImpl(Class<?> caller, Object[] args) throws Throwable {
+            var mhInvoker = mhInvoker();
+            return switch (paramCount) {
+                case 0 -> mhInvoker.invoke(caller);
+                case 1 -> mhInvoker.invoke(caller, argAt(args, 0));
+                case 2 -> mhInvoker.invoke(caller, argAt(args, 0), argAt(args, 1));
+                default -> mhInvoker.invoke(caller, args);
+            };
+        }
+    }
+
+    static class InstanceAdapterMethodAccessorWithLeadingCaller extends InstanceAdaptiveMethodAccessor {
+        InstanceAdapterMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
+            this(method, target, true);
+        }
+        InstanceAdapterMethodAccessorWithLeadingCaller(Method method, MethodHandle target, boolean hasLeadingCaller) {
+            super(method, target, hasLeadingCaller);
         }
 
         @Override
@@ -333,58 +380,12 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
         @Hidden
         @ForceInline
         Object invokeImpl(Class<?> caller, Object obj, Object[] args) throws Throwable {
+            var mhInvoker = mhInvoker();
             return switch (paramCount) {
-                case 0 -> target.invokeExact(obj, caller);
-                case 1 -> target.invokeExact(obj, caller, argAt(args, 0));
-                case 2 -> target.invokeExact(obj, caller, argAt(args, 0), argAt(args, 1));
-                default -> target.invokeExact(obj, caller, args);
-            };
-        }
-    }
-
-    static class StaticMethodAccessorWithLeadingCaller extends DirectMethodAccessorImpl {
-        StaticMethodAccessorWithLeadingCaller(Method method, MethodHandle target) {
-            super(method, target);
-        }
-
-        @Override
-        public Object invoke(Object obj, Object[] args) throws InvocationTargetException {
-            throw new InternalError("caller sensitive method invoked without explicit caller: " + method);
-        }
-
-        @Override
-        @ForceInline
-        public Object invoke(Class<?> caller, Object obj, Object[] args) throws InvocationTargetException {
-            if (MethodHandleAccessorFactory.VERBOSE) {
-                System.out.println(this.getClass().getSimpleName() + " caller " + caller.getName()
-                        + " target " + obj + " args " + Arrays.deepToString(args));
-            }
-            checkArgumentCount(paramCount, args);
-            try {
-                return invokeImpl(caller, args);
-            } catch (ClassCastException|WrongMethodTypeException e) {
-                if (isIllegalArgument(e))
-                    throw new IllegalArgumentException("argument type mismatch", e);
-                else
-                    throw new InvocationTargetException(e);
-            } catch (NullPointerException e) {
-                if (isIllegalArgument(e))
-                    throw new IllegalArgumentException(e);
-                else
-                    throw new InvocationTargetException(e);
-            } catch (Throwable e) {
-                throw new InvocationTargetException(e);
-            }
-        }
-
-        @Hidden
-        @ForceInline
-        Object invokeImpl(Class<?> caller, Object[] args) throws Throwable {
-            return switch (paramCount) {
-                case 0 -> target.invokeExact(caller);
-                case 1 -> target.invokeExact(caller, argAt(args, 0));
-                case 2 -> target.invokeExact(caller, argAt(args, 0), argAt(args, 1));
-                default -> target.invokeExact(caller, args);
+                case 0 -> mhInvoker.invoke(obj, caller);
+                case 1 -> mhInvoker.invoke(obj, caller, argAt(args, 0));
+                case 2 -> mhInvoker.invoke(obj, caller, argAt(args, 0), argAt(args, 1));
+                default -> mhInvoker.invoke(obj, caller, args);
             };
         }
     }
@@ -401,8 +402,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
      */
     static class CallerSensitiveWithInvoker extends DirectMethodAccessorImpl {
         private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
+        private final boolean isStatic;
         private CallerSensitiveWithInvoker(Method method, MethodHandle target) {
-            super(method, target);
+            super(method, target, null, false);
+            this.isStatic = Modifier.isStatic(method.getModifiers());
         }
 
         @Override
@@ -421,6 +424,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 Objects.requireNonNull(obj);
             }
             checkArgumentCount(paramCount, args);
+            // caller-sensitive method is invoked through a per-caller invoker
             var invoker = JLIA.reflectiveInvoker(caller);
             try {
                 // invoke the target method handle via an invoker
@@ -481,34 +485,8 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 return invoke0(csmAdapter, obj, newArgs);
             } else {
                 assert VM.isJavaLangInvokeInited();
-
-                /*
-                 * When Method::invoke on a caller-sensitive method is to be invoked
-                 * and no adapter method with a leading caller class argument is defined,
-                 * the caller-sensitive method must be invoked via an invoker injected
-                 * which has the following signature:
-                 *     reflect_invoke_V(MethodHandle mh, Object target, Object[] args)
-                 *
-                 * The stack frames calling the method `csm` through reflection will
-                 * look like this:
-                 *     target.csm(args)
-                 *     NativeMethodAccesssorImpl::invoke(target, args)
-                 *     MethodAccessImpl::invoke(target, args)
-                 *     InjectedInvoker::reflect_invoke_V(vamh, target, args);
-                 *     method::invoke(target, args)
-                 *     p.Foo::m
-                 *
-                 * An injected invoker class is a hidden class which has the same
-                 * defining class loader, runtime package, and protection domain
-                 * as the given caller class.
-                 *
-                 * This method is needed by NativeMethodAccessorImpl and the generated
-                 * MethodAccessor.   The caller-sensitive method will call
-                 * Reflection::getCallerClass to get the caller class.
-                 */
-                var invoker = SharedSecrets.getJavaLangInvokeAccess().reflectiveInvoker(caller);
                 try {
-                    return invoker.invokeExact(methodAccessorInvoker(), obj, args);
+                    return ReflectiveInvoker.invoke(methodAccessorInvoker(), caller, obj, args);
                 } catch (InvocationTargetException|RuntimeException|Error e) {
                     throw e;
                 } catch (Throwable e) {
@@ -517,16 +495,79 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             }
         }
 
+        public Object invokeViaReflectiveInvoker(Object obj, Object[] args) throws InvocationTargetException {
+            return invoke0(method, obj, args);
+        }
+
+        /*
+         * A method handle to invoke Reflective::Invoker
+         */
         private MethodHandle maInvoker;
         private MethodHandle methodAccessorInvoker() {
             MethodHandle invoker = maInvoker;
             if (invoker == null) {
-                maInvoker = invoker = MethodHandleAccessorFactory.reflectiveInvokerFor(this);
+                maInvoker = invoker = ReflectiveInvoker.bindTo(this);
             }
             return invoker;
         }
 
         private static native Object invoke0(Method m, Object obj, Object[] args);
+
+        static class ReflectiveInvoker {
+            /**
+             * Return a method handle for NativeAccessor::invoke bound to the given accessor object
+             */
+            static MethodHandle bindTo(NativeAccessor accessor) {
+                return NATIVE_ACCESSOR_INVOKE.bindTo(accessor);
+            }
+
+            /*
+             * When Method::invoke on a caller-sensitive method is to be invoked
+             * and no adapter method with a leading caller class argument is defined,
+             * the caller-sensitive method must be invoked via an invoker injected
+             * which has the following signature:
+             *     reflect_invoke_V(MethodHandle mh, Object target, Object[] args)
+             *
+             * The stack frames calling the method `csm` through reflection will
+             * look like this:
+             *     obj.csm(args)
+             *     NativeAccessor::invoke(obj, args)
+             *     InjectedInvoker::reflect_invoke_V(vamh, obj, args);
+             *     method::invoke(obj, args)
+             *     p.Foo::m
+             *
+             * An injected invoker class is a hidden class which has the same
+             * defining class loader, runtime package, and protection domain
+             * as the given caller class.
+             *
+             * The caller-sensitive method will call Reflection::getCallerClass
+             * to get the caller class.
+             */
+            static Object invoke(MethodHandle target, Class<?> caller, Object obj, Object[] args)
+                    throws InvocationTargetException
+            {
+                var reflectInvoker = JLIA.reflectiveInvoker(caller);
+                try {
+                    return reflectInvoker.invokeExact(target, obj, args);
+                } catch (InvocationTargetException | RuntimeException | Error e) {
+                    throw e;
+                } catch (Throwable e) {
+                    throw new InternalError(e);
+                }
+            }
+
+            static final JavaLangInvokeAccess JLIA;
+            static final MethodHandle NATIVE_ACCESSOR_INVOKE;
+            static {
+                try {
+                    JLIA = SharedSecrets.getJavaLangInvokeAccess();
+                    NATIVE_ACCESSOR_INVOKE = MethodHandles.lookup().findVirtual(NativeAccessor.class, "invoke",
+                            methodType(Object.class, Object.class, Object[].class));
+                } catch (NoSuchMethodException|IllegalAccessException e) {
+                    throw new InternalError(e);
+                }
+            }
+        }
     }
 
     /**

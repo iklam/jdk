@@ -25,12 +25,54 @@
 
 package jdk.internal.reflect;
 
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
-class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
-    VarHandleLongFieldAccessorImpl(Field field, MHFieldAccessor accessor, boolean isReadyOnly) {
-        super(field, accessor, isReadyOnly);
+abstract class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
+    static FieldAccessorImpl fieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+        return Modifier.isStatic(field.getModifiers())
+                ? new StaticFieldAccessor(field, varHandle, isReadOnly)
+                : new InstanceFieldAccessor(field, varHandle, isReadOnly);
     }
+
+    VarHandleLongFieldAccessorImpl(Field field, VarHandle varHandle, boolean isReadOnly) {
+        super(field, varHandle, isReadOnly);
+    }
+
+    abstract long getValue(Object obj);
+    abstract void setValue(Object obj, long l) throws Throwable;
+
+    static class StaticFieldAccessor extends VarHandleLongFieldAccessorImpl {
+        StaticFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        long getValue(Object obj) {
+            return accessor().getLong();
+        }
+
+        void setValue(Object obj, long l) throws Throwable {
+            accessor().setLong(l);
+        }
+
+        protected void ensureObj(Object o) {}
+    }
+
+    static class InstanceFieldAccessor extends VarHandleLongFieldAccessorImpl {
+        InstanceFieldAccessor(Field field, VarHandle varHandle, boolean isReadOnly) {
+            super(field, varHandle, isReadOnly);
+        }
+
+        long getValue(Object obj) {
+            return accessor().getLong(obj);
+        }
+
+        void setValue(Object obj, long l) throws Throwable {
+            accessor().setLong(obj, l);
+        }
+    }
+
     public Object get(Object obj) throws IllegalArgumentException {
         return Long.valueOf(getLong(obj));
     }
@@ -57,7 +99,7 @@ class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
 
     public long getLong(Object obj) throws IllegalArgumentException {
         try {
-            return isStatic ? accessor.getLong() : accessor.getLong(obj);
+            return getValue(obj);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
@@ -146,11 +188,7 @@ class VarHandleLongFieldAccessorImpl extends VarHandleFieldAccessorImpl {
             throwFinalFieldIllegalAccessException(l);
         }
         try {
-            if (isStatic) {
-                accessor.setLong(l);
-            } else {
-                accessor.setLong(obj, l);
-            }
+            setValue(obj, l);
         } catch (IllegalArgumentException|NullPointerException e) {
             throw e;
         } catch (ClassCastException e) {
