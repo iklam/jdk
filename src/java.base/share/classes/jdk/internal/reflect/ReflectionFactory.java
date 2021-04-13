@@ -40,6 +40,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.security.PrivilegedAction;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Properties;
 
@@ -193,7 +194,7 @@ public class ReflectionFactory {
         }
 
         if (useDirectMethodHandle) {
-            if (!VM.isJavaLangInvokeInited()) {
+            if (useNativeAccessor(method)) {
                 return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
             }
             return MethodHandleAccessorFactory.newMethodAccessor(method, callerSensitive);
@@ -250,7 +251,7 @@ public class ReflectionFactory {
         }
 
         if (useDirectMethodHandle) {
-            if (!VM.isJavaLangInvokeInited()) {
+            if (useNativeAccessor(c)) {
                 return DirectConstructorAccessorImpl.nativeAccessor(c);
             }
             return MethodHandleAccessorFactory.newConstructorAccessor(c);
@@ -276,6 +277,34 @@ public class ReflectionFactory {
                 return res;
             }
         }
+    }
+
+    /*
+     * Returns true if NativeAccessor should be used.
+     */
+    private static boolean useNativeAccessor(Executable member) {
+        if (!VM.isJavaLangInvokeInited())
+            return true;
+
+        if (Modifier.isNative(member.getModifiers()))
+            return true;
+
+        if (useNativeAccessorOnly)  // for testing only
+            return true;
+
+        // MethodHandle::withVarargs on a member with varargs modifier bit set
+        // verifies that the last parameter of the member must be an array type.
+        // The JVMS does not require the last parameter descriptor of the method descriptor
+        // is an array type if the ACC_VARARGS flag is set in the access_flags item.
+        // Hence the reflection implementation does not check the last parameter type
+        // if ACC_VARARGS flag is set.  Workaround this by invoking through
+        // the native accessor.
+        int paramCount = member.getParameterCount();
+        if (member.isVarArgs() &&
+                (paramCount == 0 || !(member.getParameterTypes()[paramCount-1].isArray()))) {
+            return true;
+        }
+        return false;
     }
 
     //--------------------------------------------------------------------------
@@ -651,9 +680,6 @@ public class ReflectionFactory {
 
     static boolean useDirectMethodHandle() {
         return useDirectMethodHandle;
-    }
-    static boolean useNativeAccessorOnly() {
-        return useNativeAccessorOnly;
     }
 
     static String invocationType() {

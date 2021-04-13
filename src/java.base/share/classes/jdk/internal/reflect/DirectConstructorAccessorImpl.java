@@ -85,7 +85,6 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
     }
 
     static ConstructorAccessorImpl nativeAccessor(Constructor<?> ctor) {
-        assert !VM.isJavaLangInvokeInited();
         return new NativeAccessor(ctor);
     }
 

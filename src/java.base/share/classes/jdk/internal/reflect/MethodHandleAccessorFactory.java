@@ -57,9 +57,6 @@ final class MethodHandleAccessorFactory {
 
     static MethodAccessorImpl newMethodAccessor(Method method, boolean callerSensitive) {
         assert VM.isJavaLangInvokeInited();
-        if (Modifier.isNative(method.getModifiers()) || ReflectionFactory.useNativeAccessorOnly()) {
-            return DirectMethodAccessorImpl.nativeAccessor(method, callerSensitive);
-        }
 
         // ExceptionInInitializerError may be thrown during class initialization
         // Ensure class initialized outside the invocation of method handle
