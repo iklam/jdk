@@ -33,7 +33,7 @@
  * @build sun.hotspot.WhiteBox
  * @build JCmdTestLingeredApp JCmdTest
  * @run driver jdk.test.lib.helpers.ClassFileInstaller sun.hotspot.WhiteBox
- * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI JCmdTest
+ * @run main/othervm/timeout=480 -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI JCmdTest
  */
 
 import java.io.File;
@@ -131,6 +131,7 @@ public class JCmdTest {
 
     }
 
+    static int logFileCount = 0;
     private static void runWithArchiveFile(String archiveName, boolean useBoot,  String... messages) throws Exception {
         List<String> args = new ArrayList<String>();
         if (useBoot) {
@@ -147,6 +148,7 @@ public class JCmdTest {
         args.add("-Xlog:class+load");
 
         LingeredApp app = createLingeredApp(args.toArray(new String[0]));
+        app.setLogFileName("JCmdTest.log." + (logFileCount++));
         app.stopApp();
         String output = app.getOutput().getStdout();
         if (messages != null) {
@@ -160,6 +162,7 @@ public class JCmdTest {
 
     private static void test(String jcmdSub, String archiveFile,
                              long pid, boolean useBoot, boolean expectOK, String... messages) throws Exception {
+        System.out.println("Expected: " + (expectOK ? "SUCCESS" : "FAIL"));
         boolean isStatic = jcmdSub.equals(SUBCMD_STATIC_DUMP);
         String fileName = archiveFile != null ? archiveFile :
             ("java_pid" + pid + (isStatic ? "_static" : "_dynamic") + ".jsa");
@@ -241,7 +244,7 @@ public class JCmdTest {
         app = createLingeredApp("-cp", allJars);
         pid = app.getPid();
         for (int i = 0; i < ITERATION_TIMES; i++) {
-            test(SUBCMD_STATIC_DUMP, STATIC_DUMP_FILE + "0" + i, pid, noBoot,  EXPECT_PASS, STATIC_MESSAGES);
+            test(SUBCMD_STATIC_DUMP, STATIC_DUMP_FILE + "0" + i + ".jsa", pid, noBoot,  EXPECT_PASS, STATIC_MESSAGES);
         }
         app.stopApp();
 
@@ -293,18 +296,18 @@ public class JCmdTest {
         print2ln(test_count++ + " Test dynamic dump with -XX:+RecordDynamicDumpInfo.");
         app = createLingeredApp("-cp", allJars, "-XX:+RecordDynamicDumpInfo");
         pid = app.getPid();
-        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "01", pid, noBoot, EXPECT_PASS, DYNAMIC_MESSAGES);
+        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "01.jsa", pid, noBoot, EXPECT_PASS, DYNAMIC_MESSAGES);
 
         // Test dynamic dump twice to same process.
         print2ln(test_count++ + " Test dynamic dump second time to the same process.");
-        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "02", pid, noBoot,  EXPECT_FAIL);
+        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "02.jsa", pid, noBoot,  EXPECT_FAIL);
         app.stopApp();
 
         // Test dynamic dump with -XX:-RecordDynamicDumpInfo.
         print2ln(test_count++ + " Test dynamic dump with -XX:-RecordDynamicDumpInfo.");
         app = createLingeredApp("-cp", allJars);
         pid = app.getPid();
-        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "01", pid, noBoot, EXPECT_FAIL);
+        test(SUBCMD_DYNAMIC_DUMP, DYNAMIC_DUMP_FILE + "01.jsa", pid, noBoot, EXPECT_FAIL);
         app.stopApp();
 
         // Test dynamic dump with default archive name (null).
