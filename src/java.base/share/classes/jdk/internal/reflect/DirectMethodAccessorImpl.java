@@ -43,7 +43,8 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import static java.lang.invoke.MethodType.methodType;
-import static jdk.internal.reflect.AccessorUtils.*;
+import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
+import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
 
 abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
     /**
@@ -169,8 +170,8 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 -> mhInvoker.invoke();
-                case 1 -> mhInvoker.invoke(argAt(args, 0));
-                case 2 -> mhInvoker.invoke(argAt(args, 0), argAt(args, 1));
+                case 1 -> mhInvoker.invoke(args[0]);
+                case 2 -> mhInvoker.invoke(args[0], args[1]);
                 default -> mhInvoker.invoke(args);
             };
         }
@@ -220,8 +221,8 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 -> mhInvoker.invoke(obj);
-                case 1 -> mhInvoker.invoke(obj, argAt(args, 0));
-                case 2 -> mhInvoker.invoke(obj, argAt(args, 0), argAt(args, 1));
+                case 1 -> mhInvoker.invoke(obj, args[0]);
+                case 2 -> mhInvoker.invoke(obj, args[0], args[1]);
                 default -> mhInvoker.invoke(obj, args);
             };
         }
@@ -331,8 +332,8 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 -> mhInvoker.invoke(caller);
-                case 1 -> mhInvoker.invoke(caller, argAt(args, 0));
-                case 2 -> mhInvoker.invoke(caller, argAt(args, 0), argAt(args, 1));
+                case 1 -> mhInvoker.invoke(caller, args[0]);
+                case 2 -> mhInvoker.invoke(caller, args[0], args[1]);
                 default -> mhInvoker.invoke(caller, args);
             };
         }
@@ -383,8 +384,8 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             var mhInvoker = mhInvoker();
             return switch (paramCount) {
                 case 0 -> mhInvoker.invoke(obj, caller);
-                case 1 -> mhInvoker.invoke(obj, caller, argAt(args, 0));
-                case 2 -> mhInvoker.invoke(obj, caller, argAt(args, 0), argAt(args, 1));
+                case 1 -> mhInvoker.invoke(obj, caller, args[0]);
+                case 2 -> mhInvoker.invoke(obj, caller, args[0], args[1]);
                 default -> mhInvoker.invoke(obj, caller, args);
             };
         }
@@ -567,6 +568,16 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                     throw new InternalError(e);
                 }
             }
+        }
+    }
+
+    private static void checkArgumentCount(int paramCount, Object[] args) {
+        // only check argument count for specialized forms
+        if (paramCount > SPECIALIZED_PARAM_COUNT) return;
+
+        int argc = args != null ? args.length : 0;
+        if (argc != paramCount) {
+            throw new IllegalArgumentException("wrong number of arguments: " + argc + " expected: " + paramCount);
         }
     }
 

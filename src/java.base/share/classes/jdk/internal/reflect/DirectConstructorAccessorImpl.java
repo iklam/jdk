@@ -33,9 +33,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 
-import static jdk.internal.reflect.AccessorUtils.argAt;
-import static jdk.internal.reflect.AccessorUtils.checkArgumentCount;
 import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
+import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
 
 final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
     private final Constructor<?> ctor;
@@ -53,12 +52,17 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
             System.out.println("newInstance on " + ctor.getDeclaringClass().getName()
                     + " with args " + Arrays.deepToString(args));
         }
-        checkArgumentCount(paramCount, args);
+
+        int argc = args != null ? args.length : 0;
+        // only check argument count for specialized forms
+        if (paramCount <= SPECIALIZED_PARAM_COUNT && argc != paramCount) {
+            throw new IllegalArgumentException("wrong number of arguments: " + argc + " expected: " + paramCount);
+        }
         try {
             return switch (paramCount) {
                 case 0 ->  target.invokeExact();
-                case 1 ->  target.invokeExact(argAt(args, 0));
-                case 2 ->  target.invokeExact(argAt(args, 0), argAt(args, 1));
+                case 1 ->  target.invokeExact(args[0]);
+                case 2 ->  target.invokeExact(args[0], args[1]);
                 default -> target.invokeExact(args);
             };
         } catch (ClassCastException|WrongMethodTypeException e) {

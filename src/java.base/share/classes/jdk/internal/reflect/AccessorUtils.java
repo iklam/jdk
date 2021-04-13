@@ -33,23 +33,6 @@ import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM
  * Utility methods used by DirectMethodAccessorImpl and DirectConstructorImpl
  */
 public class AccessorUtils {
-    static void checkArgumentCount(int paramCount, Object[] args) {
-        // only check argument count for specialized forms
-        if (paramCount > SPECIALIZED_PARAM_COUNT) return;
-
-        int argc = args != null ? args.length : 0;
-        if (argc != paramCount) {
-            throw new IllegalArgumentException("wrong number of arguments: " + argc + " expected: " + paramCount);
-        }
-    }
-
-    static Object argAt(Object[] args, int index) {
-        if (args != null && index < args.length) {
-            return args[index];
-        }
-        return null;
-    }
-
     static boolean isIllegalArgument(RuntimeException e) {
         StackTraceElement[] stackTrace = e.getStackTrace();
         if (stackTrace.length == 0) {
@@ -85,13 +68,13 @@ public class AccessorUtils {
         return false;
     }
 
-    private static Set<String> IMPL_PACKAGES = Set.of(
+    private static final Set<String> IMPL_PACKAGES = Set.of(
             "java.lang.reflect",
             "java.lang.invoke",
             "jdk.internal.reflect",
             "sun.invoke.util"
     );
-    private static Set<String> ACCESSOR_IMPL_CLASSES = Set.of(
+    private static final Set<String> ACCESSOR_IMPL_CLASSES = Set.of(
             DirectMethodAccessorImpl.class.getName(),
             DirectMethodAccessorImpl.StaticMethodAccessor.class.getName(),
             DirectMethodAccessorImpl.InstanceMethodAccessor.class.getName(),
