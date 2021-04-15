@@ -25,7 +25,10 @@
 
 package jdk.internal.reflect;
 
-import jdk.internal.misc.VM;
+import jdk.internal.vm.annotation.DontInline;
+import jdk.internal.vm.annotation.ForceInline;
+import jdk.internal.vm.annotation.Hidden;
+import jdk.internal.vm.annotation.Stable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.WrongMethodTypeException;
@@ -36,14 +39,29 @@ import java.util.Arrays;
 import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
 import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
 
-final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
-    private final Constructor<?> ctor;
-    private final MethodHandle target;
-    private final int paramCount;
+class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
+    static ConstructorAccessorImpl constructorAccessor(Constructor<?> ctor, MethodHandle target) {
+        return new DirectConstructorAccessorImpl(ctor, target);
+    }
+
+    static ConstructorAccessorImpl nativeAccessor(Constructor<?> ctor) {
+        return new NativeAccessor(ctor);
+    }
+
+    protected final Constructor<?> ctor;
+    @Stable protected final MethodHandle target;
+    @Stable protected final MHMethodAccessor invoker;
+    protected final int paramCount;
     DirectConstructorAccessorImpl(Constructor<?> ctor, MethodHandle target) {
         this.ctor = ctor;
         this.target = target;
+        this.invoker = new MHMethodAccessorDelegate(target);
         this.paramCount = ctor.getParameterCount();
+    }
+
+    @ForceInline
+    MHMethodAccessor mhInvoker() {
+        return invoker;
     }
 
     @Override
@@ -59,12 +77,7 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
             throw new IllegalArgumentException("wrong number of arguments: " + argc + " expected: " + paramCount);
         }
         try {
-            return switch (paramCount) {
-                case 0 ->  target.invokeExact();
-                case 1 ->  target.invokeExact(args[0]);
-                case 2 ->  target.invokeExact(args[0], args[1]);
-                default -> target.invokeExact(args);
-            };
+            return invokeImpl(args);
         } catch (ClassCastException|WrongMethodTypeException e) {
             if (isIllegalArgument(e))
                 throw new IllegalArgumentException("argument type mismatch", e);
@@ -80,12 +93,43 @@ final class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
         }
     }
 
-    static ConstructorAccessorImpl constructorAccessor(Constructor<?> ctor, MethodHandle target) {
-        return new DirectConstructorAccessorImpl(ctor, target);
+    @Hidden
+    @ForceInline
+    Object invokeImpl(Object[] args) throws Throwable {
+        var mhInvoker = mhInvoker();
+        return switch (paramCount) {
+            case 0 -> mhInvoker.invoke();
+            case 1 -> mhInvoker.invoke(args[0]);
+            case 2 -> mhInvoker.invoke(args[0], args[1]);
+            case 3 -> mhInvoker.invoke(args[0], args[1], args[2]);
+            default -> mhInvoker.invoke(args);
+        };
     }
 
-    static ConstructorAccessorImpl nativeAccessor(Constructor<?> ctor) {
-        return new NativeAccessor(ctor);
+    static class StaticAdaptiveAccessor extends DirectConstructorAccessorImpl {
+        private @Stable MHMethodAccessor fastInvoker;
+        private int numInvocations;
+        StaticAdaptiveAccessor(Constructor<?> ctor, MethodHandle target) {
+            super(ctor, target);
+        }
+
+        @ForceInline
+        MHMethodAccessor mhInvoker() {
+            var invoker = fastInvoker;
+            if (invoker != null) {
+                return invoker;
+            }
+            return slowInvoker();
+        }
+
+        @DontInline
+        private MHMethodAccessor slowInvoker() {
+            var invoker = this.invoker;
+            if (++numInvocations > ReflectionFactory.inflationThreshold()) {
+                fastInvoker = invoker = MethodHandleAccessorFactory.newMethodHandleAccessor(ctor, target);
+            }
+            return invoker;
+        }
     }
 
     /**

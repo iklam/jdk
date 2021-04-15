@@ -201,10 +201,10 @@ final class MethodHandleAccessorFactory {
         return target.asType(mtype);
     }
 
-    static final int SPECIALIZED_PARAM_COUNT = 2;
+    static final int SPECIALIZED_PARAM_COUNT = 3;
     static MethodType specializedMethodType(boolean isStatic, boolean hasLeadingCaller, int paramCount) {
         return switch (paramCount) {
-            // specialize for number of formal arguments <= 2 to avoid spreader
+            // specialize for number of formal arguments <= 3 to avoid spreader
             case 0 -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class)
                                                    : methodType(Object.class))
                                : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class)
@@ -217,6 +217,10 @@ final class MethodHandleAccessorFactory {
                                                    : methodType(Object.class, Object.class, Object.class))
                                : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object.class, Object.class)
                                                    : methodType(Object.class, Object.class, Object.class, Object.class));
+            case 3 -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class, Object.class, Object.class, Object.class)
+                                                   : methodType(Object.class, Object.class, Object.class, Object.class))
+                               : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object.class, Object.class, Object.class)
+                                                   : methodType(Object.class, Object.class, Object.class, Object.class, Object.class));
             default -> isStatic ? (hasLeadingCaller ? methodType(Object.class, Class.class, Object[].class)
                                                     : methodType(Object.class, Object[].class))
                                 : (hasLeadingCaller ? methodType(Object.class, Object.class, Class.class, Object[].class)
@@ -229,6 +233,7 @@ final class MethodHandleAccessorFactory {
             case 0 -> methodType(Object.class);
             case 1 -> methodType(Object.class, Object.class);
             case 2 -> methodType(Object.class, Object.class, Object.class);
+            case 3 -> methodType(Object.class, Object.class, Object.class, Object.class);
             default -> methodType(Object.class, Object[].class);
         };
     }
@@ -289,9 +294,31 @@ final class MethodHandleAccessorFactory {
         }
     }
 
+    /**
+     * Spins a hidden class that invokes a constant MethodHandle of the target method handle,
+     * loaded from the class data via condy, for reliable performance.
+     *
+     * Due to the overhead of class loading, this is not the default.
+     */
+    static MHMethodAccessor newMethodHandleAccessor(Constructor<?> c, MethodHandle target) {
+        var name = classNamePrefix(c, target.type());
+        var cn = name + "$$" + counter.getAndIncrement();
+        byte[] bytes = ACCESSOR_CLASSFILES.computeIfAbsent(name, n -> spinByteCode(name, c, target.type()));
+        try {
+            var lookup = JLIA.defineHiddenClassWithClassData(LOOKUP, cn, bytes, target, true);
+            var ctor = lookup.findConstructor(lookup.lookupClass(), methodType(void.class));
+            ctor = ctor.asType(methodType(MHMethodAccessor.class));
+            return (MHMethodAccessor) ctor.invokeExact();
+        } catch (Throwable e) {
+            throw new InternalError(e);
+        }
+    }
+
     private static final ConcurrentHashMap<String, byte[]> ACCESSOR_CLASSFILES = new ConcurrentHashMap<>();
     private static final String FIELD_CLASS_NAME_PREFIX = "jdk/internal/reflect/FieldAccessorImpl_";
     private static final String METHOD_CLASS_NAME_PREFIX = "jdk/internal/reflect/MethodAccessorImpl_";
+    private static final String CONSTRUCTOR_CLASS_NAME_PREFIX = "jdk/internal/reflect/ConstructorAccessorImpl_";
+
     // Used to ensure that each spun class name is unique
     private static final AtomicInteger counter = new AtomicInteger();
 
@@ -305,6 +332,10 @@ final class MethodHandleAccessorFactory {
         var isStatic = Modifier.isStatic(method.getModifiers());
         var methodTypeName = methodTypeName(isStatic, hasLeadingCaller, mtype);
         return METHOD_CLASS_NAME_PREFIX + methodTypeName;
+    }
+    private static String classNamePrefix(Constructor<?> c, MethodType mtype) {
+        var methodTypeName = methodTypeName(true, false, mtype);
+        return CONSTRUCTOR_CLASS_NAME_PREFIX + methodTypeName;
     }
 
     /**
@@ -342,6 +373,12 @@ final class MethodHandleAccessorFactory {
     private static byte[] spinByteCode(String cn, Method method, MethodType mtype, boolean hasLeadingCaller) {
         var builder = new ClassByteBuilder(cn, MethodHandle.class);
         var bytes = builder.buildMethodAccessor(method, mtype, hasLeadingCaller);
+        maybeDumpClassFile(cn, bytes);
+        return bytes;
+    }
+    private static byte[] spinByteCode(String cn, Constructor<?> ctor, MethodType mtype) {
+        var builder = new ClassByteBuilder(cn, MethodHandle.class);
+        var bytes = builder.buildConstructorAccessor(ctor, mtype);
         maybeDumpClassFile(cn, bytes);
         return bytes;
     }

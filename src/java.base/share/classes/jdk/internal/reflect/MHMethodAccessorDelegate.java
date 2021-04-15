@@ -61,6 +61,9 @@ final class MHMethodAccessorDelegate implements MHMethodAccessor {
     @Hidden public Object invoke(Object obj, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(obj, arg1, arg2);
     }
+    @Hidden public Object invoke(Object obj, Object arg1, Object arg2, Object arg3) throws Throwable {
+        return target.invokeExact(obj, arg1, arg2, arg3);
+    }
     @Hidden public Object invoke(Object obj, Class<?> caller) throws Throwable {
         return target.invokeExact(obj, caller);
     }
@@ -69,6 +72,9 @@ final class MHMethodAccessorDelegate implements MHMethodAccessor {
     }
     @Hidden public Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(obj, caller, arg1, arg2);
+    }
+    @Hidden public Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2, Object arg3) throws Throwable {
+        return target.invokeExact(obj, caller, arg1, arg2, arg3);
     }
 
     // specialized version for static method
@@ -91,5 +97,8 @@ final class MHMethodAccessorDelegate implements MHMethodAccessor {
     }
     @Hidden public Object invoke(Class<?> caller, Object arg1, Object arg2) throws Throwable {
         return target.invokeExact(caller, arg1, arg2);
+    }
+    @Hidden public Object invoke(Class<?> caller, Object arg1, Object arg2, Object arg3) throws Throwable {
+        return target.invokeExact(caller, arg1, arg2, arg3);
     }
 }

@@ -59,6 +59,9 @@ public interface MHMethodAccessor {
     default Object invoke(Object obj, Object arg1, Object arg2) throws Throwable {
         throw new UnsupportedOperationException();
     }
+    default Object invoke(Object obj, Object arg1, Object arg2, Object arg3) throws Throwable {
+        throw new UnsupportedOperationException();
+    }
     default Object invoke(Object obj, Class<?> caller) throws Throwable {
         throw new UnsupportedOperationException();
     }
@@ -66,6 +69,9 @@ public interface MHMethodAccessor {
         throw new UnsupportedOperationException();
     }
     default Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2) throws Throwable {
+        throw new UnsupportedOperationException();
+    }
+    default Object invoke(Object obj, Class<?> caller, Object arg1, Object arg2, Object arg3) throws Throwable {
         throw new UnsupportedOperationException();
     }
 
@@ -87,6 +93,9 @@ public interface MHMethodAccessor {
         throw new UnsupportedOperationException();
     }
     default Object invoke(Class<?> caller, Object arg1, Object arg2) throws Throwable {
+        throw new UnsupportedOperationException();
+    }
+    default Object invoke(Class<?> caller, Object arg1, Object arg2, Object arg3) throws Throwable {
         throw new UnsupportedOperationException();
     }
 }

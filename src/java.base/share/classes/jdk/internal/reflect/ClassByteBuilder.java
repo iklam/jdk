@@ -26,6 +26,7 @@
 package jdk.internal.reflect;
 
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -85,6 +86,20 @@ public class ClassByteBuilder extends ClassWriter {
             addInvokeMethod(mtype);
         } else {
             addSpecializedInvokeMethod(mtype, isStatic, hasLeadingCaller, paramCount);
+        }
+        visitEnd();
+        return toByteArray();
+    }
+
+    public byte[] buildConstructorAccessor(Constructor<?> ctor, MethodType mtype) {
+        visit(V16, ACC_FINAL, classname, null, OBJECT_CLS, new String[] { METHOD_ACCESSOR_CLS });
+        addConstructor();
+
+        int paramCount = ctor.getParameterCount();
+        if (mtype.lastParameterType() == Object[].class) {
+            addInvokeMethod(mtype);
+        } else {
+            addSpecializedInvokeMethod(mtype, true /* no receiver */, false, paramCount);
         }
         visitEnd();
         return toByteArray();

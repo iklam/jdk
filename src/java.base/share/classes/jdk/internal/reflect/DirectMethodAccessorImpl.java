@@ -172,6 +172,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 0 -> mhInvoker.invoke();
                 case 1 -> mhInvoker.invoke(args[0]);
                 case 2 -> mhInvoker.invoke(args[0], args[1]);
+                case 3 -> mhInvoker.invoke(args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(args);
             };
         }
@@ -223,6 +224,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 0 -> mhInvoker.invoke(obj);
                 case 1 -> mhInvoker.invoke(obj, args[0]);
                 case 2 -> mhInvoker.invoke(obj, args[0], args[1]);
+                case 3 -> mhInvoker.invoke(obj, args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(obj, args);
             };
         }
@@ -334,6 +336,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 0 -> mhInvoker.invoke(caller);
                 case 1 -> mhInvoker.invoke(caller, args[0]);
                 case 2 -> mhInvoker.invoke(caller, args[0], args[1]);
+                case 3 -> mhInvoker.invoke(caller, args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(caller, args);
             };
         }
@@ -386,6 +389,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 0 -> mhInvoker.invoke(obj, caller);
                 case 1 -> mhInvoker.invoke(obj, caller, args[0]);
                 case 2 -> mhInvoker.invoke(obj, caller, args[0], args[1]);
+                case 3 -> mhInvoker.invoke(obj, caller, args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(obj, caller, args);
             };
         }
