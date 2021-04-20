@@ -27,13 +27,11 @@ package jdk.internal.reflect;
 
 import java.util.Set;
 
-import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
-
 /**
  * Utility methods used by DirectMethodAccessorImpl and DirectConstructorImpl
  */
 public class AccessorUtils {
-    static boolean isIllegalArgument(RuntimeException e) {
+    static boolean isIllegalArgument(Class<?> accessorType, RuntimeException e) {
         StackTraceElement[] stackTrace = e.getStackTrace();
         if (stackTrace.length == 0) {
             return false;       // would this happen?
@@ -49,7 +47,7 @@ public class AccessorUtils {
         for (; i < stackTrace.length; i++) {
             frame = stackTrace[i];
             String cname = frame.getClassName();
-            if (ACCESSOR_IMPL_CLASSES.contains(cname)) {
+            if (cname.equals(accessorType.getName())) {
                 // it's illegal argument if this exception is thrown from implClass
                 return true;
             }
@@ -58,14 +56,27 @@ public class AccessorUtils {
                 // it's not IAE as it's thrown from the reflective method
                 return false;
             }
-            // if thrown from java.base
             int index = cname.lastIndexOf(".");
-            String pn = cname.substring(0, index);
+            String pn = index > 0 ? cname.substring(0, index) : "";
             if (!IMPL_PACKAGES.contains(pn)) {
+                // exception thrown from java.base but not from reflection internals
+                return false;
+            }
+            if (isAccessorImplClass(cname)) {
+                // thrown from another reflection accessor impl class
                 return false;
             }
         }
         return false;
+    }
+
+    /*
+     * Returns true if it is DirectMethodAccessorImpl or DirectConstructorAccessorImpl
+     * or its subclass.
+     */
+    private static boolean isAccessorImplClass(String cn) {
+        return cn.startsWith(DirectMethodAccessorImpl.class.getName()) ||
+                cn.startsWith(DirectConstructorAccessorImpl.class.getName());
     }
 
     private static final Set<String> IMPL_PACKAGES = Set.of(
@@ -73,16 +84,5 @@ public class AccessorUtils {
             "java.lang.invoke",
             "jdk.internal.reflect",
             "sun.invoke.util"
-    );
-    private static final Set<String> ACCESSOR_IMPL_CLASSES = Set.of(
-            DirectMethodAccessorImpl.class.getName(),
-            DirectMethodAccessorImpl.StaticMethodAccessor.class.getName(),
-            DirectMethodAccessorImpl.InstanceMethodAccessor.class.getName(),
-            DirectMethodAccessorImpl.StaticAdaptiveMethodAccessor.class.getName(),
-            DirectMethodAccessorImpl.InstanceAdaptiveMethodAccessor.class.getName(),
-            DirectMethodAccessorImpl.StaticAdaptiveMethodAccessorWithLeadingCaller.class.getName(),
-            DirectMethodAccessorImpl.InstanceAdapterMethodAccessorWithLeadingCaller.class.getName(),
-            DirectMethodAccessorImpl.CallerSensitiveWithInvoker.class.getName(),
-            DirectConstructorAccessorImpl.class.getName()
     );
 }

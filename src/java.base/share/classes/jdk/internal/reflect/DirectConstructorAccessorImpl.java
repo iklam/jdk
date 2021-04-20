@@ -36,7 +36,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 
-import static jdk.internal.reflect.AccessorUtils.isIllegalArgument;
 import static jdk.internal.reflect.MethodHandleAccessorFactory.SPECIALIZED_PARAM_COUNT;
 
 class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
@@ -91,6 +90,10 @@ class DirectConstructorAccessorImpl extends ConstructorAccessorImpl {
         } catch (Throwable e) {
             throw new InvocationTargetException(e);
         }
+    }
+
+    private boolean isIllegalArgument(RuntimeException ex) {
+        return AccessorUtils.isIllegalArgument(DirectConstructorAccessorImpl.class, ex);
     }
 
     @Hidden

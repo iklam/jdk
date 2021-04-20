@@ -176,6 +176,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 default -> mhInvoker.invoke(args);
             };
         }
+
+        boolean isIllegalArgument(RuntimeException ex) {
+            return AccessorUtils.isIllegalArgument(StaticMethodAccessor.class, ex);
+        }
     }
 
     static class InstanceMethodAccessor extends DirectMethodAccessorImpl {
@@ -227,6 +231,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 3 -> mhInvoker.invoke(obj, args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(obj, args);
             };
+        }
+
+        boolean isIllegalArgument(RuntimeException ex) {
+            return AccessorUtils.isIllegalArgument(InstanceMethodAccessor.class, ex);
         }
     }
 
@@ -340,6 +348,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 default -> mhInvoker.invoke(caller, args);
             };
         }
+
+        boolean isIllegalArgument(RuntimeException ex) {
+            return AccessorUtils.isIllegalArgument(StaticAdaptiveMethodAccessorWithLeadingCaller.class, ex);
+        }
     }
 
     static class InstanceAdapterMethodAccessorWithLeadingCaller extends InstanceAdaptiveMethodAccessor {
@@ -381,6 +393,7 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             }
         }
 
+
         @Hidden
         @ForceInline
         Object invokeImpl(Class<?> caller, Object obj, Object[] args) throws Throwable {
@@ -392,6 +405,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
                 case 3 -> mhInvoker.invoke(obj, caller, args[0], args[1], args[2]);
                 default -> mhInvoker.invoke(obj, caller, args);
             };
+        }
+
+        boolean isIllegalArgument(RuntimeException ex) {
+            return AccessorUtils.isIllegalArgument(InstanceAdapterMethodAccessorWithLeadingCaller.class, ex);
         }
     }
 
@@ -447,6 +464,10 @@ abstract class DirectMethodAccessorImpl extends MethodAccessorImpl {
             } catch (Throwable e) {
                 throw new InvocationTargetException(e);
             }
+        }
+
+        boolean isIllegalArgument(RuntimeException ex) {
+            return AccessorUtils.isIllegalArgument(CallerSensitiveWithInvoker.class, ex);
         }
     }
 
