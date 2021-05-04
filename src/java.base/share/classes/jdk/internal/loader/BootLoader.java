@@ -65,14 +65,14 @@ public class BootLoader {
     }
 
     // ServiceCatalog for the boot class loader
-    private static final ServicesCatalog SERVICES_CATALOG;
-    static {
+    private static ServicesCatalog SERVICES_CATALOG = ServicesCatalog.create();
+
+    public static void initArchivedData() {
+        // We should come to here after only ModuleBootstrap::boot() has determined that
+        // the archived boot layer can be used.
         ArchivedClassLoaders archivedClassLoaders = ArchivedClassLoaders.get();
-        if (archivedClassLoaders != null) {
-            SERVICES_CATALOG = archivedClassLoaders.servicesCatalog(null);
-        } else {
-            SERVICES_CATALOG = ServicesCatalog.create();
-        }
+        assert archivedClassLoaders != null;
+        SERVICES_CATALOG = archivedClassLoaders.servicesCatalog(null);
     }
 
     // ClassLoaderValue map for the boot class loader
@@ -82,6 +82,8 @@ public class BootLoader {
     // native libraries loaded by the boot class loader
     private static final NativeLibraries NATIVE_LIBS
         = NativeLibraries.jniNativeLibraries(null);
+
+    private static final JavaLangAccess JLA = SharedSecrets.getJavaLangAccess();
 
     /**
      * Returns the unnamed module for the boot loader.
@@ -131,7 +133,7 @@ public class BootLoader {
      * Loads the Class object with the given name defined to the boot loader.
      */
     public static Class<?> loadClassOrNull(String name) {
-        return ClassLoaders.bootLoader().loadClassOrNull(name);
+        return JLA.findBootstrapClassOrNull(name);
     }
 
     /**

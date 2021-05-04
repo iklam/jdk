@@ -25,10 +25,8 @@
 
 package java.lang.invoke;
 
-import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.loader.BootLoader;
-import jdk.internal.misc.VM;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.FieldVisitor;
 import jdk.internal.org.objectweb.asm.MethodVisitor;
@@ -98,8 +96,6 @@ abstract class ClassSpecializer<T,K,S extends ClassSpecializer<T,K,S>.SpeciesDat
 
     /** Return the factory object used to build and load concrete species code. */
     protected final Factory factory() { return factory; }
-
-    private static final JavaLangAccess JLA = SharedSecrets.getJavaLangAccess();
 
     /**
      * Constructor for this class specializer.
@@ -478,11 +474,7 @@ abstract class ClassSpecializer<T,K,S extends ClassSpecializer<T,K,S>.SpeciesDat
             assert(className.indexOf('/') < 0) : className;
             Class<?> salvage = null;
             try {
-                if (VM.isModuleSystemInited()) {
-                    salvage = BootLoader.loadClassOrNull(className);
-                } else {
-                    salvage = JLA.findBootstrapClassOrNull(null, className);
-                }
+                salvage = BootLoader.loadClassOrNull(className);
             } catch (Error ex) {
                 // ignore
             } finally {

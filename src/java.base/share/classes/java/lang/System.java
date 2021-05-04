@@ -2195,7 +2195,7 @@ public final class System {
                                         boolean initialize, int flags, Object classData) {
                 return ClassLoader.defineClass0(loader, lookup, name, b, 0, b.length, pd, initialize, flags, classData);
             }
-            public Class<?> findBootstrapClassOrNull(ClassLoader cl, String name) {
+            public Class<?> findBootstrapClassOrNull(String name) {
                 return ClassLoader.findBootstrapClassOrNull(name);
             }
             public Package definePackage(ClassLoader cl, String name, Module module) {

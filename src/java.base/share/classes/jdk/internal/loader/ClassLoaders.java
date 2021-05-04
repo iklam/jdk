@@ -132,7 +132,7 @@ public class ClassLoaders {
 
         @Override
         protected Class<?> loadClassOrNull(String cn, boolean resolve) {
-            return JLA.findBootstrapClassOrNull(this, cn);
+            return JLA.findBootstrapClassOrNull(cn);
         }
     };
 
