@@ -67,7 +67,7 @@ class ArchivedClassLoaders {
     }
 
     ServicesCatalog servicesCatalog(ClassLoader loader) {
-        if (loader == null) {
+        if (loader == bootLoader) {
             return servicesCatalogs[0];
         } else if (loader == platformLoader) {
             return servicesCatalogs[1];

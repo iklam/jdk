@@ -166,7 +166,6 @@ public final class ModuleBootstrap {
         if (archivedBootLayer != null) {
             assert canUseArchivedBootLayer();
             bootLayer = archivedBootLayer.bootLayer();
-            BootLoader.initArchivedData();
             CDS.defineArchivedModules(ClassLoaders.platformClassLoader(), ClassLoaders.appClassLoader());
 
             // assume boot layer has at least one module providing a service

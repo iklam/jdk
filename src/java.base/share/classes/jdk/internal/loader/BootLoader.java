@@ -46,6 +46,7 @@ import jdk.internal.access.SharedSecrets;
 import jdk.internal.module.Modules;
 import jdk.internal.module.ServicesCatalog;
 import jdk.internal.util.StaticProperty;
+import jdk.internal.vm.annotation.Stable;
 
 /**
  * Find resources and packages in modules defined to the boot class loader or
@@ -65,15 +66,7 @@ public class BootLoader {
     }
 
     // ServiceCatalog for the boot class loader
-    private static ServicesCatalog SERVICES_CATALOG = ServicesCatalog.create();
-
-    public static void initArchivedData() {
-        // We should come to here after only ModuleBootstrap::boot() has determined that
-        // the archived boot layer can be used.
-        ArchivedClassLoaders archivedClassLoaders = ArchivedClassLoaders.get();
-        assert archivedClassLoaders != null;
-        SERVICES_CATALOG = archivedClassLoaders.servicesCatalog(null);
-    }
+    private static @Stable ServicesCatalog SERVICES_CATALOG;
 
     // ClassLoaderValue map for the boot class loader
     private static final ConcurrentHashMap<?, ?> CLASS_LOADER_VALUE_MAP
@@ -92,10 +85,17 @@ public class BootLoader {
         return UNNAMED_MODULE;
     }
 
+    public static void setServicesCatalog(ServicesCatalog catalog) {
+        assert SERVICES_CATALOG == null;
+        SERVICES_CATALOG = catalog;
+    }
+
     /**
      * Returns the ServiceCatalog for modules defined to the boot class loader.
      */
     public static ServicesCatalog getServicesCatalog() {
+        // should not be called before we have finished module system initialization
+        assert SERVICES_CATALOG != null;
         return SERVICES_CATALOG;
     }
 

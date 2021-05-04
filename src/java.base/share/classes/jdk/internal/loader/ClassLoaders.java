@@ -61,8 +61,11 @@ public class ClassLoaders {
         if (archivedClassLoaders != null) {
             // assert VM.getSavedProperty("jdk.boot.class.path.append") == null
             BOOT_LOADER = (BootClassLoader) archivedClassLoaders.bootLoader();
+            ServicesCatalog catalog = archivedClassLoaders.servicesCatalog(BOOT_LOADER);
+            BootLoader.setServicesCatalog(catalog);
+
             PLATFORM_LOADER = (PlatformClassLoader) archivedClassLoaders.platformLoader();
-            ServicesCatalog catalog = archivedClassLoaders.servicesCatalog(PLATFORM_LOADER);
+            catalog = archivedClassLoaders.servicesCatalog(PLATFORM_LOADER);
             ServicesCatalog.putServicesCatalog(PLATFORM_LOADER, catalog);
         } else {
             // -Xbootclasspath/a or -javaagent with Boot-Class-Path attribute
@@ -71,6 +74,7 @@ public class ClassLoaders {
                     ? new URLClassPath(append, true)
                     : null;
             BOOT_LOADER = new BootClassLoader(ucp);
+            BootLoader.setServicesCatalog(ServicesCatalog.create());
             PLATFORM_LOADER = new PlatformClassLoader(BOOT_LOADER);
         }
         // A class path is required when no initial module is specified.
