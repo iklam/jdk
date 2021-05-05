@@ -55,18 +55,20 @@ public class ClassLoaders {
     private static final PlatformClassLoader PLATFORM_LOADER;
     private static final AppClassLoader APP_LOADER;
 
+    private static void setArchivedServicesCatalog(ArchivedClassLoaders archivedClassLoaders, ClassLoader loader) {
+        ServicesCatalog catalog = archivedClassLoaders.servicesCatalog(loader);
+        ServicesCatalog.putServicesCatalog(loader, catalog);
+    }
+
     // Creates the built-in class loaders.
     static {
         ArchivedClassLoaders archivedClassLoaders = ArchivedClassLoaders.get();
         if (archivedClassLoaders != null) {
             // assert VM.getSavedProperty("jdk.boot.class.path.append") == null
             BOOT_LOADER = (BootClassLoader) archivedClassLoaders.bootLoader();
-            ServicesCatalog catalog = archivedClassLoaders.servicesCatalog(BOOT_LOADER);
-            BootLoader.setServicesCatalog(catalog);
-
+            setArchivedServicesCatalog(archivedClassLoaders, BOOT_LOADER);
             PLATFORM_LOADER = (PlatformClassLoader) archivedClassLoaders.platformLoader();
-            catalog = archivedClassLoaders.servicesCatalog(PLATFORM_LOADER);
-            ServicesCatalog.putServicesCatalog(PLATFORM_LOADER, catalog);
+            setArchivedServicesCatalog(archivedClassLoaders, PLATFORM_LOADER);
         } else {
             // -Xbootclasspath/a or -javaagent with Boot-Class-Path attribute
             String append = VM.getSavedProperty("jdk.boot.class.path.append");
@@ -74,7 +76,6 @@ public class ClassLoaders {
                     ? new URLClassPath(append, true)
                     : null;
             BOOT_LOADER = new BootClassLoader(ucp);
-            BootLoader.setServicesCatalog(ServicesCatalog.create());
             PLATFORM_LOADER = new PlatformClassLoader(BOOT_LOADER);
         }
         // A class path is required when no initial module is specified.
@@ -90,8 +91,7 @@ public class ClassLoaders {
         URLClassPath ucp = new URLClassPath(cp, false);
         if (archivedClassLoaders != null) {
             APP_LOADER = (AppClassLoader) archivedClassLoaders.appLoader();
-            ServicesCatalog catalog = archivedClassLoaders.servicesCatalog(APP_LOADER);
-            ServicesCatalog.putServicesCatalog(APP_LOADER, catalog);
+            setArchivedServicesCatalog(archivedClassLoaders, APP_LOADER);
             APP_LOADER.setClassPath(ucp);
         } else {
             APP_LOADER = new AppClassLoader(PLATFORM_LOADER, ucp);

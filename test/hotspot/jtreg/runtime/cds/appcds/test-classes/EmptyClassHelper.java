@@ -46,7 +46,7 @@ class EmptyClassHelper {
                 System.out.println(ex.toString());
             }
         } else {
-            cls = jla.findBootstrapClassOrNull(appLoader, className);
+            cls = jla.findBootstrapClassOrNull(className);
             System.out.println("bootLoader loaded class");
             System.out.println("cls = " + cls);
             try {

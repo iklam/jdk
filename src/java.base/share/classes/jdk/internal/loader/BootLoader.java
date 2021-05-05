@@ -65,9 +65,6 @@ public class BootLoader {
         setBootLoaderUnnamedModule0(UNNAMED_MODULE);
     }
 
-    // ServiceCatalog for the boot class loader
-    private static @Stable ServicesCatalog SERVICES_CATALOG;
-
     // ClassLoaderValue map for the boot class loader
     private static final ConcurrentHashMap<?, ?> CLASS_LOADER_VALUE_MAP
         = new ConcurrentHashMap<>();
@@ -85,18 +82,11 @@ public class BootLoader {
         return UNNAMED_MODULE;
     }
 
-    public static void setServicesCatalog(ServicesCatalog catalog) {
-        assert SERVICES_CATALOG == null;
-        SERVICES_CATALOG = catalog;
-    }
-
     /**
      * Returns the ServiceCatalog for modules defined to the boot class loader.
      */
     public static ServicesCatalog getServicesCatalog() {
-        // should not be called before we have finished module system initialization
-        assert SERVICES_CATALOG != null;
-        return SERVICES_CATALOG;
+        return ServicesCatalog.getServicesCatalog(ClassLoaders.bootLoader());
     }
 
     /**
