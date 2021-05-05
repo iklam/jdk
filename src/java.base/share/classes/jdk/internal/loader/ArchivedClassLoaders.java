@@ -47,7 +47,7 @@ class ArchivedClassLoaders {
         appLoader = ClassLoaders.appClassLoader();
 
         servicesCatalogs = new ServicesCatalog[3];
-        servicesCatalogs[0] = BootLoader.getServicesCatalog();
+        servicesCatalogs[0] = ServicesCatalog.getServicesCatalog(bootLoader);
         servicesCatalogs[1] = ServicesCatalog.getServicesCatalog(platformLoader);
         servicesCatalogs[2] = ServicesCatalog.getServicesCatalog(appLoader);
 
