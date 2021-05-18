@@ -30,53 +30,32 @@
 #include "utilities/ostream.hpp"
 
 class ClassListWriter {
-  friend const char* make_log_name(const char* log_name, const char* force_directory);
-
+#if INCLUDE_CDS
   static fileStream* _classlist_file;
   MutexLocker _locker;
 public:
-#if INCLUDE_CDS
   ClassListWriter() : _locker(Thread::current(), ClassListFile_lock, Mutex::_no_safepoint_check_flag) {}
-#else
-  ClassListWriter() : _locker(Thread::current(), NULL, Mutex::_no_safepoint_check_flag) {}
-#endif
 
   outputStream* stream() {
     return _classlist_file;
   }
 
   static bool is_enabled() {
-#if INCLUDE_CDS
     return _classlist_file != NULL && _classlist_file->is_open();
+  }
+
 #else
+public:
+  static bool is_enabled() {
     return false;
-#endif
   }
+#endif
 
-  static void init() {
-#if INCLUDE_CDS
-  // For -XX:DumpLoadedClassList=<file> option
-  if (DumpLoadedClassList != NULL) {
-    const char* list_name = make_log_name(DumpLoadedClassList, NULL);
-    _classlist_file = new(ResourceObj::C_HEAP, mtInternal)
-                         fileStream(list_name);
-    _classlist_file->print_cr("# NOTE: Do not modify this file.");
-    _classlist_file->print_cr("#");
-    _classlist_file->print_cr("# This file is generated via the -XX:DumpLoadedClassList=<class_list_file> option");
-    _classlist_file->print_cr("# and is used at CDS archive dump time (see -Xshare:dump).");
-    _classlist_file->print_cr("#");
-    FREE_C_HEAP_ARRAY(char, list_name);
-  }
-#endif
-  }
 
-  static void delete_classlist() {
-#if INCLUDE_CDS
-    if (_classlist_file != NULL) {
-        delete _classlist_file;
-    }
-#endif
-  }
+  static void init() NOT_CDS_RETURN;
+  static void write(const InstanceKlass* k) NOT_CDS_RETURN;
+  static void write_to_stream(const InstanceKlass* k, outputStream* stream) NOT_CDS_RETURN;
+  static void delete_classlist() NOT_CDS_RETURN;
 };
 
 #endif // SHARE_CDS_CLASSLISTWRITER_HPP

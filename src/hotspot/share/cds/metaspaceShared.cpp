@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "jvm_io.h"
 #include "cds/archiveBuilder.hpp"
+#include "cds/classListWriter.hpp"
 #include "cds/classListParser.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/dumpAllocStats.hpp"
@@ -153,9 +154,7 @@ public:
     for (Klass* klass = cld->klasses(); klass != NULL; klass = klass->next_link()) {
       if (klass->is_instance_klass()) {
         InstanceKlass* ik = InstanceKlass::cast(klass);
-        if (ik->is_shareable()) {
-          _stream->print_cr("%s", ik->name()->as_C_string());
-        }
+        ClassListWriter::write_to_stream(ik, _stream);
       }
     }
   }

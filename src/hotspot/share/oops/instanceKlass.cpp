@@ -3592,7 +3592,7 @@ const char* InstanceKlass::internal_name() const {
 void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
                                              const ModuleEntry* module_entry,
                                              const ClassFileStream* cfs) const {
-  log_to_classlist();
+  ClassListWriter::write(this);
 
   if (!log_is_enabled(Info, class, load)) {
     return;
@@ -4133,45 +4133,6 @@ unsigned char * InstanceKlass::get_cached_class_file_bytes() {
   return VM_RedefineClasses::get_cached_class_file_bytes(_cached_class_file);
 }
 #endif
-
-bool InstanceKlass::is_shareable() const {
-#if INCLUDE_CDS
-  ClassLoaderData* loader_data = class_loader_data();
-  if (!SystemDictionaryShared::is_sharing_possible(loader_data)) {
-    return false;
-  }
-
-  if (is_hidden()) {
-    return false;
-  }
-
-  if (module()->is_patched()) {
-    return false;
-  }
-
-  return true;
-#else
-  return false;
-#endif
-}
-
-void InstanceKlass::log_to_classlist() const {
-#if INCLUDE_CDS
-  ResourceMark rm;
-  if (ClassListWriter::is_enabled()) {
-    if (!ClassLoader::has_jrt_entry()) {
-       warning("DumpLoadedClassList and CDS are not supported in exploded build");
-       DumpLoadedClassList = NULL;
-       return;
-    }
-    if (is_shareable()) {
-      ClassListWriter w;
-      w.stream()->print_cr("%s", name()->as_C_string());
-      w.stream()->flush();
-    }
-  }
-#endif // INCLUDE_CDS
-}
 
 // Make a step iterating over the class hierarchy under the root class.
 // Skips subclasses if requested.

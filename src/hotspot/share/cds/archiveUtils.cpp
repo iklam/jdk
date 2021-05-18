@@ -329,8 +329,6 @@ void ReadClosure::do_region(u_char* start, size_t size) {
   }
 }
 
-fileStream* ClassListWriter::_classlist_file = NULL;
-
 void ArchiveUtils::log_to_classlist(BootstrapInfo* bootstrap_specifier, TRAPS) {
   if (ClassListWriter::is_enabled()) {
     if (SystemDictionaryShared::is_supported_invokedynamic(bootstrap_specifier)) {
