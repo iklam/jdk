@@ -1164,28 +1164,28 @@ InstanceKlass* SystemDictionaryShared::acquire_class_for_current_thread(
 }
 
 class UniqueUnregisteredClassesTable : public ResourceHashtable<
-  Symbol*, bool,
+  Symbol*, InstanceKlass*,
   primitive_hash<Symbol*>,
   primitive_equals<Symbol*>,
-  6661,                             // prime number
+  15889, // prime number
   ResourceObj::C_HEAP> {};
 
 static UniqueUnregisteredClassesTable* _unique_unregistered_classes = NULL;
 
-bool SystemDictionaryShared::check_unique_unregistered_class(Thread* current, InstanceKlass* k) {
+bool SystemDictionaryShared::check_unique_unregistered_class(Thread* current, InstanceKlass* klass) {
   // We don't allow duplicated unregistered classes of the same name.
   Arguments::assert_is_dumping_archive();
   MutexLocker ml(current, UniqueUnregisteredClasses_lock);
-  Symbol* name = k->name();
+  Symbol* name = klass->name();
   if (_unique_unregistered_classes == NULL) {
     _unique_unregistered_classes = new (ResourceObj::C_HEAP, mtClass)UniqueUnregisteredClassesTable();
   }
   bool created;
-  _unique_unregistered_classes->put_if_absent(name, true, &created);
+  InstanceKlass** v = _unique_unregistered_classes->put_if_absent(name, klass, &created);
   if (created) {
     name->increment_refcount();
   }
-  return created;
+  return (klass == *v);
 }
 
 // true == class was successfully added; false == a duplicated class already exists.
@@ -1298,6 +1298,21 @@ void SystemDictionaryShared::remove_dumptime_info(InstanceKlass* k) {
     p->_loader_constraints = NULL;
   }
   _dumptime_table->remove(k);
+}
+
+void SystemDictionaryShared::handle_class_unloading(InstanceKlass* klass) {
+  if (Arguments::is_dumping_archive()) {
+    remove_dumptime_info(klass);
+  }
+
+  if (_unique_unregistered_classes != NULL) {
+    MutexLocker ml(Thread::current(), UniqueUnregisteredClasses_lock);
+    Symbol* name = klass->name();
+    InstanceKlass** v = _unique_unregistered_classes->get(name);
+    if (v != NULL) {
+      *v = NULL;
+    }
+  }
 }
 
 bool SystemDictionaryShared::is_jfr_event_class(InstanceKlass *k) {
@@ -1418,14 +1433,14 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
 
   if (k->is_hidden() && !is_registered_lambda_proxy_class(k)) {
     ResourceMark rm;
-    log_debug(cds)("Skipping %s: %s", k->name()->as_C_string(), "Hidden class");
+    log_debug(cds)("Skipping %s: Hidden class", k->name()->as_C_string());
     return true;
   }
 
   InstanceKlass* super = k->java_super();
   if (super != NULL && check_for_exclusion(super, NULL)) {
     ResourceMark rm;
-    log_warning(cds)("Skipping %s: super class %s is excluded @%p", k->name()->as_C_string(), super->name()->as_C_string(), super);
+    log_warning(cds)("Skipping %s: super class %s is excluded", k->name()->as_C_string(), super->name()->as_C_string());
     return true;
   }
 
@@ -1434,7 +1449,7 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
   for (int i = 0; i < len; i++) {
     InstanceKlass* intf = interfaces->at(i);
     if (check_for_exclusion(intf, NULL)) {
-      log_warning(cds)("Skipping %s: interface %s is excluded @%p", k->name()->as_C_string(), intf->name()->as_C_string(), intf);
+      log_warning(cds)("Skipping %s: interface %s is excluded", k->name()->as_C_string(), intf->name()->as_C_string());
       return true;
     }
   }

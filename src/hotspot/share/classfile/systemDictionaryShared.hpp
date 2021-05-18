@@ -252,6 +252,7 @@ public:
                                                             Symbol* super_name,  bool is_superclass);
 
   static void init_dumptime_info(InstanceKlass* k) NOT_CDS_RETURN;
+  static void handle_class_unloading(InstanceKlass* k) NOT_CDS_RETURN;
   static void remove_dumptime_info(InstanceKlass* k) NOT_CDS_RETURN;
 
   static Dictionary* boot_loader_dictionary() {
