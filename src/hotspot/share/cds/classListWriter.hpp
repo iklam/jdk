@@ -29,10 +29,15 @@
 #include "runtime/thread.hpp"
 #include "utilities/ostream.hpp"
 
+class ClassFileStream;
+
 class ClassListWriter {
 #if INCLUDE_CDS
   static fileStream* _classlist_file;
   MutexLocker _locker;
+  static int get_class_list_id(const InstanceKlass* k);
+  static bool has_class_list_id(const InstanceKlass* k);
+
 public:
   ClassListWriter() : _locker(Thread::current(), ClassListFile_lock, Mutex::_no_safepoint_check_flag) {}
 
@@ -53,8 +58,8 @@ public:
 
 
   static void init() NOT_CDS_RETURN;
-  static void write(const InstanceKlass* k) NOT_CDS_RETURN;
-  static void write_to_stream(const InstanceKlass* k, outputStream* stream) NOT_CDS_RETURN;
+  static void write(const InstanceKlass* k, const ClassFileStream* cfs) NOT_CDS_RETURN;
+  static void write_to_stream(const InstanceKlass* k, outputStream* stream, const ClassFileStream* cfs = NULL) NOT_CDS_RETURN;
   static void delete_classlist() NOT_CDS_RETURN;
 };
 

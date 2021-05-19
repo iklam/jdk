@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/classListWriter.hpp"
+#include "classfile/classFileStream.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/moduleEntry.hpp"
@@ -49,7 +50,7 @@ void ClassListWriter::init() {
   }
 }
 
-void ClassListWriter::write(const InstanceKlass* k) {
+void ClassListWriter::write(const InstanceKlass* k, const ClassFileStream* cfs) {
   if (!is_enabled()) {
     return;
   }
@@ -61,13 +62,71 @@ void ClassListWriter::write(const InstanceKlass* k) {
   }
 
   ClassListWriter w;
-  write_to_stream(k, w.stream());
+  write_to_stream(k, w.stream(), cfs);
 }
 
-void ClassListWriter::write_to_stream(const InstanceKlass* k, outputStream* stream) {
+class ClassListIDTable : public ResourceHashtable<
+  const InstanceKlass*, int,
+  primitive_hash<const InstanceKlass*>,
+  primitive_equals<const InstanceKlass*>,
+  15889, // prime number
+  ResourceObj::C_HEAP> {};
+
+static ClassListIDTable* _class_list_id_table = NULL;
+static int _total_class_list_id;
+
+int ClassListWriter::get_class_list_id(const InstanceKlass* k) {
+  //assert has lock
+  if (_class_list_id_table == NULL) {
+    _class_list_id_table = new (ResourceObj::C_HEAP, mtClass)ClassListIDTable();
+  }
+  bool created;
+  int* v = _class_list_id_table->put_if_absent(k, &created);
+  if (created) {
+    *v = _total_class_list_id++;
+  }
+  return *v;
+}
+
+bool ClassListWriter::has_class_list_id(const InstanceKlass* k) {
+  //assert has lock
+  if (_class_list_id_table != NULL) {
+    return _class_list_id_table->get(k) != NULL;
+  } else {
+    return false;
+  }
+}
+
+void ClassListWriter::write_to_stream(const InstanceKlass* k, outputStream* stream, const ClassFileStream* cfs) {
   ClassLoaderData* loader_data = k->class_loader_data();
+
   if (!SystemDictionaryShared::is_sharing_possible(loader_data)) {
-    return;
+    if (cfs == NULL || strncmp(cfs->source(), "file:", 5) != 0) {
+      return;
+    }
+    if (k->has_old_class_version()) {
+      return;
+    }
+    if (!SystemDictionaryShared::check_unique_unregistered_class(Thread::current(), (InstanceKlass*)k)) {
+      return;
+    }
+  }
+
+
+  {
+    InstanceKlass* super = k->java_super();
+    if (super != NULL && !has_class_list_id(super)) {
+      return;
+    }
+
+    Array<InstanceKlass*>* interfaces = k->local_interfaces();
+    int len = interfaces->length();
+    for (int i = 0; i < len; i++) {
+      InstanceKlass* intf = interfaces->at(i);
+      if (!has_class_list_id(super)) {
+        return;
+      }
+    }
   }
 
   if (k->is_hidden()) {
@@ -79,7 +138,26 @@ void ClassListWriter::write_to_stream(const InstanceKlass* k, outputStream* stre
   }
 
   ResourceMark rm;
-  stream->print_cr("%s", k->name()->as_C_string());
+  stream->print("%s id: %d", k->name()->as_C_string(), get_class_list_id(k));
+  if (!SystemDictionaryShared::is_sharing_possible(loader_data)) {
+    InstanceKlass* super = k->java_super();
+    assert(super != NULL, "must be");
+    stream->print(" super: %d", get_class_list_id(super));
+
+    Array<InstanceKlass*>* interfaces = k->local_interfaces();
+    int len = interfaces->length();
+    if (len > 0) {
+      stream->print(" interfaces:");
+      for (int i = 0; i < len; i++) {
+        InstanceKlass* intf = interfaces->at(i);
+        stream->print(" %d", get_class_list_id(intf));
+      }
+    }
+
+    stream->print(" source: %s", cfs->source() + 5); // skip "file:/"
+  }
+
+  stream->cr();
   stream->flush();
 }
 

@@ -3590,7 +3590,7 @@ const char* InstanceKlass::internal_name() const {
 void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
                                              const ModuleEntry* module_entry,
                                              const ClassFileStream* cfs) const {
-  ClassListWriter::write(this);
+  ClassListWriter::write(this, cfs);
 
   if (!log_is_enabled(Info, class, load)) {
     return;

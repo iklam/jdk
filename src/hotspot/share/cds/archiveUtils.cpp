@@ -334,6 +334,7 @@ void ArchiveUtils::log_to_classlist(BootstrapInfo* bootstrap_specifier, TRAPS) {
     if (SystemDictionaryShared::is_supported_invokedynamic(bootstrap_specifier)) {
       ResourceMark rm(THREAD);
       const constantPoolHandle& pool = bootstrap_specifier->pool();
+     if (SystemDictionaryShared::is_sharing_possible(pool->pool_holder()->class_loader_data())) {
       int pool_index = bootstrap_specifier->bss_index();
       ClassListWriter w;
       w.stream()->print("%s %s", LAMBDA_PROXY_TAG, pool->pool_holder()->name()->as_C_string());
@@ -344,6 +345,7 @@ void ArchiveUtils::log_to_classlist(BootstrapInfo* bootstrap_specifier, TRAPS) {
         w.stream()->print(" %s", indy_items->at(i));
       }
       w.stream()->cr();
+     }
     }
   }
 }

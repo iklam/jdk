@@ -1174,7 +1174,6 @@ static UniqueUnregisteredClassesTable* _unique_unregistered_classes = NULL;
 
 bool SystemDictionaryShared::check_unique_unregistered_class(Thread* current, InstanceKlass* klass) {
   // We don't allow duplicated unregistered classes of the same name.
-  Arguments::assert_is_dumping_archive();
   MutexLocker ml(current, UniqueUnregisteredClasses_lock);
   Symbol* name = klass->name();
   if (_unique_unregistered_classes == NULL) {
