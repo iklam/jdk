@@ -29,14 +29,10 @@
 
 template<
     typename K, typename V,
-    // xlC does not compile this:
-    // http://stackoverflow.com/questions/8532961/template-argument-of-type-that-is-defined-by-inner-typedef-from-other-template-c
-    //typename ResourceHashtableFns<K>::hash_fn   HASH   = primitive_hash<K>,
-    //typename ResourceHashtableFns<K>::equals_fn EQUALS = primitive_equals<K>,
-    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
-    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>,
-    ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
-    MEMFLAGS MEM_TYPE = mtInternal
+    unsigned (*HASH)  (K const&),
+    bool     (*EQUALS)(K const&, K const&),
+    ResourceObj::allocation_type ALLOC_TYPE,
+    MEMFLAGS MEM_TYPE
     >
 class BaseResourceHashtable : public ResourceObj {
 protected:
@@ -180,6 +176,8 @@ protected:
   }
 };
 
+// This is the old ResourceHashtable where the SIZE is a built-time constant
+
 template<
     typename K, typename V,
     // xlC does not compile this:
@@ -198,10 +196,6 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
   typedef class MySuper::Node Node;
 
   Node* _table[SIZE];
-
-  Node** lookup_node(unsigned hash, K const& key) {
-    return MySuper::lookup_node(hash, key, _table, SIZE);
-  }
 
  public:
   ResourceHashtable() { memset(_table, 0, SIZE * sizeof(Node*)); }
@@ -237,6 +231,70 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
   template<class ITER>
   void iterate(ITER* iter) const {
     return MySuper::iterate(iter, _table, SIZE);
+  }
+};
+
+// This is the new ResourceHashtable where the _size is given at runtime
+
+template<
+    typename K, typename V,
+    unsigned (*HASH)  (K const&)           = primitive_hash<K>,    // see comments in ResourceHashtable
+    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>,  // see comments in ResourceHashtable
+    ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
+    MEMFLAGS MEM_TYPE = mtInternal
+    >
+class ResourceHashtableXX : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> {
+ private:
+  typedef class BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> MySuper;
+  typedef class MySuper::Node Node;
+
+  int _size;
+  Node** _table;
+
+ public:
+  ResourceHashtableXX(int size) : _size(size) {
+    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
+      _table = NEW_C_HEAP_ARRAY(Node*, _size, MEM_TYPE);
+    } else {
+      _table = NEW_RESOURCE_ARRAY(Node*, _size);
+    }
+    memset(_table, 0, _size * sizeof(Node*));
+  }
+
+  ~ResourceHashtableXX() {
+    MySuper::deallocate(_table, _size);
+    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
+      FREE_C_HEAP_ARRAY(Node*, _table);
+    }
+  }
+
+  bool contains(K const& key) const {
+    return get(key) != NULL;
+  }
+
+  V* get(K const& key) const {
+    return MySuper::get(key, (Node**)_table, _size);
+  }
+
+  bool put(K const& key, V const& value) {
+    return MySuper::put(key, value, _table, _size);
+  }
+
+  V* put_if_absent(K const& key, bool* p_created) {
+    return MySuper::put_if_absent(key, p_created, _table, _size);
+  }
+
+  V* put_if_absent(K const& key, V const& value, bool* p_created) {
+    return MySuper::put_if_absent(key, value, p_created, _table, _size);
+  }
+
+  bool remove(K const& key) {
+    return MySuper::remove(key, _table, _size);
+  }
+
+  template<class ITER>
+  void iterate(ITER* iter) const {
+    return MySuper::iterate(iter, _table, _size);
   }
 };
 

@@ -120,6 +120,23 @@ oop SystemDictionary::java_platform_loader() {
   return _java_platform_loader.resolve();
 }
 
+static void testtest(int table_size) {
+  if (UseNewCode) {
+    ResourceHashtableXX<int, int, primitive_hash<int>, primitive_equals<int>, ResourceObj::C_HEAP> mytable(table_size);
+    bool created;
+    mytable.put(1, 11111);
+    mytable.put(2, 22222);
+    tty->print_cr("[1] => %d", *mytable.get(1));
+    tty->print_cr("[2] => %d", *mytable.get(2));
+
+    mytable.put_if_absent(2, 33333, &created);
+    tty->print_cr("[2] => %d, created = %d", *mytable.get(2), created);
+
+    mytable.put_if_absent(3, 33333, &created);
+    tty->print_cr("[3] => %d, created = %d", *mytable.get(3), created);
+  }
+}
+
 void SystemDictionary::compute_java_loaders(TRAPS) {
   JavaValue result(T_OBJECT);
   InstanceKlass* class_loader_klass = vmClasses::ClassLoader_klass();
@@ -138,6 +155,8 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
                          CHECK);
 
   _java_platform_loader = OopHandle(Universe::vm_global(), result.get_oop());
+
+  testtest(12345);
 }
 
 ClassLoaderData* SystemDictionary::register_loader(Handle class_loader, bool create_mirror_cld) {
