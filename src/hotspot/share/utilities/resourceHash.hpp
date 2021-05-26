@@ -72,6 +72,21 @@ protected:
     return ptr;
   }
 
+  static inline void _deallocate(Node** table, int size) {
+    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
+      Node* const* bucket = table;
+      while (bucket < &table[size]) {
+        Node* node = *bucket;
+        while (node != NULL) {
+          Node* cur = node;
+          node = node->_next;
+          delete cur;
+        }
+        ++bucket;
+      }
+    }
+  }
+
   inline static V* _get(K const& key, Node** table, int size) {
     unsigned hv = HASH(key);
     Node** ptr = _lookup_node(hv, key, table, size);
@@ -82,7 +97,39 @@ protected:
     }
   }
 
+ /**
+  * Inserts or replaces a value in the table.
+  * @return: true:  if a new item is added
+  *          false: if the item already existed and the value is updated
+  */
+  inline static bool put(K const& key, V const& value, Node** table, int size) {
+    unsigned hv = HASH(key);
+    Node** ptr = _lookup_node(hv, key, table, size);
+    if (*ptr != NULL) {
+      (*ptr)->_value = value;
+      return false;
+    } else {
+      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key, value);
+      return true;
+    }
+  }
 
+  // Look up the key.
+  // If an entry for the key exists, leave map unchanged and return a pointer to its value.
+  // If no entry for the key exists, create a new entry from key and a default-created value
+  //  and return a pointer to the value.
+  // *p_created is true if entry was created, false if entry pre-existed.
+  inline static V* put_if_absent(K const& key, bool* p_created, Node** table, int size) {
+    unsigned hv = HASH(key);
+    Node** ptr = _lookup_node(hv, key, table, size);
+    if (*ptr == NULL) {
+      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key);
+      *p_created = true;
+    } else {
+      *p_created = false;
+    }
+    return &(*ptr)->_value;
+  }
 };
 
 template<
@@ -108,99 +155,27 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
     return MySuper::_lookup_node(hash, key, _table, SIZE);
   }
 
-  Node const** lookup_node(unsigned hash, K const& key) const {
-    return const_cast<Node const**>(
-        const_cast<ResourceHashtable*>(this)->lookup_node(hash, key));
-  }
-
  public:
   ResourceHashtable() { memset(_table, 0, SIZE * sizeof(Node*)); }
 
-  static inline void _deallocate(Node** table, int size) {
-    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
-      Node* const* bucket = table;
-      while (bucket < &table[size]) {
-        Node* node = *bucket;
-        while (node != NULL) {
-          Node* cur = node;
-          node = node->_next;
-          delete cur;
-        }
-        ++bucket;
-      }
-    }
-  }
-
   ~ResourceHashtable() {
-    _deallocate(_table, SIZE);
+    MySuper::_deallocate(_table, SIZE);
   }
 
   bool contains(K const& key) const {
     return get(key) != NULL;
   }
 
-
-#if 0
-  static inline Node** _lookup_node(unsigned hash, K const& key, Node** table, int size) {
-    unsigned index = hash % size;
-    Node** ptr = &table[index];
-    while (*ptr != NULL) {
-      Node* node = *ptr;
-      if (node->_hash == hash && EQUALS(key, node->_key)) {
-        break;
-      }
-      ptr = &(node->_next);
-    }
-    return ptr;
-  }
-
-  inline static V* _get(K const& key, Node** table, int size) {
-    unsigned hv = HASH(key);
-    Node** ptr = _lookup_node(hv, key, table, size);
-    if (*ptr != NULL) {
-      return const_cast<V*>(&(*ptr)->_value);
-    } else {
-      return NULL;
-    }
-  }
-#endif
-
   V* get(K const& key) const {
     return MySuper::_get(key, (Node**)_table, SIZE);
   }
 
- /**
-  * Inserts or replaces a value in the table.
-  * @return: true:  if a new item is added
-  *          false: if the item already existed and the value is updated
-  */
   bool put(K const& key, V const& value) {
-    unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
-    if (*ptr != NULL) {
-      (*ptr)->_value = value;
-      return false;
-    } else {
-      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key, value);
-      return true;
-    }
+    return MySuper::put(key, value, _table, SIZE);
   }
 
-  // Look up the key.
-  // If an entry for the key exists, leave map unchanged and return a pointer to its value.
-  // If no entry for the key exists, create a new entry from key and a default-created value
-  //  and return a pointer to the value.
-  // *p_created is true if entry was created, false if entry pre-existed.
   V* put_if_absent(K const& key, bool* p_created) {
-    unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
-    if (*ptr == NULL) {
-      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key);
-      *p_created = true;
-    } else {
-      *p_created = false;
-    }
-    return &(*ptr)->_value;
+    return MySuper::put_if_absent(key, p_created, _table, SIZE);
   }
 
   // Look up the key.
