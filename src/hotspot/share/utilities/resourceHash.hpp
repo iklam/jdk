@@ -27,6 +27,25 @@
 
 #include "memory/allocation.hpp"
 
+
+template<
+    typename K, typename V,
+    // xlC does not compile this:
+    // http://stackoverflow.com/questions/8532961/template-argument-of-type-that-is-defined-by-inner-typedef-from-other-template-c
+    //typename ResourceHashtableFns<K>::hash_fn   HASH   = primitive_hash<K>,
+    //typename ResourceHashtableFns<K>::equals_fn EQUALS = primitive_equals<K>,
+    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
+    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>,
+    ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
+    MEMFLAGS MEM_TYPE = mtInternal
+    >
+class BaseResourceHashtable : public ResourceObj {
+
+
+};
+
+
+
 template<
     typename K, typename V,
     // xlC does not compile this:
@@ -39,7 +58,7 @@ template<
     ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
     MEMFLAGS MEM_TYPE = mtInternal
     >
-class ResourceHashtable : public ResourceObj {
+class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> {
  private:
 
   class Node : public ResourceObj {
@@ -62,9 +81,9 @@ class ResourceHashtable : public ResourceObj {
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
-  Node** lookup_node(unsigned hash, K const& key) {
-    unsigned index = hash % SIZE;
-    Node** ptr = &_table[index];
+  static inline Node** _lookup_node(unsigned hash, K const& key, Node** table, int size) {
+    unsigned index = hash % size;
+    Node** ptr = &table[index];
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -75,6 +94,10 @@ class ResourceHashtable : public ResourceObj {
     return ptr;
   }
 
+  Node** lookup_node(unsigned hash, K const& key) {
+    return _lookup_node(hash, key, _table, SIZE);
+  }
+
   Node const** lookup_node(unsigned hash, K const& key) const {
     return const_cast<Node const**>(
         const_cast<ResourceHashtable*>(this)->lookup_node(hash, key));
@@ -83,10 +106,10 @@ class ResourceHashtable : public ResourceObj {
  public:
   ResourceHashtable() { memset(_table, 0, SIZE * sizeof(Node*)); }
 
-  ~ResourceHashtable() {
-    if (ALLOC_TYPE == C_HEAP) {
-      Node* const* bucket = _table;
-      while (bucket < &_table[SIZE]) {
+  static inline void _deallocate(Node** table, int size) {
+    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
+      Node* const* bucket = table;
+      while (bucket < &table[size]) {
         Node* node = *bucket;
         while (node != NULL) {
           Node* cur = node;
@@ -96,6 +119,10 @@ class ResourceHashtable : public ResourceObj {
         ++bucket;
       }
     }
+  }
+
+  ~ResourceHashtable() {
+    _deallocate(_table, SIZE);
   }
 
   bool contains(K const& key) const {
@@ -171,7 +198,7 @@ class ResourceHashtable : public ResourceObj {
     Node* node = *ptr;
     if (node != NULL) {
       *ptr = node->_next;
-      if (ALLOC_TYPE == C_HEAP) {
+      if (ALLOC_TYPE == ResourceObj::C_HEAP) {
         delete node;
       }
       return true;
@@ -183,9 +210,9 @@ class ResourceHashtable : public ResourceObj {
   // called for each entry in the table.  If do_entry() returns false,
   // the iteration is cancelled.
   template<class ITER>
-  void iterate(ITER* iter) const {
-    Node* const* bucket = _table;
-    while (bucket < &_table[SIZE]) {
+  static void _iterate(ITER* iter, Node* const* table, int size) {
+    Node* const* bucket = table;
+    while (bucket < &table[size]) {
       Node* node = *bucket;
       while (node != NULL) {
         bool cont = iter->do_entry(node->_key, node->_value);
@@ -194,6 +221,12 @@ class ResourceHashtable : public ResourceObj {
       }
       ++bucket;
     }
+  }
+
+
+  template<class ITER>
+  void iterate(ITER* iter) const {
+    return _iterate<ITER>(iter, _table, SIZE);
   }
 };
 
