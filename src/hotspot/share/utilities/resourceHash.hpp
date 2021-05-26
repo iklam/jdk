@@ -40,27 +40,7 @@ template<
     MEMFLAGS MEM_TYPE = mtInternal
     >
 class BaseResourceHashtable : public ResourceObj {
-
-
-};
-
-
-
-template<
-    typename K, typename V,
-    // xlC does not compile this:
-    // http://stackoverflow.com/questions/8532961/template-argument-of-type-that-is-defined-by-inner-typedef-from-other-template-c
-    //typename ResourceHashtableFns<K>::hash_fn   HASH   = primitive_hash<K>,
-    //typename ResourceHashtableFns<K>::equals_fn EQUALS = primitive_equals<K>,
-    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
-    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>,
-    unsigned SIZE = 256,
-    ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
-    MEMFLAGS MEM_TYPE = mtInternal
-    >
-class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> {
- private:
-
+protected:
   class Node : public ResourceObj {
    public:
     unsigned _hash;
@@ -77,8 +57,6 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
 
   };
 
-  Node* _table[SIZE];
-
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
   static inline Node** _lookup_node(unsigned hash, K const& key, Node** table, int size) {
@@ -94,8 +72,40 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
     return ptr;
   }
 
+  inline static V* _get(K const& key, Node** table, int size) {
+    unsigned hv = HASH(key);
+    Node** ptr = _lookup_node(hv, key, table, size);
+    if (*ptr != NULL) {
+      return const_cast<V*>(&(*ptr)->_value);
+    } else {
+      return NULL;
+    }
+  }
+
+
+};
+
+template<
+    typename K, typename V,
+    // xlC does not compile this:
+    // http://stackoverflow.com/questions/8532961/template-argument-of-type-that-is-defined-by-inner-typedef-from-other-template-c
+    //typename ResourceHashtableFns<K>::hash_fn   HASH   = primitive_hash<K>,
+    //typename ResourceHashtableFns<K>::equals_fn EQUALS = primitive_equals<K>,
+    unsigned (*HASH)  (K const&)           = primitive_hash<K>,
+    bool     (*EQUALS)(K const&, K const&) = primitive_equals<K>,
+    unsigned SIZE = 256,
+    ResourceObj::allocation_type ALLOC_TYPE = ResourceObj::RESOURCE_AREA,
+    MEMFLAGS MEM_TYPE = mtInternal
+    >
+class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> {
+ private:
+  typedef class BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC_TYPE, MEM_TYPE> MySuper;
+  typedef class MySuper::Node Node;
+
+  Node* _table[SIZE];
+
   Node** lookup_node(unsigned hash, K const& key) {
-    return _lookup_node(hash, key, _table, SIZE);
+    return MySuper::_lookup_node(hash, key, _table, SIZE);
   }
 
   Node const** lookup_node(unsigned hash, K const& key) const {
@@ -129,14 +139,34 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
     return get(key) != NULL;
   }
 
-  V* get(K const& key) const {
+
+#if 0
+  static inline Node** _lookup_node(unsigned hash, K const& key, Node** table, int size) {
+    unsigned index = hash % size;
+    Node** ptr = &table[index];
+    while (*ptr != NULL) {
+      Node* node = *ptr;
+      if (node->_hash == hash && EQUALS(key, node->_key)) {
+        break;
+      }
+      ptr = &(node->_next);
+    }
+    return ptr;
+  }
+
+  inline static V* _get(K const& key, Node** table, int size) {
     unsigned hv = HASH(key);
-    Node const** ptr = lookup_node(hv, key);
+    Node** ptr = _lookup_node(hv, key, table, size);
     if (*ptr != NULL) {
       return const_cast<V*>(&(*ptr)->_value);
     } else {
       return NULL;
     }
+  }
+#endif
+
+  V* get(K const& key) const {
+    return MySuper::_get(key, (Node**)_table, SIZE);
   }
 
  /**
