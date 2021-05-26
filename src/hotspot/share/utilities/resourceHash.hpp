@@ -27,7 +27,6 @@
 
 #include "memory/allocation.hpp"
 
-
 template<
     typename K, typename V,
     // xlC does not compile this:
@@ -59,7 +58,7 @@ protected:
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
-  static inline Node** _lookup_node(unsigned hash, K const& key, Node** table, int size) {
+  static inline Node** lookup_node(unsigned hash, K const& key, Node** table, int size) {
     unsigned index = hash % size;
     Node** ptr = &table[index];
     while (*ptr != NULL) {
@@ -72,8 +71,8 @@ protected:
     return ptr;
   }
 
-  static inline void _deallocate(Node** table, int size) {
-    if (ALLOC_TYPE == ResourceObj::C_HEAP) {
+  static inline void deallocate(Node** table, int size) {
+    if (ALLOC_TYPE == C_HEAP) {
       Node* const* bucket = table;
       while (bucket < &table[size]) {
         Node* node = *bucket;
@@ -87,9 +86,9 @@ protected:
     }
   }
 
-  inline static V* _get(K const& key, Node** table, int size) {
+  inline static V* get(K const& key, Node** table, int size) {
     unsigned hv = HASH(key);
-    Node** ptr = _lookup_node(hv, key, table, size);
+    Node** ptr = lookup_node(hv, key, table, size);
     if (*ptr != NULL) {
       return const_cast<V*>(&(*ptr)->_value);
     } else {
@@ -104,7 +103,7 @@ protected:
   */
   inline static bool put(K const& key, V const& value, Node** table, int size) {
     unsigned hv = HASH(key);
-    Node** ptr = _lookup_node(hv, key, table, size);
+    Node** ptr = lookup_node(hv, key, table, size);
     if (*ptr != NULL) {
       (*ptr)->_value = value;
       return false;
@@ -121,7 +120,7 @@ protected:
   // *p_created is true if entry was created, false if entry pre-existed.
   inline static V* put_if_absent(K const& key, bool* p_created, Node** table, int size) {
     unsigned hv = HASH(key);
-    Node** ptr = _lookup_node(hv, key, table, size);
+    Node** ptr = lookup_node(hv, key, table, size);
     if (*ptr == NULL) {
       *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key);
       *p_created = true;
@@ -129,6 +128,55 @@ protected:
       *p_created = false;
     }
     return &(*ptr)->_value;
+  }
+
+  // Look up the key.
+  // If an entry for the key exists, leave map unchanged and return a pointer to its value.
+  // If no entry for the key exists, create a new entry from key and value and return a
+  //  pointer to the value.
+  // *p_created is true if entry was created, false if entry pre-existed.
+  inline static V* put_if_absent(K const& key, V const& value, bool* p_created, Node** table, int size) {
+    unsigned hv = HASH(key);
+    Node** ptr = lookup_node(hv, key, table, size);
+    if (*ptr == NULL) {
+      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key, value);
+      *p_created = true;
+    } else {
+      *p_created = false;
+    }
+    return &(*ptr)->_value;
+  }
+
+  bool remove(K const& key, Node** table, int size) {
+    unsigned hv = HASH(key);
+    Node** ptr = lookup_node(hv, key, table, size);
+
+    Node* node = *ptr;
+    if (node != NULL) {
+      *ptr = node->_next;
+      if (ALLOC_TYPE == C_HEAP) {
+        delete node;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // ITER contains bool do_entry(K const&, V const&), which will be
+  // called for each entry in the table.  If do_entry() returns false,
+  // the iteration is cancelled.
+  template<class ITER>
+  static void iterate(ITER* iter, Node* const* table, int size) {
+    Node* const* bucket = table;
+    while (bucket < &table[size]) {
+      Node* node = *bucket;
+      while (node != NULL) {
+        bool cont = iter->do_entry(node->_key, node->_value);
+        if (!cont) { return; }
+        node = node->_next;
+      }
+      ++bucket;
+    }
   }
 };
 
@@ -152,14 +200,14 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
   Node* _table[SIZE];
 
   Node** lookup_node(unsigned hash, K const& key) {
-    return MySuper::_lookup_node(hash, key, _table, SIZE);
+    return MySuper::lookup_node(hash, key, _table, SIZE);
   }
 
  public:
   ResourceHashtable() { memset(_table, 0, SIZE * sizeof(Node*)); }
 
   ~ResourceHashtable() {
-    MySuper::_deallocate(_table, SIZE);
+    MySuper::deallocate(_table, SIZE);
   }
 
   bool contains(K const& key) const {
@@ -167,7 +215,7 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
   }
 
   V* get(K const& key) const {
-    return MySuper::_get(key, (Node**)_table, SIZE);
+    return MySuper::get(key, (Node**)_table, SIZE);
   }
 
   bool put(K const& key, V const& value) {
@@ -178,62 +226,18 @@ class ResourceHashtable : public BaseResourceHashtable<K, V, HASH, EQUALS, ALLOC
     return MySuper::put_if_absent(key, p_created, _table, SIZE);
   }
 
-  // Look up the key.
-  // If an entry for the key exists, leave map unchanged and return a pointer to its value.
-  // If no entry for the key exists, create a new entry from key and value and return a
-  //  pointer to the value.
-  // *p_created is true if entry was created, false if entry pre-existed.
   V* put_if_absent(K const& key, V const& value, bool* p_created) {
-    unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
-    if (*ptr == NULL) {
-      *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key, value);
-      *p_created = true;
-    } else {
-      *p_created = false;
-    }
-    return &(*ptr)->_value;
+    return MySuper::put_if_absent(key, value, p_created, _table, SIZE);
   }
-
 
   bool remove(K const& key) {
-    unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
-
-    Node* node = *ptr;
-    if (node != NULL) {
-      *ptr = node->_next;
-      if (ALLOC_TYPE == ResourceObj::C_HEAP) {
-        delete node;
-      }
-      return true;
-    }
-    return false;
+    return MySuper::remove(key, _table, SIZE);
   }
-
-  // ITER contains bool do_entry(K const&, V const&), which will be
-  // called for each entry in the table.  If do_entry() returns false,
-  // the iteration is cancelled.
-  template<class ITER>
-  static void _iterate(ITER* iter, Node* const* table, int size) {
-    Node* const* bucket = table;
-    while (bucket < &table[size]) {
-      Node* node = *bucket;
-      while (node != NULL) {
-        bool cont = iter->do_entry(node->_key, node->_value);
-        if (!cont) { return; }
-        node = node->_next;
-      }
-      ++bucket;
-    }
-  }
-
 
   template<class ITER>
   void iterate(ITER* iter) const {
-    return _iterate<ITER>(iter, _table, SIZE);
+    return MySuper::iterate(iter, _table, SIZE);
   }
 };
-
 
 #endif // SHARE_UTILITIES_RESOURCEHASH_HPP
