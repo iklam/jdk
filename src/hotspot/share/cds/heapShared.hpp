@@ -384,8 +384,6 @@ private:
 
   static void fixup_mapped_heap_regions() NOT_CDS_JAVA_HEAP_RETURN;
 
-  inline static bool is_archived_object(oop p) NOT_CDS_JAVA_HEAP_RETURN_(false);
-
   static void resolve_classes(JavaThread* THREAD) NOT_CDS_JAVA_HEAP_RETURN;
   static void initialize_from_archived_subgraph(Klass* k, JavaThread* THREAD) NOT_CDS_JAVA_HEAP_RETURN;
 
