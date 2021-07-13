@@ -24,7 +24,7 @@
 /*
  * @test
  * @bug 8261090
- * @summary CDS support of old classes with major version < JDK_6 (50) for static archive.
+ * @summary CDS support of old classes with major version < JDK_6 (50).
  *          Test with old super class.
  * @requires vm.cds
  * @library /test/lib
@@ -35,7 +35,6 @@
  * @run driver OldSuperClass
  */
 
-import jdk.test.lib.cds.CDSTestUtils;
 import jdk.test.lib.process.OutputAnalyzer;
 
 public class OldSuperClass {
@@ -46,15 +45,8 @@ public class OldSuperClass {
         JarBuilder.build(namePrefix, appClasses);
         String appJar = TestCommon.getTestJar(namePrefix + ".jar");
 
-        boolean dynamicMode = CDSTestUtils.DYNAMIC_DUMP;
-
         // create archive with class list
-        OutputAnalyzer output = TestCommon.dump(appJar, appClasses, "-Xlog:class+load,cds=debug,verification=trace");
-        TestCommon.checkExecReturn(output, 0,
-                                   dynamicMode ? true : false,
-                                   "Pre JDK 6 class not supported by CDS: 49.0 OldSuper",
-                                   "Skipping ChildOldSuper: Old class has been linked",
-                                   "Skipping GChild: Old class has been linked");
+        OutputAnalyzer output = TestCommon.testDump(appJar, appClasses, "-Xlog:class+load,cds=debug,verification=trace");
 
         // run with archive
         TestCommon.run(
@@ -64,18 +56,10 @@ public class OldSuperClass {
           .assertNormalExit(out -> {
               out.shouldContain("Verifying class OldSuper with old format")
                  .shouldContain("Verifying class ChildOldSuper with new format")
-                 .shouldContain("Verifying class GChild with new format");
-              if (!dynamicMode) {
-                  out.shouldContain("OldSuper source: shared objects file")
-                     .shouldContain("ChildOldSuper source: shared objects file")
-                     .shouldContain("GChild source: shared objects file");
-              } else {
-                  // Old classes were already linked before dynamic dump happened,
-                  // so they couldn't be archived.
-                  out.shouldMatch(".class.load.*OldSuper source:.*oldsuperclass.jar")
-                     .shouldMatch(".class.load.*ChildOldSuper source:.*oldsuperclass.jar")
-                     .shouldMatch(".class.load.*GChild source:.*oldsuperclass.jar");
-              }
+                 .shouldContain("Verifying class GChild with new format")
+                 .shouldContain("OldSuper source: shared objects file")
+                 .shouldContain("ChildOldSuper source: shared objects file")
+                 .shouldContain("GChild source: shared objects file");
           });
     }
 }

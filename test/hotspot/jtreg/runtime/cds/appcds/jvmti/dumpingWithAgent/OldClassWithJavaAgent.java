@@ -59,11 +59,9 @@ public class OldClassWithJavaAgent {
 
         // The java agent will load and link the class. We will skip old classes
         // which have been linked during static CDS dump.
-        // Dynamic CDS dump doesn't support old class.
+        // Old classes will not be linked during dynamic CDS dump.
         if (!dynamicMode) {
             output.shouldContain("Skipping OldSuper: Old class has been linked");
-        } else {
-            output.shouldContain("Pre JDK 6 class not supported by CDS: 49.0 OldSuper");
         }
     }
 }

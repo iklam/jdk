@@ -283,36 +283,24 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
     // support them and make CDS more complicated.
     return warn_excluded(k, "JFR event class");
   }
-  if (k->init_state() < InstanceKlass::linked) {
-    // In CDS dumping, we will attempt to link all classes. Those that fail to link will
-    // be recorded in DumpTimeClassInfo.
-    Arguments::assert_is_dumping_archive();
 
-    // TODO -- rethink how this can be handled.
-    // We should try to link ik, however, we can't do it here because
-    // 1. We are at VM exit
-    // 2. linking a class may cause other classes to be loaded, which means
-    //    a custom ClassLoader.loadClass() may be called, at a point where the
-    //    class loader doesn't expect it.
+  if (!k->is_linked()) {
     if (has_class_failed_verification(k)) {
       return warn_excluded(k, "Failed verification");
-    } else {
-      if (k->can_be_verified_at_dumptime()) {
-        return warn_excluded(k, "Not linked");
-      }
     }
-  }
-  if (DynamicDumpSharedSpaces && k->major_version() < 50 /*JAVA_6_VERSION*/) {
-    // In order to support old classes during dynamic dump, class rewriting needs to
-    // be reverted. This would result in more complex code and testing but not much gain.
-    ResourceMark rm;
-    log_warning(cds)("Pre JDK 6 class not supported by CDS: %u.%u %s",
-                     k->major_version(),  k->minor_version(), k->name()->as_C_string());
-    return true;
-  }
-
-  if (!k->can_be_verified_at_dumptime() && k->is_linked()) {
-    return warn_excluded(k, "Old class has been linked");
+    if (DynamicDumpSharedSpaces && !is_builtin(k) && k->is_shared_unregistered_class()) {
+      return warn_excluded(k, "Not linked (shared unregistered class)");
+    }
+  } else {
+    if (!k->can_be_verified_at_dumptime()) {
+      // We have an old class that has been linked (e.g., it's been executed during
+      // dump time). This class has been verified using the old verifier, which
+      // doesn't save the verification constraints, so check_verification_constraints()
+      // won't work at runtime.
+      // As a result, we cannot store this class. It must be loaded and fully verified
+      // at runtime.
+      return warn_excluded(k, "Old class has been linked");
+    }
   }
 
   if (k->is_hidden() && !is_registered_lambda_proxy_class(k)) {

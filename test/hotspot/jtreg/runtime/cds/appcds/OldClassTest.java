@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,7 +24,7 @@
 
 /*
  * @test
- * @summary CDS support of old classes with major version < JDK_6 (50) for static archive.
+ * @summary CDS support of old classes with major version < JDK_6 (50).
  * @requires vm.cds
  * @library /test/lib
  * @modules java.base/jdk.internal.org.objectweb.asm
@@ -35,7 +35,6 @@
 
 import java.io.File;
 import java.io.FileOutputStream;
-import jdk.test.lib.cds.CDSTestUtils;
 import jdk.test.lib.process.OutputAnalyzer;
 import java.nio.file.Files;
 
@@ -56,46 +55,31 @@ public class OldClassTest implements Opcodes {
     }
 
     String appClasses[] = TestCommon.list("Hello");
-    boolean dynamicMode = CDSTestUtils.DYNAMIC_DUMP;
 
     // CASE 1: pre-JDK 6 compiled classes should be excluded from the dump
-    OutputAnalyzer output = TestCommon.dump(jar, appClasses, "-Xlog:class+load,cds=debug");
-    TestCommon.checkExecReturn(output, 0,
-                               dynamicMode ? true : false,
-                               "Pre JDK 6 class not supported by CDS");
+    TestCommon.testDump(jar, appClasses, "-Xlog:class+load,cds=debug");
 
     TestCommon.run(
         "-cp", jar,
         "-Xlog:class+load",
         "Hello")
       .assertNormalExit(out -> {
-          out.shouldContain("Hello Unicode world (Old)");
-          if (!dynamicMode) {
-              out.shouldContain("Hello source: shared objects file");
-          } else {
-              out.shouldMatch(".class.load. Hello source:.*OldClassTest_old.jar");
-          }
+          out.shouldContain("Hello Unicode world (Old)")
+             .shouldContain("Hello source: shared objects file");
       });
 
     // CASE 2: if we exlcude old version of this class, we should not pick up
     //         the newer version of this class in a subsequent classpath element.
     String classpath = jar + File.pathSeparator + jarSrcFile.getPath();
-    output = TestCommon.dump(classpath, appClasses);
-    TestCommon.checkExecReturn(output, 0,
-                               dynamicMode ? true : false,
-                               "Pre JDK 6 class not supported by CDS");
+    TestCommon.testDump(classpath, appClasses);
 
     TestCommon.run(
         "-cp", classpath,
         "-Xlog:class+load",
         "Hello")
       .assertNormalExit(out -> {
-          out.shouldContain("Hello Unicode world (Old)");
-          if (!dynamicMode) {
-              out.shouldContain("Hello source: shared objects file");
-          } else {
-              out.shouldMatch(".class.load. Hello source:.*OldClassTest_old.jar");
-          }
+          out.shouldContain("Hello Unicode world (Old)")
+             .shouldContain("Hello source: shared objects file");
       });
   }
 

@@ -839,6 +839,17 @@ bool InstanceKlass::link_class_impl(TRAPS) {
                        external_name());
     return false;
   }
+
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces && !can_be_verified_at_dumptime()) {
+    oop loader = class_loader_data()->class_loader();
+    bool keep_alive = class_loader_data()->keep_alive();
+    if (!java_lang_ClassLoader::is_reflection_class_loader(loader) && keep_alive) {
+      return true;
+    }
+  }
+#endif
+
   // return if already verified
   if (is_linked()) {
     return true;
@@ -1013,6 +1024,19 @@ void InstanceKlass::initialize_super_interfaces(TRAPS) {
 
 void InstanceKlass::initialize_impl(TRAPS) {
   HandleMark hm(THREAD);
+
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces && !can_be_verified_at_dumptime()) {
+    oop loader = class_loader_data()->class_loader();
+    if (!java_lang_ClassLoader::is_reflection_class_loader(loader)) {
+      ResourceMark rm(THREAD);
+      tty->print_cr("    skip initialize %s %d", name()->as_C_string(), major_version());
+      print();
+      class_loader_data()->print();
+      return;
+    }
+  }
+#endif
 
   // Make sure klass is linked (verified) before initialization
   // A class could already be verified, since it has been reflected upon.
@@ -2395,7 +2419,8 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
 
 void InstanceKlass::remove_unshareable_info() {
 
-  if (can_be_verified_at_dumptime()) {
+  if (is_linked()) {
+    assert(can_be_verified_at_dumptime(), "must be");
     // Remember this so we can avoid walking the hierarchy at runtime.
     set_verified_at_dump_time();
   }
