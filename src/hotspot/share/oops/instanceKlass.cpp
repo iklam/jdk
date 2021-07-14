@@ -840,7 +840,7 @@ bool InstanceKlass::link_class_impl(TRAPS) {
     return false;
   }
 
-#if INCLUDE_CDS
+#if INCLUDE_CDS && 0
   if (DynamicDumpSharedSpaces && !can_be_verified_at_dumptime()) {
     oop loader = class_loader_data()->class_loader();
     bool keep_alive = class_loader_data()->keep_alive();
@@ -912,6 +912,10 @@ bool InstanceKlass::link_class_impl(TRAPS) {
 
     if (!is_linked()) {
       if (!is_rewritten()) {
+        if (is_shared()) {
+          assert(!verified_at_dump_time(), "must be");
+        }
+
         {
           bool verify_ok = verify_code(THREAD);
           if (!verify_ok) {
@@ -945,7 +949,7 @@ bool InstanceKlass::link_class_impl(TRAPS) {
       // 1) the class is loaded by custom class loader or
       // 2) the class is loaded by built-in class loader but failed to add archived loader constraints
       bool need_init_table = true;
-      if (is_shared() && SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
+      if (is_shared() && verified_at_dump_time() && SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
         need_init_table = false;
       }
       if (need_init_table) {
@@ -1025,7 +1029,7 @@ void InstanceKlass::initialize_super_interfaces(TRAPS) {
 void InstanceKlass::initialize_impl(TRAPS) {
   HandleMark hm(THREAD);
 
-#if INCLUDE_CDS
+#if INCLUDE_CDS && 0
   if (DynamicDumpSharedSpaces && !can_be_verified_at_dumptime()) {
     oop loader = class_loader_data()->class_loader();
     if (!java_lang_ClassLoader::is_reflection_class_loader(loader)) {

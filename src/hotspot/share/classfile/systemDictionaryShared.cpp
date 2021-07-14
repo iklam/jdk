@@ -288,9 +288,11 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
     if (has_class_failed_verification(k)) {
       return warn_excluded(k, "Failed verification");
     }
+#if 0
     if (DynamicDumpSharedSpaces && !is_builtin(k) && k->is_shared_unregistered_class()) {
       return warn_excluded(k, "Not linked (shared unregistered class)");
     }
+#endif
   } else {
     if (!k->can_be_verified_at_dumptime()) {
       // We have an old class that has been linked (e.g., it's been executed during
