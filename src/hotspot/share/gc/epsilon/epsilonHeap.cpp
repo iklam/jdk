@@ -263,6 +263,10 @@ HeapWord* EpsilonHeap::mem_allocate(size_t size, bool *gc_overhead_limit_was_exc
   return allocate_work(size);
 }
 
+HeapWord* EpsilonHeap::allocate_loaded_archive_space(size_t size) {
+  return allocate_work(size);
+}
+
 void EpsilonHeap::collect(GCCause::Cause cause) {
   switch (cause) {
     case GCCause::_metadata_GC_threshold:

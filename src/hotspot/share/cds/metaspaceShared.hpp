@@ -72,6 +72,9 @@ class MetaspaceShared : AllStatic {
     max_open_archive_heap_region = 2,
     last_open_archive_heap_region = first_open_archive_heap_region + max_open_archive_heap_region - 1,
 
+    first_archive_heap_region = first_closed_archive_heap_region,
+    last_archive_heap_region = last_open_archive_heap_region,
+
     last_valid_region = last_open_archive_heap_region,
     n_regions =  last_valid_region + 1 // total number of regions
   };

@@ -38,6 +38,7 @@
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
+#include "gc/shared/collectedHeap.hpp"
 #include "gc/shared/gcLocker.hpp"
 #include "gc/shared/gcVMOperations.hpp"
 #include "logging/log.hpp"
@@ -70,9 +71,20 @@
 bool HeapShared::_closed_archive_heap_region_mapped = false;
 bool HeapShared::_open_archive_heap_region_mapped = false;
 bool HeapShared::_archive_heap_region_fixed = false;
+bool HeapShared::_is_loaded = false;
 address   HeapShared::_narrow_oop_base;
 int       HeapShared::_narrow_oop_shift;
 DumpedInternedStrings *HeapShared::_dumped_interned_strings = NULL;
+
+uintptr_t HeapShared::_archived_base_0 = UINTPTR_MAX;
+uintptr_t HeapShared::_archived_base_1 = UINTPTR_MAX;
+uintptr_t HeapShared::_archived_base_2 = UINTPTR_MAX;
+uintptr_t HeapShared::_archived_base_3 = UINTPTR_MAX;
+uintptr_t HeapShared::_archived_top    = 0;
+intx HeapShared::_runtime_offset_0 = 0;
+intx HeapShared::_runtime_offset_1 = 0;
+intx HeapShared::_runtime_offset_2 = 0;
+intx HeapShared::_runtime_offset_3 = 0;
 
 //
 // If you add new entries to the following tables, you should know what you're doing!
@@ -126,7 +138,7 @@ void HeapShared::fixup_mapped_heap_regions() {
   FileMapInfo *mapinfo = FileMapInfo::current_info();
   mapinfo->fixup_mapped_heap_regions();
   set_archive_heap_region_fixed();
-  if (is_mapped()) {
+  if (is_fully_available()) {
     _roots = OopHandle(Universe::vm_global(), decode_from_archive(_roots_narrow));
     if (!MetaspaceShared::use_full_module_graph()) {
       // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
@@ -199,7 +211,7 @@ int HeapShared::append_root(oop obj) {
 objArrayOop HeapShared::roots() {
   if (DumpSharedSpaces) {
     assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
-    if (!is_heap_object_archiving_allowed()) {
+    if (!HeapShared::can_write()) {
       return NULL;
     }
   } else {
@@ -213,7 +225,7 @@ objArrayOop HeapShared::roots() {
 
 void HeapShared::set_roots(narrowOop roots) {
   assert(UseSharedSpaces, "runtime only");
-  assert(open_archive_heap_region_mapped(), "must be");
+  assert(is_fully_available(), "must be");
   _roots_narrow = roots;
 }
 
@@ -238,7 +250,7 @@ oop HeapShared::get_root(int index, bool clear) {
 void HeapShared::clear_root(int index) {
   assert(index >= 0, "sanity");
   assert(UseSharedSpaces, "must be");
-  if (open_archive_heap_region_mapped()) {
+  if (is_fully_available()) {
     if (log_is_enabled(Debug, cds, heap)) {
       oop old = roots()->obj_at(index);
       log_debug(cds, heap)("Clearing root %d: was " PTR_FORMAT, index, p2i(old));
@@ -315,7 +327,7 @@ void HeapShared::archive_klass_objects() {
 }
 
 void HeapShared::run_full_gc_in_vm_thread() {
-  if (is_heap_object_archiving_allowed()) {
+  if (HeapShared::can_write()) {
     // Avoid fragmentation while archiving heap objects.
     // We do this inside a safepoint, so that no further allocation can happen after GC
     // has finished.
@@ -360,7 +372,7 @@ void HeapShared::archive_java_heap_objects(GrowableArray<MemRegion>* closed,
 
 void HeapShared::copy_closed_archive_heap_objects(
                                     GrowableArray<MemRegion> * closed_archive) {
-  assert(is_heap_object_archiving_allowed(), "Cannot archive java heap objects");
+  assert(HeapShared::can_write(), "must be");
 
   G1CollectedHeap::heap()->begin_archive_alloc_range();
 
@@ -378,7 +390,7 @@ void HeapShared::copy_closed_archive_heap_objects(
 
 void HeapShared::copy_open_archive_heap_objects(
                                     GrowableArray<MemRegion> * open_archive) {
-  assert(is_heap_object_archiving_allowed(), "Cannot archive java heap objects");
+  assert(HeapShared::can_write(), "must be");
 
   G1CollectedHeap::heap()->begin_archive_alloc_range(true /* open */);
 
@@ -680,7 +692,7 @@ static void verify_the_heap(Klass* k, const char* which) {
 // ClassFileLoadHook is enabled, it's possible for this class to be dynamically replaced. In
 // this case, we will not load the ArchivedKlassSubGraphInfoRecord and will clear its roots.
 void HeapShared::resolve_classes(JavaThread* THREAD) {
-  if (!is_mapped()) {
+  if (!is_fully_available()) {
     return; // nothing to do
   }
   resolve_classes_for_subgraphs(closed_archive_subgraph_entry_fields,
@@ -718,7 +730,7 @@ void HeapShared::resolve_classes_for_subgraph_of(Klass* k, JavaThread* THREAD) {
 }
 
 void HeapShared::initialize_from_archived_subgraph(Klass* k, JavaThread* THREAD) {
-  if (!is_mapped()) {
+  if (!is_fully_available()) {
     return; // nothing to do
   }
 
@@ -1266,7 +1278,7 @@ void HeapShared::init_subgraph_entry_fields(ArchivableStaticFieldInfo fields[],
 }
 
 void HeapShared::init_subgraph_entry_fields(TRAPS) {
-  assert(is_heap_object_archiving_allowed(), "Sanity check");
+  assert(HeapShared::can_write(), "must be");
   _dump_time_subgraph_info_table = new (ResourceObj::C_HEAP, mtClass)DumpTimeKlassSubGraphInfoTable();
   init_subgraph_entry_fields(closed_archive_subgraph_entry_fields,
                              num_closed_archive_subgraph_entry_fields,
@@ -1282,7 +1294,7 @@ void HeapShared::init_subgraph_entry_fields(TRAPS) {
 }
 
 void HeapShared::init_for_dumping(TRAPS) {
-  if (is_heap_object_archiving_allowed()) {
+  if (HeapShared::can_write()) {
     _dumped_interned_strings = new (ResourceObj::C_HEAP, mtClass)DumpedInternedStrings();
     init_subgraph_entry_fields(CHECK);
   }
@@ -1438,6 +1450,194 @@ void HeapShared::patch_archived_heap_embedded_pointers(MemRegion region, address
 
   PatchEmbeddedPointers patcher((narrowOop*)region.start());
   bm.iterate(&patcher);
+}
+
+// The CDS archive remembers each heap object by its address at dump time, but
+// the heap object may be loaded at a different address at run time. This structure is used
+// to translate the dump time addresses for all objects in FileMapInfo::space_at(region_index)
+// to their runtime addresses.
+struct LoadedArchiveHeapRegion {
+  int       _region_index;   // index for FileMapInfo::space_at(index)
+  size_t    _region_size;    // number of bytes in this region
+  uintptr_t _archived_base;  // The dump-time (decoded) address of the first object in this region
+  intx      _runtime_offset; // If an object's dump time address P is within in this region, its
+                             // runtime address is P + _runtime_offset
+
+  static int comparator(const void* a, const void* b) {
+    LoadedArchiveHeapRegion* reg_a = (LoadedArchiveHeapRegion*)a;
+    LoadedArchiveHeapRegion* reg_b = (LoadedArchiveHeapRegion*)b;
+    if (reg_a->_archived_base < reg_b->_archived_base) {
+      return -1;
+    } else if (reg_a->_archived_base == reg_b->_archived_base) {
+      return 0;
+    } else {
+      return 1;
+    }
+  }
+};
+
+void HeapShared::init_loaded_heap_relocation(LoadedArchiveHeapRegion* loaded_regions,
+                                             int num_loaded_regions,
+                                             uintptr_t top) {
+  _archived_base_0 = loaded_regions[0]._archived_base;
+  _archived_base_1 = loaded_regions[1]._archived_base;
+  _archived_base_2 = loaded_regions[2]._archived_base;
+  _archived_base_3 = loaded_regions[3]._archived_base;
+  _archived_top = top;
+  _runtime_offset_0 = loaded_regions[0]._runtime_offset;
+  _runtime_offset_1 = loaded_regions[1]._runtime_offset;
+  _runtime_offset_2 = loaded_regions[2]._runtime_offset;
+  _runtime_offset_3 = loaded_regions[3]._runtime_offset;
+
+  assert(2 <= num_loaded_regions && num_loaded_regions <= 4, "must be");
+  if (num_loaded_regions < 4) {
+    _archived_base_3 = UINTPTR_MAX;
+  }
+  if (num_loaded_regions < 3) {
+    _archived_base_2 = UINTPTR_MAX;
+  }
+
+  _is_loaded = true;
+}
+
+bool HeapShared::can_load() {
+  return Universe::heap()->can_load_archived_heap();
+}
+
+template <int NUM_LOADED_REGIONS>
+class PatchLoadedRegionPointers: public BitMapClosure {
+  narrowOop* _start;
+  intx _offset_0;
+  intx _offset_1;
+  intx _offset_2;
+  intx _offset_3;
+  uintptr_t _base_0;
+  uintptr_t _base_1;
+  uintptr_t _base_2;
+  uintptr_t _base_3;
+  uintptr_t _top;
+ public:
+  PatchLoadedRegionPointers(narrowOop* start,
+                            LoadedArchiveHeapRegion* reloc_info, // FIXME: assert that max_num_heap_regions == 4.
+                            uintptr_t top)
+    : _start(start), 
+      _offset_0(reloc_info[0]._runtime_offset),
+      _offset_1(reloc_info[1]._runtime_offset),
+      _offset_2(reloc_info[2]._runtime_offset),
+      _offset_3(reloc_info[3]._runtime_offset),
+      _base_0(reloc_info[0]._archived_base),
+      _base_1(reloc_info[1]._archived_base),
+      _base_2(reloc_info[2]._archived_base),
+      _base_3(reloc_info[3]._archived_base),
+      _top(top) {}
+
+  bool do_bit(size_t offset) {
+    narrowOop* p = _start + offset;
+    narrowOop v = *p;
+    assert(!CompressedOops::is_null(v), "null oops should have been filtered out at dump time");
+    uintptr_t o = cast_from_oop<uintptr_t>(HeapShared::decode_from_archive(v));
+    assert(_base_0 <= o && o < _top, "must be");
+
+    static_assert(NUM_LOADED_REGIONS >= 2, "we have at least 2 loaded regions");
+
+    // We have only 2 regions for the default archive. Use template to avoid unnecessary comparisons.
+    if (NUM_LOADED_REGIONS > 3 && o > _base_3) {
+      o += _offset_3;
+    } else if (NUM_LOADED_REGIONS > 2 && o > _base_2) {
+      o += _offset_2;
+    } else if (o >= _base_1) {
+      o += _offset_1;
+    } else {
+      o += _offset_0;
+    }
+    RawAccess<IS_NOT_NULL>::oop_store(p, cast_to_oop(o));
+    return true;
+  }
+};
+
+bool HeapShared::load_heap_regions(FileMapInfo* mapinfo) {
+  HeapShared::init_narrow_oop_decoding(mapinfo->narrow_oop_base(), mapinfo->narrow_oop_shift());
+
+  constexpr int max_num_heap_regions = MetaspaceShared::last_archive_heap_region - MetaspaceShared::first_archive_heap_region + 1;
+  LoadedArchiveHeapRegion reloc_info[max_num_heap_regions];
+  memset(reloc_info, 0, sizeof(reloc_info));
+  size_t total_bytes = 0;
+  uintptr_t archived_objs_top = 0; // dump time address of archived objects cannot be this or higher
+
+  int i;
+  int num_loaded_regions = 0;
+  for (i = MetaspaceShared::first_archive_heap_region;
+       i <= MetaspaceShared::last_archive_heap_region; i++) {
+    FileMapRegion* r = mapinfo->space_at(i);
+    r->assert_is_heap_region();
+    if (r->used() > 0) {
+      assert(is_aligned(r->used(), HeapWordSize), "must be");
+      total_bytes += r->used();
+      LoadedArchiveHeapRegion* ri = &reloc_info[num_loaded_regions++];
+      ri->_region_index = i;
+      ri->_region_size = r->used();
+      ri->_archived_base = (uintptr_t)mapinfo->start_address_as_decoded_from_archive(r);
+      uintptr_t top = ri->_archived_base + ri->_region_size;
+      if (archived_objs_top < top) {
+        archived_objs_top = top;
+      }
+    }
+  }
+
+  assert(is_aligned(total_bytes, HeapWordSize), "must be");
+  uintptr_t buffer = (uintptr_t)
+    Universe::heap()->allocate_loaded_archive_space(total_bytes / HeapWordSize);
+
+  //----------------------------------------------------------------------
+  // Find the relocation offset of the pointers in each region
+  qsort(reloc_info, num_loaded_regions, sizeof(LoadedArchiveHeapRegion),
+        LoadedArchiveHeapRegion::comparator);
+
+  uintptr_t loaded_base = buffer;
+  for (i = 0; i < num_loaded_regions; i++) {
+    // This region will be loaded at loaded_base, so all objects inside this
+    // region will be shifted by ri->offset
+    LoadedArchiveHeapRegion* ri = &reloc_info[i];
+    ri->_runtime_offset = loaded_base - ri->_archived_base;
+    loaded_base += ri->_region_size;
+  }
+
+  //----------------------------------------------------------------------
+  uintptr_t bitmap_base = (uintptr_t)mapinfo->map_bitmap_region();
+  uintptr_t load_address = buffer;
+  for (i = 0; i < num_loaded_regions; i++) {
+    LoadedArchiveHeapRegion* ri = &reloc_info[i];
+    FileMapRegion* r = mapinfo->space_at(ri->_region_index);
+
+    if (!mapinfo->read_region(ri->_region_index, (char*)load_address, r->used())) {
+      return false; // FIXME release the buffer
+    }
+    log_info(cds)("Loaded heap    region #%d at base " INTPTR_FORMAT " size = " SIZE_FORMAT_W(8) " bytes, delta = " INTX_FORMAT,
+                  ri->_region_index, load_address, ri->_region_size, ri->_runtime_offset);
+
+    uintptr_t oopmap = bitmap_base + r->oopmap_offset();
+    BitMapView bm((BitMap::bm_word_t*)oopmap, r->oopmap_size_in_bits());
+
+    if (num_loaded_regions == 4) {
+      PatchLoadedRegionPointers<4> patcher((narrowOop*)load_address, reloc_info, archived_objs_top);
+      bm.iterate(&patcher);
+    } else if (num_loaded_regions == 3) {
+      PatchLoadedRegionPointers<3> patcher((narrowOop*)load_address, reloc_info, archived_objs_top);
+      bm.iterate(&patcher);
+    } else {
+      assert(num_loaded_regions == 2, "must be");
+      PatchLoadedRegionPointers<2> patcher((narrowOop*)load_address, reloc_info, archived_objs_top);
+      bm.iterate(&patcher);
+    }
+
+    load_address += r->used();
+  }
+
+  // Need to do the following two lines in this order.
+  HeapShared::init_loaded_heap_relocation(reloc_info, num_loaded_regions, archived_objs_top);
+  HeapShared::set_roots(mapinfo->heap_obj_roots());
+
+  return true;
 }
 
 #endif // INCLUDE_CDS_JAVA_HEAP

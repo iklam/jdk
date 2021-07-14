@@ -42,6 +42,7 @@
 
 #if INCLUDE_CDS_JAVA_HEAP
 class DumpedInternedStrings;
+class FileMapInfo;
 
 struct ArchivableStaticFieldInfo {
   const char* klass_name;
@@ -138,15 +139,72 @@ class ArchivedKlassSubGraphInfoRecord {
 };
 #endif // INCLUDE_CDS_JAVA_HEAP
 
+struct LoadedArchiveHeapRegion;
+
 class HeapShared: AllStatic {
   friend class VerifySharedOopClosure;
- private:
 
+public:
+  // The CDS Archive Heap can be used in two different ways (depending on the GC type)
+  // - Mapped: (G1 only) the contents of the Archive Heap are mmap'ed into the heap
+  // - Loaded: At VM start-up, the contents of the Archive Heap are copied into the
+  //           heap's old generation. This is easier to implement than mapping, but
+  //           slightly less efficient.
+  static bool can_use() { return can_map() || can_load(); }
+
+  // Can this VM write an archive heap -- currently only G1+compressed{oops,cp}
+  static bool can_write() {
+    assert(DumpSharedSpaces, "only when writing static archive");
+    CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedOops && UseCompressedClassPointers);)
+    NOT_CDS_JAVA_HEAP(return false;)
+  }
+
+  // Can this VM map an archive heap -- currently only G1+compressed{oops,cp}
+  static bool can_map() {
+    CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedOops && UseCompressedClassPointers);)
+    NOT_CDS_JAVA_HEAP(return false;)
+  }
+  static bool is_mapped() {
+    return closed_archive_heap_region_mapped() && open_archive_heap_region_mapped();
+  }
+
+  // Can this VM load an archive heap at start-up?
+  static bool can_load()  NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static bool is_loaded() {
+    CDS_JAVA_HEAP_ONLY(return _is_loaded;)
+    NOT_CDS_JAVA_HEAP(return false;)
+  }
+
+  static bool are_archived_strings_available() {
+    return is_loaded() || closed_archive_heap_region_mapped();
+  }
+  static bool are_archived_mirrors_available() {
+    return is_fully_available();
+  }
+  static bool is_fully_available() {
+    return is_loaded() || is_mapped();
+  }
+
+private:
 #if INCLUDE_CDS_JAVA_HEAP
   static bool _closed_archive_heap_region_mapped;
   static bool _open_archive_heap_region_mapped;
+  static bool _is_loaded;
+
   static bool _archive_heap_region_fixed;
   static DumpedInternedStrings *_dumped_interned_strings;
+
+  // Support for loaded archived heap. These are cached values from
+  // LoadedArchiveHeapRegion's.
+  static uintptr_t _archived_base_0;
+  static uintptr_t _archived_base_1;
+  static uintptr_t _archived_base_2;
+  static uintptr_t _archived_base_3;
+  static uintptr_t _archived_top;
+  static intx _runtime_offset_0;
+  static intx _runtime_offset_1;
+  static intx _runtime_offset_2;
+  static intx _runtime_offset_3;
 
 public:
   static bool oop_equals(oop const& p1, oop const& p2) {
@@ -156,6 +214,8 @@ public:
   static unsigned string_oop_hash(oop const& string) {
     return java_lang_String::hash_code(string);
   }
+
+  static bool load_heap_regions(FileMapInfo* mapinfo);
 
 private:
   typedef ResourceHashtable<oop, oop,
@@ -282,6 +342,9 @@ private:
                resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAPS);
   static void resolve_or_init(Klass* k, bool do_init, TRAPS);
   static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record);
+  static void init_loaded_heap_relocation(LoadedArchiveHeapRegion* reloc_info,
+                                          int num_regions,
+                                          uintptr_t top);
  public:
   static void reset_archived_object_states(TRAPS);
   static void create_archived_object_cache() {
@@ -351,11 +414,6 @@ private:
  public:
   static void run_full_gc_in_vm_thread() NOT_CDS_JAVA_HEAP_RETURN;
 
-  static bool is_heap_object_archiving_allowed() {
-    CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedOops && UseCompressedClassPointers);)
-    NOT_CDS_JAVA_HEAP(return false;)
-  }
-
   static bool is_heap_region(int idx) {
     CDS_JAVA_HEAP_ONLY(return (idx >= MetaspaceShared::first_closed_archive_heap_region &&
                                idx <= MetaspaceShared::last_open_archive_heap_region);)
@@ -377,9 +435,6 @@ private:
   static bool open_archive_heap_region_mapped() {
     CDS_JAVA_HEAP_ONLY(return _open_archive_heap_region_mapped;)
     NOT_CDS_JAVA_HEAP_RETURN_(false);
-  }
-  static bool is_mapped() {
-    return closed_archive_heap_region_mapped() && open_archive_heap_region_mapped();
   }
 
   static void fixup_mapped_heap_regions() NOT_CDS_JAVA_HEAP_RETURN;
