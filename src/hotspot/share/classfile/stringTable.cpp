@@ -779,7 +779,7 @@ void StringTable::serialize_shared_table_header(SerializeClosure* soc) {
   if (soc->writing()) {
     // Sanity. Make sure we don't use the shared table at dump time
     _shared_table.reset();
-  } else if (!HeapShared::closed_archive_heap_region_mapped()) {
+  } else if (!HeapShared::closed_regions_mapped()) {
     _shared_table.reset();
   }
 }

@@ -65,14 +65,14 @@ class MetaspaceShared : AllStatic {
     num_non_heap_spaces = 3,   // rw and ro and bm
 
     // mapped java heap regions
-    first_closed_archive_heap_region = bm + 1,
-    max_closed_archive_heap_region = 2,
-    last_closed_archive_heap_region = first_closed_archive_heap_region + max_closed_archive_heap_region - 1,
-    first_open_archive_heap_region = last_closed_archive_heap_region + 1,
-    max_open_archive_heap_region = 2,
-    last_open_archive_heap_region = first_open_archive_heap_region + max_open_archive_heap_region - 1,
+    first_closed_heap_region = bm + 1,
+    max_closed_heap_region = 2,
+    last_closed_heap_region = first_closed_heap_region + max_closed_heap_region - 1,
+    first_open_heap_region = last_closed_heap_region + 1,
+    max_open_heap_region = 2,
+    last_open_heap_region = first_open_heap_region + max_open_heap_region - 1,
 
-    last_valid_region = last_open_archive_heap_region,
+    last_valid_region = last_open_heap_region,
     n_regions =  last_valid_region + 1 // total number of regions
   };
 
