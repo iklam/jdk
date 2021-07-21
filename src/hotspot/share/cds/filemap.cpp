@@ -212,7 +212,7 @@ void FileMapHeader::populate(FileMapInfo* mapinfo, size_t core_region_alignment)
   _core_region_alignment = core_region_alignment;
   _obj_alignment = ObjectAlignmentInBytes;
   _compact_strings = CompactStrings;
-  if (HeapShared::is_heap_object_archiving_allowed()) {
+  if (DumpSharedSpaces && HeapShared::can_write()) {
     _narrow_oop_mode = CompressedOops::mode();
     _narrow_oop_base = CompressedOops::base();
     _narrow_oop_shift = CompressedOops::shift();
@@ -1598,7 +1598,6 @@ MapArchiveResult FileMapInfo::map_regions(int regions[], int num_regions, char* 
 }
 
 bool FileMapInfo::read_region(int i, char* base, size_t size) {
-  assert(MetaspaceShared::use_windows_memory_mapping(), "used by windows only");
   FileMapRegion* si = space_at(i);
   log_info(cds)("Commit %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)%s",
                 is_static() ? "static " : "dynamic", i, p2i(base), p2i(base + size),
@@ -1804,6 +1803,24 @@ MemRegion FileMapInfo::get_heap_regions_range_with_current_oop_encoding_mode() {
   return MemRegion((HeapWord*)start, (HeapWord*)end);
 }
 
+void FileMapInfo::map_or_load_heap_regions() {
+  bool success = false;
+
+  if (has_heap_regions()) {
+    if (HeapShared::can_map()) {
+      success = map_heap_regions();
+    } else if (HeapShared::can_load()) {
+      success = HeapShared::load_heap_regions(this);
+    } else {
+      log_info(cds)("Cannot use CDS heap data. UseG1GC or UseEpsilonGC are required.");
+    }
+  }
+
+  if (!success) {
+    MetaspaceShared::disable_full_module_graph();
+  }
+}
+
 //
 // Map the closed and open archive heap objects to the runtime java heap.
 //
@@ -1819,12 +1836,6 @@ MemRegion FileMapInfo::get_heap_regions_range_with_current_oop_encoding_mode() {
 // regions may be added. GC may mark and update references in the mapped
 // open archive objects.
 void FileMapInfo::map_heap_regions_impl() {
-  if (!HeapShared::is_heap_object_archiving_allowed()) {
-    log_info(cds)("CDS heap data is being ignored. UseG1GC, "
-                  "UseCompressedOops and UseCompressedClassPointers are required.");
-    return;
-  }
-
   if (JvmtiExport::should_post_class_file_load_hook() && JvmtiExport::has_early_class_hook_env()) {
     ShouldNotReachHere(); // CDS should have been disabled.
     // The archived objects are mapped at JVM start-up, but we don't know if
@@ -1936,10 +1947,8 @@ void FileMapInfo::map_heap_regions_impl() {
   }
 }
 
-void FileMapInfo::map_heap_regions() {
-  if (has_heap_regions()) {
-    map_heap_regions_impl();
-  }
+bool FileMapInfo::map_heap_regions() {
+  map_heap_regions_impl();
 
   if (!HeapShared::closed_regions_mapped()) {
     assert(closed_heap_regions == NULL &&
@@ -1948,7 +1957,9 @@ void FileMapInfo::map_heap_regions() {
 
   if (!HeapShared::open_regions_mapped()) {
     assert(open_heap_regions == NULL && num_open_heap_regions == 0, "sanity");
-    MetaspaceShared::disable_full_module_graph();
+    return false;
+  } else {
+    return true;
   }
 }
 

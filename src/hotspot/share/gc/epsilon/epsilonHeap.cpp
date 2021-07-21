@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017, 2020, Red Hat, Inc. All rights reserved.
+ * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -260,6 +261,10 @@ HeapWord* EpsilonHeap::allocate_new_tlab(size_t min_size,
 
 HeapWord* EpsilonHeap::mem_allocate(size_t size, bool *gc_overhead_limit_was_exceeded) {
   *gc_overhead_limit_was_exceeded = false;
+  return allocate_work(size);
+}
+
+HeapWord* EpsilonHeap::allocate_loaded_archive_space(size_t size) {
   return allocate_work(size);
 }
 
