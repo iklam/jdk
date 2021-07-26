@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,7 +26,7 @@ import java.util.*;
 
 // This is a test case executed by DumpClassList.java to load classes
 // from various places to ensure that they are not written to the class list.
-public class ArrayListTest {
+public class DumpClassListApp {
     public static void main(String args[]) throws Exception {
         // The following lambda usage should generate various classes like
         // java.lang.invoke.LambdaForm$MH/1146743572. All of them should be excluded from
@@ -35,7 +35,7 @@ public class ArrayListTest {
         a.add("hello world.");
         a.forEach(str -> System.out.println(str));
 
-        System.out.println(Class.forName("java.lang.NewClass")); // should be excluded from the class list.
+        System.out.println(Class.forName("jdk.jfr.NewClass")); // should be excluded from the class list.
         System.out.println(Class.forName("boot.append.Foo"));    // should be excluded from the class list.
     }
 }
