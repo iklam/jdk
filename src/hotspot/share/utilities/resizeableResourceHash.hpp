@@ -67,6 +67,11 @@ protected:
   Node** table() {
     return _table;
   }
+
+  template<typename T>
+  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
+    return t->_table;
+  }
 };
 
 template<

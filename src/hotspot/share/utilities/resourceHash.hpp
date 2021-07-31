@@ -69,7 +69,11 @@ class ResourceHashtableBase : public STORAGE {
   // it's in the table.
   Node** lookup_node(unsigned hash, K const& key) {
     unsigned index = hash % table_size();
-    Node** ptr = bucket_at(index);
+#if 0
+    Node** ptr = bucket_at2(index);
+#else
+    Node** ptr = bucket_at4(this, index);
+#endif
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -85,6 +89,39 @@ class ResourceHashtableBase : public STORAGE {
   Node const** table() const {
     return const_cast<Node const**>(const_cast<ResourceHashtableBase*>(this)->table());
   }
+
+  template<typename T>
+  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
+    return STORAGE::table_of(t);
+  }
+
+
+  template<typename T>
+  using NodeType = typename std::conditional<std::is_const<T>::value, Node const, Node>::type;
+
+  template<typename T>
+  static NodeType<T>** bucket_at4(T* tab, unsigned index) {
+    NodeType<T>** t = table_of(tab);
+    return &t[index];
+  }
+
+
+  template<typename T>
+  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type bucket_at3(T* tab, unsigned index) {
+    using NODE = typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type;
+    NODE t = table_of(tab);
+    return &t[index];
+  }
+
+  Node** bucket_at3a(unsigned index) {
+    return bucket_at3(this, index);
+  }
+
+  Node** bucket_at2(unsigned index) {
+    Node** t = table_of(this);
+    return &t[index];
+  }
+
 
  protected:
   ResourceHashtableBase() : STORAGE(), _number_of_entries(0) {}
@@ -126,7 +163,7 @@ class ResourceHashtableBase : public STORAGE {
   }
 
   const V* get(K const& key) const {
-    return const_cast<const V*>(const_cast<ResourceHashtableBase*>(this)->get(key));
+    return const_cast<ResourceHashtableBase*>(this)->get(key);
   }
 
 
@@ -250,8 +287,14 @@ protected:
     return TABLE_SIZE;
   }
 
+public:
   Node** table() {
     return _table;
+  }
+
+  template<typename T>
+  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
+    return t->_table;
   }
 };
 
