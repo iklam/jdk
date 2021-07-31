@@ -69,11 +69,7 @@ class ResourceHashtableBase : public STORAGE {
   // it's in the table.
   Node** lookup_node(unsigned hash, K const& key) {
     unsigned index = hash % table_size();
-#if 0
-    Node** ptr = bucket_at2(index);
-#else
     Node** ptr = bucket_at4(this, index);
-#endif
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -90,38 +86,20 @@ class ResourceHashtableBase : public STORAGE {
     return const_cast<Node const**>(const_cast<ResourceHashtableBase*>(this)->table());
   }
 
-  template<typename T>
-  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
-    return STORAGE::table_of(t);
-  }
-
 
   template<typename T>
   using NodeType = typename std::conditional<std::is_const<T>::value, Node const, Node>::type;
+
+  template<typename T>
+  static  NodeType<T>** table_of(T* t) {
+    return STORAGE::table_of(t);
+  }
 
   template<typename T>
   static NodeType<T>** bucket_at4(T* tab, unsigned index) {
     NodeType<T>** t = table_of(tab);
     return &t[index];
   }
-
-
-  template<typename T>
-  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type bucket_at3(T* tab, unsigned index) {
-    using NODE = typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type;
-    NODE t = table_of(tab);
-    return &t[index];
-  }
-
-  Node** bucket_at3a(unsigned index) {
-    return bucket_at3(this, index);
-  }
-
-  Node** bucket_at2(unsigned index) {
-    Node** t = table_of(this);
-    return &t[index];
-  }
-
 
  protected:
   ResourceHashtableBase() : STORAGE(), _number_of_entries(0) {}
@@ -130,9 +108,9 @@ class ResourceHashtableBase : public STORAGE {
 
   ~ResourceHashtableBase() {
     if (ALLOC_TYPE == ResourceObj::C_HEAP) {
-      Node* const* bucket = table();
+      Node** bucket = table_of(this);
       const unsigned sz = table_size();
-      while (bucket < bucket_at(sz)) {
+      while (bucket < bucket_at4(this, sz)) {
         Node* node = *bucket;
         while (node != NULL) {
           Node* cur = node;
@@ -239,11 +217,12 @@ class ResourceHashtableBase : public STORAGE {
   }
 
  private:
-  template<class TABLE, class NODE, class VALUE, class ITER>
+  template<class ITER, class VALUE, class TABLE>
   static void iterate_impl(TABLE* t, ITER* iter) {
-    NODE** bucket = t->table();
+    using NODE = NodeType<TABLE>;
+    NODE** bucket = table_of(t);
     const unsigned sz = t->table_size();
-    while (bucket < t->bucket_at(sz)) {
+    while (bucket < bucket_at4(t, sz)) {
       NODE* node = *bucket;
       while (node != NULL) {
         bool cont = iter->do_entry(const_cast<K const&>(node->_key), const_cast<VALUE>(node->_value));
@@ -262,7 +241,7 @@ class ResourceHashtableBase : public STORAGE {
   // or else the table may no longer be properly hashed.
   template<class ITER>
   void iterate(ITER* iter) {
-    return iterate_impl<ResourceHashtableBase, Node, V&, ITER>(this, iter);
+    return iterate_impl<ITER, V&>(this, iter);
   }
 
   // Same as iterate(), except the callback should be
@@ -270,7 +249,7 @@ class ResourceHashtableBase : public STORAGE {
   // the value.
   template<class ITER>
   void const_iterate(ITER* iter) const {
-    return iterate_impl<ResourceHashtableBase const, Node const, V const&, ITER>(this, iter);
+    return iterate_impl<ITER, V const&>(this, iter);
   }
 };
 

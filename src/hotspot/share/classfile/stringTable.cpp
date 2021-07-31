@@ -768,7 +768,7 @@ void StringTable::write_to_archive(const DumpedInternedStrings* dumped_interned_
 
   // Copy the interned strings into the "string space" within the java heap
   CopyToArchive copier(&writer);
-  dumped_interned_strings->const_iterate(&copier);
+  const_cast<DumpedInternedStrings*>(dumped_interned_strings)->iterate(&copier);
 
   writer.dump(&_shared_table, "string");
 }
