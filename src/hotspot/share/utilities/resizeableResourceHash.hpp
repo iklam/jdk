@@ -33,6 +33,8 @@ template<
     MEMFLAGS MEM_TYPE>
 class ResizeableResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
+  template <typename T>
+  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
 
 protected:
   unsigned _table_size;
@@ -69,7 +71,7 @@ protected:
   }
 
   template<typename T>
-  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
+  static NodePtr<T>* table_of(T* t) {
     return t->_table;
   }
 };

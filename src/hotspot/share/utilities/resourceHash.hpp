@@ -59,11 +59,22 @@ class ResourceHashtableBase : public STORAGE {
  private:
   int _number_of_entries;
 
+  template<typename T>
+  static NodePtr<T>* table_of(T* t) {
+    return STORAGE::table_of(t);
+  }
+
+  template<typename T>
+  static NodePtr<T>* bucket_at(T* tab, unsigned index) {
+    NodePtr<T>* t = table_of(tab);
+    return &t[index];
+  }
+
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
   Node** lookup_node(unsigned hash, K const& key) {
     unsigned index = hash % table_size();
-    Node** ptr = bucket_at4(this, index);
+    Node** ptr = bucket_at(this, index);
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -72,20 +83,6 @@ class ResourceHashtableBase : public STORAGE {
       ptr = &(node->_next);
     }
     return ptr;
-  }
-
-  template<typename T>
-  using NodeType = typename std::conditional<std::is_const<T>::value, Node const, Node>::type;
-
-  template<typename T>
-  static typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type table_of(T* t) {
-    return STORAGE::table_of(t);
-  }
-
-  template<typename T>
-  static NodeType<T>** bucket_at4(T* tab, unsigned index) {
-    NodeType<T>** t = table_of(tab);
-    return &t[index];
   }
 
  protected:
@@ -97,7 +94,7 @@ class ResourceHashtableBase : public STORAGE {
     if (ALLOC_TYPE == ResourceObj::C_HEAP) {
       Node** bucket = table_of(this);
       const unsigned sz = table_size();
-      while (bucket < bucket_at4(this, sz)) {
+      while (bucket < bucket_at(this, sz)) {
         Node* node = *bucket;
         while (node != NULL) {
           Node* cur = node;
@@ -203,39 +200,13 @@ class ResourceHashtableBase : public STORAGE {
     return false;
   }
 
-#if 1
-  template<class T>
-  static void iterate_impl2(T* t) {
-    ResourceHashtableNode<oopDesc*, bool>* const* b = NULL;
-    const ResourceHashtableNode<oopDesc*, bool>** c = NULL;
-
-    b = table_of(t);
-
-    //c = b;
-
-    using NODE = NodeType<T>;
-    Node* const* bucket = NULL;
-    b = bucket;
-    bucket = b;
-
-    //= table_of(t);
-  }
-
-
-  void const_iterate2() const {
-    iterate_impl2(this);
-  }
-#endif
-
-
  private:
-  template<class ITER, class VALUE, class TABLE>
+  template<class VALUE, class TABLE, class ITER>
   static void iterate_impl(TABLE* t, ITER* iter) {
-    using NODE = NodeType<TABLE>;
-    NODE** bucket = table_of(t);
+    NodePtr<TABLE>* bucket = table_of(t);
     const unsigned sz = t->table_size();
-    while (bucket < bucket_at4(t, sz)) {
-      NODE* node = *bucket;
+    while (bucket < bucket_at(t, sz)) {
+      Node* node = *bucket;
       while (node != NULL) {
         bool cont = iter->do_entry(const_cast<K const&>(node->_key), const_cast<VALUE>(node->_value));
         if (!cont) { return; }
@@ -253,7 +224,7 @@ class ResourceHashtableBase : public STORAGE {
   // or else the table may no longer be properly hashed.
   template<class ITER>
   void iterate(ITER* iter) {
-    iterate_impl<ITER, V&>(this, iter);
+    iterate_impl<V&>(this, iter);
   }
 
   // Same as iterate(), except the callback should be
@@ -261,7 +232,7 @@ class ResourceHashtableBase : public STORAGE {
   // the value.
   template<class ITER>
   void const_iterate(ITER* iter) const {
-    iterate_impl<ITER, V const&>(this, iter);
+    iterate_impl<V const&>(this, iter);
   }
 };
 
@@ -270,11 +241,6 @@ class FixedResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
   template <typename T>
   using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
-
-#if 0
-  template <typename T>
-  using NodePtr2 = typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type;
-#endif
 
   Node* _table[TABLE_SIZE];
 protected:
@@ -285,17 +251,12 @@ protected:
     return TABLE_SIZE;
   }
 
-public:
   Node** table() {
     return _table;
   }
 
   template<typename T>
-#if 0
-  static typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type table_of(T* t) {
-#else
   static NodePtr<T>* table_of(T* t) {
-#endif
     return t->_table;
   }
 };
