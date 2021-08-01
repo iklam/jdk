@@ -53,17 +53,11 @@ template<
     >
 class ResourceHashtableBase : public STORAGE {
   using Node = ResourceHashtableNode<K, V>;
+  template <typename T>
+  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
+
  private:
   int _number_of_entries;
-
-  Node** bucket_at(unsigned index) {
-    Node** t = table();
-    return &t[index];
-  }
-
-  const Node** bucket_at(unsigned index) const {
-    return const_cast<Node const**>(const_cast<ResourceHashtableBase*>(this)->bucket_at(index));
-  }
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
@@ -80,18 +74,11 @@ class ResourceHashtableBase : public STORAGE {
     return ptr;
   }
 
-  Node** table() { return STORAGE::table(); }
-
-  Node const** table() const {
-    return const_cast<Node const**>(const_cast<ResourceHashtableBase*>(this)->table());
-  }
-
-
   template<typename T>
   using NodeType = typename std::conditional<std::is_const<T>::value, Node const, Node>::type;
 
   template<typename T>
-  static  NodeType<T>** table_of(T* t) {
+  static typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type table_of(T* t) {
     return STORAGE::table_of(t);
   }
 
@@ -216,6 +203,31 @@ class ResourceHashtableBase : public STORAGE {
     return false;
   }
 
+#if 1
+  template<class T>
+  static void iterate_impl2(T* t) {
+    ResourceHashtableNode<oopDesc*, bool>* const* b = NULL;
+    const ResourceHashtableNode<oopDesc*, bool>** c = NULL;
+
+    b = table_of(t);
+
+    //c = b;
+
+    using NODE = NodeType<T>;
+    Node* const* bucket = NULL;
+    b = bucket;
+    bucket = b;
+
+    //= table_of(t);
+  }
+
+
+  void const_iterate2() const {
+    iterate_impl2(this);
+  }
+#endif
+
+
  private:
   template<class ITER, class VALUE, class TABLE>
   static void iterate_impl(TABLE* t, ITER* iter) {
@@ -241,7 +253,7 @@ class ResourceHashtableBase : public STORAGE {
   // or else the table may no longer be properly hashed.
   template<class ITER>
   void iterate(ITER* iter) {
-    return iterate_impl<ITER, V&>(this, iter);
+    iterate_impl<ITER, V&>(this, iter);
   }
 
   // Same as iterate(), except the callback should be
@@ -249,13 +261,20 @@ class ResourceHashtableBase : public STORAGE {
   // the value.
   template<class ITER>
   void const_iterate(ITER* iter) const {
-    return iterate_impl<ITER, V const&>(this, iter);
+    iterate_impl<ITER, V const&>(this, iter);
   }
 };
 
 template<unsigned TABLE_SIZE, typename K, typename V>
 class FixedResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
+  template <typename T>
+  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
+
+#if 0
+  template <typename T>
+  using NodePtr2 = typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type;
+#endif
 
   Node* _table[TABLE_SIZE];
 protected:
@@ -272,7 +291,11 @@ public:
   }
 
   template<typename T>
-  static typename std::conditional<std::is_const<T>::value, Node const**, Node**>::type table_of(T* t) {
+#if 0
+  static typename std::conditional<std::is_const<T>::value, Node* const*, Node**>::type table_of(T* t) {
+#else
+  static NodePtr<T>* table_of(T* t) {
+#endif
     return t->_table;
   }
 };
