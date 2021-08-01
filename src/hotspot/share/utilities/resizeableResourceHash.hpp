@@ -67,10 +67,6 @@ protected:
     return _table_size;
   }
 
-  Node** table() {
-    return _table;
-  }
-
   template<typename T>
   static NodePtr<T>* table_of(T* t) {
     return t->_table;
