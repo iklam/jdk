@@ -54,29 +54,26 @@ template<
     >
 class ResourceHashtableBase : public STORAGE {
   using Node = ResourceHashtableNode<K, V>;
-  template <typename TABLE>
-  using NodePtr = typename std::conditional<std::is_const<TABLE>::value, Node* const, Node*>::type;
 
  private:
   int _number_of_entries;
 
   template<typename TABLE>
-  static NodePtr<TABLE>* table_of(TABLE* t) {
+  static auto table_of(TABLE* t) {
     return STORAGE::table_of(t);
   }
 
   template<typename TABLE>
-  static NodePtr<TABLE>* bucket_at(TABLE* t, unsigned index) {
-    NodePtr<TABLE>* array = table_of(t);
-    return &array[index];
+  static auto bucket_at(TABLE* t, unsigned index) {
+    return &(table_of(t)[index]);
   }
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
   template <typename TABLE>
-  static NodePtr<TABLE>* lookup_node(TABLE* t, unsigned hash, K const& key) {
+  static auto lookup_node(TABLE* t, unsigned hash, K const& key) {
     unsigned index = hash % t->table_size();
-    NodePtr<TABLE>* ptr = bucket_at(t, index);
+    auto ptr = bucket_at(t, index);
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -121,7 +118,7 @@ private:
   template <typename TABLE>
   static V* get_impl(TABLE* t, K const& key) {
     unsigned hv = HASH(key);
-    NodePtr<TABLE>* ptr = lookup_node(t, hv, key);
+    auto ptr = lookup_node(t, hv, key);
     if (*ptr != NULL) {
       return &((*ptr)->_value);
     } else {
@@ -212,7 +209,7 @@ public:
  private:
   template<class VALUE, class TABLE, class ITER>
   static void iterate_impl(TABLE* t, ITER* iter) {
-    NodePtr<TABLE>* bucket = table_of(t);
+    auto bucket = table_of(t);
     const unsigned sz = t->table_size();
     while (bucket < bucket_at(t, sz)) {
       Node* node = *bucket;
@@ -248,8 +245,6 @@ public:
 template<unsigned TABLE_SIZE, typename K, typename V>
 class FixedResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
-  template <typename TABLE>
-  using NodePtr = typename std::conditional<std::is_const<TABLE>::value, Node* const, Node*>::type;
 
   Node* _table[TABLE_SIZE];
 protected:
@@ -261,7 +256,7 @@ protected:
   }
 
   template<typename TABLE>
-  static NodePtr<TABLE>* table_of(TABLE* t) {
+  static auto table_of(TABLE* t) {
     return t->_table;
   }
 };
