@@ -25,6 +25,7 @@
 #ifndef SHARE_UTILITIES_RESIZEABLERESOURCEHASH_HPP
 #define SHARE_UTILITIES_RESIZEABLERESOURCEHASH_HPP
 
+#include <type_traits>
 #include "utilities/resourceHash.hpp"
 
 template<
@@ -33,8 +34,8 @@ template<
     MEMFLAGS MEM_TYPE>
 class ResizeableResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
-  template <typename T>
-  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
+  template <typename TABLE>
+  using NodePtr = typename std::conditional<std::is_const<TABLE>::value, Node* const, Node*>::type;
 
 protected:
   unsigned _table_size;

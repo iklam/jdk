@@ -25,6 +25,7 @@
 #ifndef SHARE_UTILITIES_RESOURCEHASH_HPP
 #define SHARE_UTILITIES_RESOURCEHASH_HPP
 
+#include <type_traits>
 #include "memory/allocation.hpp"
 
 template<typename K, typename V>
@@ -53,29 +54,29 @@ template<
     >
 class ResourceHashtableBase : public STORAGE {
   using Node = ResourceHashtableNode<K, V>;
-  template <typename T>
-  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
+  template <typename TABLE>
+  using NodePtr = typename std::conditional<std::is_const<TABLE>::value, Node* const, Node*>::type;
 
  private:
   int _number_of_entries;
 
-  template<typename T>
-  static NodePtr<T>* table_of(T* t) {
+  template<typename TABLE>
+  static NodePtr<TABLE>* table_of(TABLE* t) {
     return STORAGE::table_of(t);
   }
 
-  template<typename T>
-  static NodePtr<T>* bucket_at(T* tab, unsigned index) {
-    NodePtr<T>* t = table_of(tab);
-    return &t[index];
+  template<typename TABLE>
+  static NodePtr<TABLE>* bucket_at(TABLE* t, unsigned index) {
+    NodePtr<TABLE>* array = table_of(t);
+    return &array[index];
   }
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
-  template <typename T>
-  static NodePtr<T>* lookup_node_impl(T* table, unsigned hash, K const& key) {
-    unsigned index = hash % table->table_size();
-    NodePtr<T>* ptr = bucket_at(table, index);
+  template <typename TABLE>
+  static NodePtr<TABLE>* lookup_node(TABLE* t, unsigned hash, K const& key) {
+    unsigned index = hash % t->table_size();
+    NodePtr<TABLE>* ptr = bucket_at(t, index);
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -84,10 +85,6 @@ class ResourceHashtableBase : public STORAGE {
       ptr = &(node->_next);
     }
     return ptr;
-  }
-
-  Node** lookup_node(unsigned hash, K const& key) {
-    return lookup_node_impl(this, hash, key);
   }
 
  protected:
@@ -120,10 +117,11 @@ class ResourceHashtableBase : public STORAGE {
     return value != NULL;
   }
 
-  template <typename T>
-  static V* get_impl(T* table, K const& key) {
+private:
+  template <typename TABLE>
+  static V* get_impl(TABLE* t, K const& key) {
     unsigned hv = HASH(key);
-    NodePtr<T>* ptr = lookup_node_impl(table, hv, key);
+    NodePtr<TABLE>* ptr = lookup_node(t, hv, key);
     if (*ptr != NULL) {
       return &((*ptr)->_value);
     } else {
@@ -131,16 +129,13 @@ class ResourceHashtableBase : public STORAGE {
     }
   }
 
+public:
   V* get(K const& key) {
     return get_impl(this, key);
   }
 
   const V* get(K const& key) const {
-#if 0
-    return const_cast<ResourceHashtableBase*>(this)->get(key);
-#else
     return get_impl(this, key);
-#endif
   }
 
 
@@ -151,7 +146,7 @@ class ResourceHashtableBase : public STORAGE {
   */
   bool put(K const& key, V const& value) {
     unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
+    Node** ptr = lookup_node(this, hv, key);
     if (*ptr != NULL) {
       (*ptr)->_value = value;
       return false;
@@ -169,7 +164,7 @@ class ResourceHashtableBase : public STORAGE {
   // *p_created is true if entry was created, false if entry pre-existed.
   V* put_if_absent(K const& key, bool* p_created) {
     unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
+    Node** ptr = lookup_node(this, hv, key);
     if (*ptr == NULL) {
       *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key);
       *p_created = true;
@@ -187,7 +182,7 @@ class ResourceHashtableBase : public STORAGE {
   // *p_created is true if entry was created, false if entry pre-existed.
   V* put_if_absent(K const& key, V const& value, bool* p_created) {
     unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
+    Node** ptr = lookup_node(this, hv, key);
     if (*ptr == NULL) {
       *ptr = new (ALLOC_TYPE, MEM_TYPE) Node(hv, key, value);
       *p_created = true;
@@ -201,8 +196,7 @@ class ResourceHashtableBase : public STORAGE {
 
   bool remove(K const& key) {
     unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
-
+    Node** ptr = lookup_node(this, hv, key);
     Node* node = *ptr;
     if (node != NULL) {
       *ptr = node->_next;
@@ -254,8 +248,8 @@ class ResourceHashtableBase : public STORAGE {
 template<unsigned TABLE_SIZE, typename K, typename V>
 class FixedResourceHashtableStorage : public ResourceObj {
   using Node = ResourceHashtableNode<K, V>;
-  template <typename T>
-  using NodePtr = typename std::conditional<std::is_const<T>::value, Node* const, Node*>::type;
+  template <typename TABLE>
+  using NodePtr = typename std::conditional<std::is_const<TABLE>::value, Node* const, Node*>::type;
 
   Node* _table[TABLE_SIZE];
 protected:
@@ -270,8 +264,8 @@ protected:
     return _table;
   }
 
-  template<typename T>
-  static NodePtr<T>* table_of(T* t) {
+  template<typename TABLE>
+  static NodePtr<TABLE>* table_of(TABLE* t) {
     return t->_table;
   }
 };
