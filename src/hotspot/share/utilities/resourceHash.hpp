@@ -72,9 +72,10 @@ class ResourceHashtableBase : public STORAGE {
 
   // Returns a pointer to where the node where the value would reside if
   // it's in the table.
-  Node** lookup_node(unsigned hash, K const& key) {
-    unsigned index = hash % table_size();
-    Node** ptr = bucket_at(this, index);
+  template <typename T>
+  static NodePtr<T>* lookup_node_impl(T* table, unsigned hash, K const& key) {
+    unsigned index = hash % table->table_size();
+    NodePtr<T>* ptr = bucket_at(table, index);
     while (*ptr != NULL) {
       Node* node = *ptr;
       if (node->_hash == hash && EQUALS(key, node->_key)) {
@@ -83,6 +84,10 @@ class ResourceHashtableBase : public STORAGE {
       ptr = &(node->_next);
     }
     return ptr;
+  }
+
+  Node** lookup_node(unsigned hash, K const& key) {
+    return lookup_node_impl(this, hash, key);
   }
 
  protected:
@@ -111,12 +116,14 @@ class ResourceHashtableBase : public STORAGE {
   int number_of_entries() const { return _number_of_entries; }
 
   bool contains(K const& key) const {
-    return const_cast<ResourceHashtableBase*>(this)->get(key) != NULL;
+    const V* value = get(key);
+    return value != NULL;
   }
 
-  V* get(K const& key) {
+  template <typename T>
+  static V* get_impl(T* table, K const& key) {
     unsigned hv = HASH(key);
-    Node** ptr = lookup_node(hv, key);
+    NodePtr<T>* ptr = lookup_node_impl(table, hv, key);
     if (*ptr != NULL) {
       return &((*ptr)->_value);
     } else {
@@ -124,8 +131,16 @@ class ResourceHashtableBase : public STORAGE {
     }
   }
 
+  V* get(K const& key) {
+    return get_impl(this, key);
+  }
+
   const V* get(K const& key) const {
+#if 0
     return const_cast<ResourceHashtableBase*>(this)->get(key);
+#else
+    return get_impl(this, key);
+#endif
   }
 
 
