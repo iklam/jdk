@@ -83,6 +83,10 @@ public:
 
   virtual void safepoint_synchronize_begin();
   virtual void safepoint_synchronize_end();
+
+  // Support for loading objects from CDS archive into the heap
+  virtual bool can_load_archived_objects() const { return true; }
+  virtual HeapWord* allocate_loaded_archive_space(size_t size);
 };
 
 #endif // SHARE_GC_SERIAL_SERIALHEAP_HPP

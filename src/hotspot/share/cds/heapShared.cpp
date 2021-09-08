@@ -1633,7 +1633,7 @@ bool HeapShared::load_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loa
     LoadedArchiveHeapRegion* ri = &loaded_regions[i];
     FileMapRegion* r = mapinfo->space_at(ri->_region_index);
 
-    if (!mapinfo->read_region(ri->_region_index, (char*)load_address, r->used())) {
+    if (!mapinfo->read_region(ri->_region_index, (char*)load_address, r->used(), /* do_commit = */ false)) {
       // There's no easy way to free the buffer, so we will fill it with zero later
       // in fill_failed_loaded_region(), and it will eventually be GC'ed.
       log_warning(cds)("Loading of heap region %d has failed. Archived objects are disabled", i);
@@ -1672,6 +1672,9 @@ bool HeapShared::load_heap_regions(FileMapInfo* mapinfo) {
 
   uintptr_t buffer;
   int num_loaded_regions = init_loaded_regions(mapinfo, loaded_regions, &buffer);
+  if (buffer == 0) {
+    return false;
+  }
   sort_loaded_regions(loaded_regions, num_loaded_regions, buffer);
   if (!load_regions(mapinfo, loaded_regions, num_loaded_regions, buffer)) {
     return false;
@@ -1732,9 +1735,11 @@ void HeapShared::verify_loaded_heap() {
 
 void HeapShared::fill_failed_loaded_region() {
   assert(_loading_failed, "must be");
-  HeapWord* bottom = (HeapWord*)_loaded_heap_bottom;
-  HeapWord* top = (HeapWord*)_loaded_heap_top;
-  Universe::heap()->fill_with_objects(bottom, top - bottom);
+  if (_loaded_heap_bottom != 0) {
+    HeapWord* bottom = (HeapWord*)_loaded_heap_bottom;
+    HeapWord* top = (HeapWord*)_loaded_heap_top;
+    Universe::heap()->fill_with_objects(bottom, top - bottom);
+  }
 }
 
 #endif // INCLUDE_CDS_JAVA_HEAP

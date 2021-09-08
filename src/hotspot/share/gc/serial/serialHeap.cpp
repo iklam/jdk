@@ -29,7 +29,9 @@
 #include "gc/shared/genMemoryPools.hpp"
 #include "gc/shared/strongRootsScope.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
+#include "logging/log.hpp"
 #include "memory/universe.hpp"
+#include "runtime/mutexLocker.hpp"
 #include "services/memoryManager.hpp"
 
 SerialHeap* SerialHeap::heap() {
@@ -111,4 +113,27 @@ void SerialHeap::safepoint_synchronize_end() {
   if (UseStringDeduplication) {
     SuspendibleThreadSet::desynchronize();
   }
+}
+
+HeapWord* SerialHeap::allocate_loaded_archive_space(size_t word_size) {
+#if 1
+  size_t byte_size = word_size * sizeof(HeapWord);
+  if (byte_size * 1.5 > NewSize) {
+    // The archived objects may take up too much space in the new gen and cause
+    // a GC before the VM is fully initialized.
+    log_info(cds)("Archived heap objects (" SIZE_FORMAT "%s) are not loaded. "
+                  "Try increasing NewSize (current value " SIZE_FORMAT "%s)",
+                  byte_size_in_proper_unit(byte_size),
+                  proper_unit_for_byte_size(byte_size),
+                  byte_size_in_proper_unit(NewSize),
+                  proper_unit_for_byte_size(NewSize));
+    return NULL;
+  }
+  MutexLocker ml(Heap_lock);
+  return young_gen()->allocate(word_size, /* is_tlab = */ false);
+#else
+  // FIXME -- this results in very slow VerifyGC
+  MutexLocker ml(Heap_lock);
+  return old_gen()->allocate(word_size, /* is_tlab = */ false);
+#endif
 }
