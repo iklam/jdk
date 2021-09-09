@@ -45,3 +45,4 @@ class CDSOffsets: public CHeapObj<mtInternal> {
 };
 
 #endif // SHARE_CDS_CDSOFFSETS_HPP
+// add more stuff
