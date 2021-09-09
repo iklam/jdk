@@ -44,4 +44,6 @@ class CDSOffsets: public CHeapObj<mtInternal> {
   static int find_offset(const char* name);
 };
 
+// add comments
+
 #endif // SHARE_CDS_CDSOFFSETS_HPP

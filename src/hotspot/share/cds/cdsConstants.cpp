@@ -31,6 +31,8 @@
 #include "memory/allocation.inline.hpp"
 #include "utilities/macros.hpp"
 
+// Added a comment
+
 CDSOffsets::CDSOffsets(const char* name, int offset, CDSOffsets* next) {
   _name = NEW_C_HEAP_ARRAY(char, strlen(name) + 1, mtInternal);
   strcpy(_name, name);
