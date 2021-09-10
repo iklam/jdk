@@ -219,6 +219,19 @@ void TenuredGeneration::object_iterate(ObjectClosure* blk) {
   _the_space->object_iterate(blk);
 }
 
+void TenuredGeneration::complete_loaded_archive_space(MemRegion archive_space) {
+  TenuredSpace* space = (TenuredSpace*)_the_space;
+
+  HeapWord* start = archive_space.start();
+  while (start < archive_space.end()) {
+    log_error(gc)("alloc-blcok at " PTR_FORMAT, p2i(start));
+    size_t word_size = _the_space->block_size(start); /// Crashes here when accessing the klass
+    log_error(gc)("alloc-blcok from " PTR_FORMAT " to " PTR_FORMAT, p2i(start), p2i(start + word_size));
+    space->alloc_block(start, start + word_size);
+    start += word_size;
+  }
+}
+
 void TenuredGeneration::save_marks() {
   _the_space->set_saved_mark();
 }

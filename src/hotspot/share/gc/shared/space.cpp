@@ -769,6 +769,10 @@ HeapWord* OffsetTableContigSpace::initialize_threshold() {
   return _offsets.initialize_threshold();
 }
 
+void OffsetTableContigSpace::alloc_block(HeapWord* start, HeapWord* end) {
+  return _offsets.alloc_block(start, end);
+}
+
 HeapWord* OffsetTableContigSpace::cross_threshold(HeapWord* start, HeapWord* end) {
   _offsets.alloc_block(start, end);
   return _offsets.threshold();

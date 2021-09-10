@@ -347,7 +347,7 @@ private:
   static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record);
 
   static int init_loaded_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loaded_regions,
-                                 uintptr_t* buffer_ret);
+                                 MemRegion& archive_space);
   static void sort_loaded_regions(LoadedArchiveHeapRegion* loaded_regions, int num_loaded_regions,
                                   uintptr_t buffer);
   static bool load_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loaded_regions,

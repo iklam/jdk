@@ -634,6 +634,7 @@ class OffsetTableContigSpace: public ContiguousSpace {
 
   // MarkSweep support phase3
   virtual HeapWord* initialize_threshold();
+  virtual void alloc_block(HeapWord* start, HeapWord* end);
   virtual HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
 
   virtual void print_on(outputStream* st) const;

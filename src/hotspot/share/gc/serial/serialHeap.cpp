@@ -116,7 +116,7 @@ void SerialHeap::safepoint_synchronize_end() {
 }
 
 HeapWord* SerialHeap::allocate_loaded_archive_space(size_t word_size) {
-#if 1
+#if 0
   size_t byte_size = word_size * sizeof(HeapWord);
   if (byte_size * 1.5 > NewSize) {
     // The archived objects may take up too much space in the new gen and cause
@@ -134,6 +134,15 @@ HeapWord* SerialHeap::allocate_loaded_archive_space(size_t word_size) {
 #else
   // FIXME -- this results in very slow VerifyGC
   MutexLocker ml(Heap_lock);
-  return old_gen()->allocate(word_size, /* is_tlab = */ false);
+  HeapWord* result = old_gen()->allocate(word_size, /* is_tlab = */ false);
+  log_error(gc)("archive from " PTR_FORMAT " to " PTR_FORMAT, p2i(result), p2i(result + word_size));
+  return result;
 #endif
+}
+
+void SerialHeap::complete_loaded_archive_space(MemRegion archive_space) {
+  assert(old_gen()->used_region().contains(archive_space), "Archive space not contained in old gen");
+  log_error(gc)("completing archive from " PTR_FORMAT " to " PTR_FORMAT, p2i(archive_space.start()), p2i(archive_space.end()));
+
+  old_gen()->complete_loaded_archive_space(archive_space);
 }

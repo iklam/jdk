@@ -1581,7 +1581,7 @@ class PatchLoadedRegionPointers: public BitMapClosure {
 };
 
 int HeapShared::init_loaded_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loaded_regions,
-                                    uintptr_t* buffer_ret) {
+                                    MemRegion& archive_space) {
   size_t total_bytes = 0;
   int num_loaded_regions = 0;
   for (int i = MetaspaceShared::first_archive_heap_region;
@@ -1599,12 +1599,14 @@ int HeapShared::init_loaded_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegio
   }
 
   assert(is_aligned(total_bytes, HeapWordSize), "must be");
-  uintptr_t buffer = (uintptr_t)
-    Universe::heap()->allocate_loaded_archive_space(total_bytes / HeapWordSize);
-  _loaded_heap_bottom = buffer;
-  _loaded_heap_top    = buffer + total_bytes;
+  size_t word_size = total_bytes / HeapWordSize;
+  HeapWord* buffer = Universe::heap()->allocate_loaded_archive_space(total_bytes / HeapWordSize);
 
-  *buffer_ret = buffer;
+  archive_space = MemRegion(buffer, word_size);
+
+  _loaded_heap_bottom = (uintptr_t)archive_space.start();
+  _loaded_heap_top    = _loaded_heap_bottom + total_bytes;
+
   return num_loaded_regions;
 }
 
@@ -1670,19 +1672,21 @@ bool HeapShared::load_heap_regions(FileMapInfo* mapinfo) {
   LoadedArchiveHeapRegion loaded_regions[MetaspaceShared::max_num_heap_regions];
   memset(loaded_regions, 0, sizeof(loaded_regions));
 
-  uintptr_t buffer;
-  int num_loaded_regions = init_loaded_regions(mapinfo, loaded_regions, &buffer);
-  if (buffer == 0) {
+  MemRegion archive_space;
+  int num_loaded_regions = init_loaded_regions(mapinfo, loaded_regions, archive_space);
+  if (archive_space.start() == nullptr) {
     return false;
   }
-  sort_loaded_regions(loaded_regions, num_loaded_regions, buffer);
-  if (!load_regions(mapinfo, loaded_regions, num_loaded_regions, buffer)) {
+  sort_loaded_regions(loaded_regions, num_loaded_regions, (uintptr_t)archive_space.start());
+  if (!load_regions(mapinfo, loaded_regions, num_loaded_regions, (uintptr_t)archive_space.start())) {
     return false;
   }
 
   init_loaded_heap_relocation(loaded_regions, num_loaded_regions);
   _is_loaded = true;
   set_roots(mapinfo->heap_obj_roots());
+
+  Universe::heap()->complete_loaded_archive_space(archive_space);
 
   return true;
 }
