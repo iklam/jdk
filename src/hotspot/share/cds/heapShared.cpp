@@ -1686,7 +1686,7 @@ bool HeapShared::load_heap_regions(FileMapInfo* mapinfo) {
   _is_loaded = true;
   set_roots(mapinfo->heap_obj_roots());
 
-  Universe::heap()->complete_loaded_archive_space(archive_space);
+// Universe::heap()->complete_loaded_archive_space(archive_space);
 
   return true;
 }
@@ -1714,6 +1714,14 @@ class VerifyLoadedHeapEmbeddedPointers: public BasicOopIterateClosure {
 };
 
 void HeapShared::verify_loaded_heap() {
+  if (is_loaded()) {
+    HeapWord* bottom = (HeapWord*)_loaded_heap_bottom;
+    HeapWord* top    = (HeapWord*)_loaded_heap_top;
+
+    MemRegion archive_space = MemRegion(bottom, top);
+    Universe::heap()->complete_loaded_archive_space(archive_space);
+  }
+
   if (!VerifyArchivedFields || !is_loaded()) {
     return;
   }
