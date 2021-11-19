@@ -143,6 +143,7 @@ struct LoadedArchiveHeapRegion;
 
 class HeapShared: AllStatic {
   friend class VerifySharedOopClosure;
+  static bool _disable_writing;
 
 public:
   // At runtime, heap regions in the CDS archive can be used in two different ways,
@@ -155,10 +156,15 @@ public:
 
   // Can this VM write heap regions into the CDS archive? Currently only G1+compressed{oops,cp}
   static bool can_write() {
+    if (_disable_writing) {
+      return false;
+    }
     CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedOops && UseCompressedClassPointers);)
     NOT_CDS_JAVA_HEAP(return false;)
   }
-
+  static void disable_writing() {
+    _disable_writing = true;
+  }
   // Can this VM map archived heap regions? Currently only G1+compressed{oops,cp}
   static bool can_map() {
     CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedOops && UseCompressedClassPointers);)
