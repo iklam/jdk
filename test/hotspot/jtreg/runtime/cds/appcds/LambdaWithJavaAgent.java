@@ -24,13 +24,14 @@
 
 /*
  * @test
- * @summary Test dumping lambda proxy class with java agent transforming
- *          its interface.
- * @requires vm.cds
+ * @bug 8276126
+ * @summary Test static dumping with java agent transforming a class loaded
+ *          by the boot class loader.
+ * @requires vm.cds.write.archived.java.heap
  * @requires vm.jvmti
  * @library /test/lib /test/hotspot/jtreg/runtime/cds/appcds/test-classes
- * @compile test-classes/OldProvider.jasm
- * @compile test-classes/LambdaContainsOldInfApp.java
+ * @compile test-classes/Hello.java
+ * @compile test-classes/TransformBootClass.java
  * @run driver LambdaWithJavaAgent
  */
 
@@ -43,22 +44,23 @@ import jdk.test.lib.helpers.ClassFileInstaller;
 public class LambdaWithJavaAgent {
 
     public static String agentClasses[] = {
-        ClassFileVersionTransformer.class.getName(),
+        TransformBootClass.class.getName(),
     };
 
     public static void main(String[] args) throws Exception {
-        String mainClass = "LambdaContainsOldInfApp";
-        String namePrefix = "lambdacontainsoldinf";
-        JarBuilder.build(namePrefix, mainClass, "OldProvider");
+        String mainClass = Hello.class.getName();
+        String namePrefix = "lambda-with-java-agent";
+        JarBuilder.build(namePrefix, mainClass);
 
         String appJar = TestCommon.getTestJar(namePrefix + ".jar");
         String classList = namePrefix + ".list";
         String archiveName = namePrefix + ".jsa";
 
         String agentJar =
-            ClassFileInstaller.writeJar("ClassFileVersionTransformer.jar",
-                                        ClassFileInstaller.Manifest.fromSourceFile("ClassFileVersionTransformer.mf"),
+            ClassFileInstaller.writeJar("TransformBootClass.jar",
+                                        ClassFileInstaller.Manifest.fromSourceFile("test-classes/TransformBootClass.mf"),
                                         agentClasses);
+        String useJavaAgent = "-javaagent:" + agentJar + "=jdk/internal/math/FDBigInteger";
 
         // dump class list
         CDSTestUtils.dumpClassList(classList, "-cp", appJar, mainClass);
@@ -68,26 +70,24 @@ public class LambdaWithJavaAgent {
             .addPrefix("-XX:ExtraSharedClassListFile=" + classList,
                        "-cp", appJar,
                        "-XX:+AllowArchivingWithJavaAgent",
-                       "-javaagent:" + agentJar + "=OldProvider",
-                       "-Xlog:class+load,cds")
+                       useJavaAgent,
+                       "-Xlog:class+load,cds+class=debug,cds")
             .setArchiveName(archiveName);
         OutputAnalyzer output = CDSTestUtils.createArchiveAndCheck(opts);
-        TestCommon.checkExecReturn(output, 0, false,
-                                   "Skipping OldProvider: Old class has been linked");
-        //output.shouldMatch("Skipping.LambdaContainsOldInfApp[$][$]Lambda[$].*0x.*:.*Old.class.has.been.linked");
+        output//.shouldMatch("klasses.*=.*unreg jdk.internal.math.FDBigInteger")
+              .shouldContain("Skipping jdk/internal/math/FDBigInteger: Unsupported location")
+              .shouldMatch(".class.load.*jdk.internal.math.FDBigInteger.*source.*modules");
 
         // run with archive
         CDSOptions runOpts = (new CDSOptions())
             .addPrefix("-cp", appJar, "-Xlog:class+load,cds=debug",
                        "-XX:+AllowArchivingWithJavaAgent",
-                       "-javaagent:" + agentJar)
+                       useJavaAgent)
             .setArchiveName(archiveName)
             .setUseVersion(false)
             .addSuffix(mainClass);
         output = CDSTestUtils.runWithArchive(runOpts);
         TestCommon.checkExecReturn(output, 0, true,
-            "[class,load] LambdaContainsOldInfApp source: shared objects file");
-        output.shouldMatch(".class.load. OldProvider.source:.*lambdacontainsoldinf.jar")
-              .shouldMatch(".class.load. LambdaContainsOldInfApp[$][$]Lambda[$].*/0x.*source:.*LambdaContainsOldInf");
+            "Hello source: shared objects file");
     }
 }
