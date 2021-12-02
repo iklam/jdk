@@ -172,9 +172,20 @@ public class SharedArchiveConsistency {
         System.out.println("\n2d. Corrupt _version, should fail\n");
         String modVersion = startNewArchive("modify-version");
         copiedJsa = CDSArchiveUtils.copyArchiveFile(orgJsaFile, modVersion);
-        CDSArchiveUtils.modifyHeaderIntField(copiedJsa, CDSArchiveUtils.offsetVersion(), 0x00000000);
+        CDSArchiveUtils.modifyHeaderIntField(copiedJsa, CDSArchiveUtils.offsetVersion(), 0x3fffffff);
         output = shareAuto ? TestCommon.execAuto(execArgs) : TestCommon.execCommon(execArgs);
         output.shouldContain("The shared archive file has the wrong version");
+        output.shouldNotContain("Checksum verification failed");
+        if (shareAuto) {
+            output.shouldContain(HELLO_WORLD);
+        }
+
+        System.out.println("\n2e. Corrupt _version, should fail\n");
+        String modVersion2 = startNewArchive("modify-version2");
+        copiedJsa = CDSArchiveUtils.copyArchiveFile(orgJsaFile, modVersion2);
+        CDSArchiveUtils.modifyHeaderIntField(copiedJsa, CDSArchiveUtils.offsetVersion(), 0x00000000);
+        output = shareAuto ? TestCommon.execAuto(execArgs) : TestCommon.execCommon(execArgs);
+        output.shouldContain("Cannot handle shared archive file version 0. Must be at least 12");
         output.shouldNotContain("Checksum verification failed");
         if (shareAuto) {
             output.shouldContain(HELLO_WORLD);
