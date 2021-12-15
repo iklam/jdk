@@ -33,13 +33,16 @@ endif
 ifndef ARCHIVE
 ARCHIVE = dyn.jsa
 endif
+ifndef NUMCLS
+NUMCLS = 512
+endif
 
 run: ZGCBaseArchive.jsa LotsUnload.jar
-	@echo -n .
+	@echo -n .$(NUMCLS)
 	@${JAVA} -cp LotsUnload.jar -XX:ArchiveClassesAtExit=${ARCHIVE} -Xmx64m -Xms32m -XX:+UseZGC \
 	    -XX:SharedArchiveFile=ZGCBaseArchive.jsa \
 	    ${LOGS} \
-	    LotsUnload 16 512
+	    LotsUnload 16 $(NUMCLS)
 
 run-parallel: ZGCBaseArchive.jsa LotsUnload.jar
 	@echo ----------------------------------------
@@ -49,7 +52,7 @@ run-parallel: ZGCBaseArchive.jsa LotsUnload.jar
 	rm -f stop.now
 	ulimit -c unlimited; \
 	for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \
-	    (while $(MAKE) -s run ARCHIVE=dyn$$i.jsa; do if test -f stop.now; then break; fi; done; touch stop.now) & \
+	    (while $(MAKE) -s run ARCHIVE=dyn$$i.jsa NUMCLS=$$(expr 117 + $$i \* 29); do if test -f stop.now; then break; fi; done; touch stop.now) & \
 	done; \
 	wait
 
