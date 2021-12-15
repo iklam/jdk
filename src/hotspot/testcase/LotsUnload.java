@@ -53,8 +53,13 @@ public class LotsUnload {
 class DefinedAsHiddenKlass {
     // ZGC region size is always a multiple of 2MB on x64
     static byte[] array = new byte[2 * 1024 * 1024 - 8 * 1024];
-
+    static String x;
+    static double d = 123;
+    static float f = 456;
     public DefinedAsHiddenKlass() {
-        //System.out.println("array size is "  + array.length + " bytes");
+        x = "array size is "  + array.length + " bytes ";
+    }
+    public void doit(Runnable r) {
+        r.run();
     }
 }
