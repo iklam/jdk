@@ -596,8 +596,9 @@ void SymbolTable::dump(outputStream* st, bool verbose) {
 }
 
 #if INCLUDE_CDS
+template <typename T>
 void SymbolTable::copy_shared_symbol_table(GrowableArray<Symbol*>* symbols,
-                                           CompactHashtableWriter* writer) {
+                                           CompactHashtableWriter<T>* writer) {
   ArchiveBuilder* builder = ArchiveBuilder::current();
   int len = symbols->length();
   for (int i = 0; i < len; i++) {
@@ -611,11 +612,11 @@ void SymbolTable::copy_shared_symbol_table(GrowableArray<Symbol*>* symbols,
 }
 
 size_t SymbolTable::estimate_size_for_archive() {
-  return CompactHashtableWriter::estimate_size(int(_items_count));
+  return CompactHashtableWriter<u4>::estimate_size(int(_items_count));
 }
 
 void SymbolTable::write_to_archive(GrowableArray<Symbol*>* symbols) {
-  CompactHashtableWriter writer(int(_items_count), ArchiveBuilder::symbol_stats());
+  CompactHashtableWriter<u4> writer(int(_items_count), ArchiveBuilder::symbol_stats());
   copy_shared_symbol_table(symbols, &writer);
   if (!DynamicDumpSharedSpaces) {
     _shared_table.reset();

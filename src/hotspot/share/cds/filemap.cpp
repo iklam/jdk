@@ -241,8 +241,13 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
     _narrow_oop_mode = CompressedOops::mode();
     _narrow_oop_base = CompressedOops::base();
     _narrow_oop_shift = CompressedOops::shift();
-    _heap_begin = CompressedOops::begin();
-    _heap_end = CompressedOops::end();
+    if (UseCompressedOops) {
+      _heap_begin = CompressedOops::begin();
+      _heap_end = CompressedOops::end();
+    } else {
+      _heap_begin = (address)G1CollectedHeap::heap()->reserved().start();
+      _heap_end = (address)G1CollectedHeap::heap()->reserved().end();
+    }
   }
   _compressed_oops = UseCompressedOops;
   _compressed_class_ptrs = UseCompressedClassPointers;
@@ -312,6 +317,7 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- compressed_class_ptrs:          %d", _compressed_class_ptrs);
   st->print_cr("- cloned_vtables_offset:          " SIZE_FORMAT_HEX, _cloned_vtables_offset);
   st->print_cr("- serialized_data_offset:         " SIZE_FORMAT_HEX, _serialized_data_offset);
+  st->print_cr("- heap_begin:                     " INTPTR_FORMAT, p2i(_heap_begin));
   st->print_cr("- heap_end:                       " INTPTR_FORMAT, p2i(_heap_end));
   st->print_cr("- jvm_ident:                      %s", _jvm_ident);
   st->print_cr("- shared_path_table_offset:       " SIZE_FORMAT_HEX, _shared_path_table_offset);
@@ -1479,8 +1485,12 @@ void FileMapInfo::write_region(int region, char* base, size_t size,
   } else if (HeapShared::is_heap_region(region)) {
     assert(!DynamicDumpSharedSpaces, "must be");
     requested_base = base;
-    mapping_offset = (size_t)CompressedOops::encode_not_null(cast_to_oop(base));
-    assert(mapping_offset == (size_t)(uint32_t)mapping_offset, "must be 32-bit only");
+    if (UseCompressedOops) {
+      mapping_offset = (size_t)CompressedOops::encode_not_null(cast_to_oop(base));
+      assert(mapping_offset == (size_t)(uint32_t)mapping_offset, "must be 32-bit only");
+    } else {
+      mapping_offset = requested_base - (char*)G1CollectedHeap::heap()->reserved().start();
+    }
   } else {
     char* requested_SharedBaseAddress = (char*)MetaspaceShared::requested_base_address();
     requested_base = ArchiveBuilder::current()->to_requested(base);
@@ -2001,7 +2011,10 @@ bool FileMapInfo::can_use_heap_regions() {
   log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
                 CompressedOops::mode(), p2i(CompressedOops::base()), CompressedOops::shift());
   log_info(cds)("    heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
+                UseCompressedOops ? p2i(CompressedOops::begin()) :
+                                    p2i((address)G1CollectedHeap::heap()->reserved().start()),
+                UseCompressedOops ? p2i(CompressedOops::end()) :
+                                    p2i((address)G1CollectedHeap::heap()->reserved().end()));
 
   if (narrow_klass_base() != CompressedKlassPointers::base() ||
       narrow_klass_shift() != CompressedKlassPointers::shift()) {
@@ -2033,15 +2046,29 @@ void FileMapInfo::map_heap_regions_impl() {
     log_info(cds)("CDS heap data needs to be relocated because the archive was created with an incompatible oop encoding mode.");
     _heap_pointers_need_patching = true;
   } else {
-    MemRegion range = get_heap_regions_range_with_current_oop_encoding_mode();
-    if (!CompressedOops::is_in(range)) {
-      log_info(cds)("CDS heap data needs to be relocated because");
-      log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
-      log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT, p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
-      _heap_pointers_need_patching = true;
-    } else if (header()->heap_end() != CompressedOops::end()) {
-      log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
-      _heap_pointers_need_patching = true;
+    if (UseCompressedOops) {
+      MemRegion range = get_heap_regions_range_with_current_oop_encoding_mode();
+      if (!CompressedOops::is_in(range)) {
+        log_info(cds)("CDS heap data needs to be relocated because");
+        log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
+        log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT, p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
+        _heap_pointers_need_patching = true;
+      } else if (header()->heap_end() != CompressedOops::end()) {
+        log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
+        _heap_pointers_need_patching = true;
+      }
+    } else {
+      MemRegion range((HeapWord*)header()->heap_begin(), (HeapWord*)header()->heap_end());
+      if (!G1CollectedHeap::heap()->reserved().contains(range)) {
+        log_info(cds)("CDS heap data needs to be relocated because");
+        log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
+        log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT,
+            p2i((address)G1CollectedHeap::heap()->reserved().start()), p2i((address)G1CollectedHeap::heap()->reserved().end()));
+        _heap_pointers_need_patching = true;
+      } else if (header()->heap_end() != (address)G1CollectedHeap::heap()->reserved().end()) {
+        log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
+        _heap_pointers_need_patching = true;
+      }
     }
   }
 
@@ -2057,7 +2084,8 @@ void FileMapInfo::map_heap_regions_impl() {
     // that they are now near the top of the runtime time. This can be done by
     // the simple math of adding the delta as shown above.
     address dumptime_heap_end = header()->heap_end();
-    address runtime_heap_end = CompressedOops::end();
+    address runtime_heap_end = UseCompressedOops ? CompressedOops::end() :
+                                                   (address)G1CollectedHeap::heap()->reserved().end();
     delta = runtime_heap_end - dumptime_heap_end;
   }
 
@@ -2065,8 +2093,10 @@ void FileMapInfo::map_heap_regions_impl() {
   HeapShared::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
 
   FileMapRegion* si = space_at(MetaspaceShared::first_closed_heap_region);
-  address relocated_closed_heap_region_bottom = start_address_as_decoded_from_archive(si);
-  if (!is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes)) {
+  address D = si->mapping_offset() + header()->heap_begin();
+  address R = D + delta;
+  address relocated_closed_heap_region_bottom = R;
+  if (UseCompressedOops && !is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes)) {
     // Align the bottom of the closed archive heap regions at G1 region boundary.
     // This will avoid the situation where the highest open region and the lowest
     // closed region sharing the same G1 region. Otherwise we will fail to map the
@@ -2136,7 +2166,13 @@ bool FileMapInfo::map_heap_regions(int first, int max,  bool is_open_archive,
     si = space_at(i);
     size_t size = si->used();
     if (size > 0) {
-      HeapWord* start = (HeapWord*)start_address_as_decoded_from_archive(si);
+      HeapWord* start;
+      if (UseCompressedOops) {
+        start = (HeapWord*)start_address_as_decoded_from_archive(si);
+      } else {
+        assert(is_aligned(si->mapping_offset(), sizeof(HeapWord)), "must be");
+        start = G1CollectedHeap::heap()->reserved().start() + (si->mapping_offset() / sizeof(HeapWord));
+      }
       regions[num_regions] = MemRegion(start, size / HeapWordSize);
       num_regions ++;
       log_info(cds)("Trying to map heap data: region[%d] at " INTPTR_FORMAT ", size = " SIZE_FORMAT_W(8) " bytes",

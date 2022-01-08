@@ -254,6 +254,8 @@ protected:
   HeapWord* _top;
   HeapWord* _max;
 
+  HeapWord* _max_region_end;
+
   // Allocate a new region for this archive allocator.
   // Allocation is from the top of the reserved heap downward.
   bool alloc_new_region();
@@ -268,7 +270,8 @@ public:
                         2), mtGC),
     _bottom(NULL),
     _top(NULL),
-    _max(NULL) { }
+    _max(NULL),
+    _max_region_end(NULL) { }
 
   virtual ~G1ArchiveAllocator() {
     assert(_allocation_region == NULL, "_allocation_region not NULL");
@@ -283,6 +286,7 @@ public:
   // aligning to the requested alignment.
   void complete_archive(GrowableArray<MemRegion>* ranges,
                         size_t end_alignment_in_bytes);
+  HeapWord* max_region_end() { return _max_region_end; };
 };
 
 #endif // SHARE_GC_G1_G1ALLOCATOR_HPP

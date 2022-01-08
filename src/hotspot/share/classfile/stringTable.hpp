@@ -31,6 +31,7 @@
 #include "oops/weakHandle.hpp"
 #include "utilities/tableStatistics.hpp"
 
+template <typename T>
 class CompactHashtableWriter;
 class DumpedInternedStrings;
 class JavaThread;

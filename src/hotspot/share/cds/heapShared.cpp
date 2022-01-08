@@ -362,7 +362,10 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
     create_archived_object_cache();
 
     log_info(cds)("Heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                  p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
+                   UseCompressedOops ? p2i(CompressedOops::begin()) :
+                                       p2i((address)G1CollectedHeap::heap()->reserved().start()),
+                   UseCompressedOops ? p2i(CompressedOops::end()) :
+                                       p2i((address)G1CollectedHeap::heap()->reserved().end()));
     log_info(cds)("Dumping objects to closed archive heap region ...");
     copy_closed_objects(closed_regions);
 
@@ -623,9 +626,10 @@ void ArchivedKlassSubGraphInfoRecord::init(KlassSubGraphInfo* info) {
   ArchivePtrMarker::mark_pointer(&_subgraph_object_klasses);
 }
 
+template <typename T>
 struct CopyKlassSubGraphInfoToArchive : StackObj {
-  CompactHashtableWriter* _writer;
-  CopyKlassSubGraphInfoToArchive(CompactHashtableWriter* writer) : _writer(writer) {}
+  CompactHashtableWriter<T>* _writer;
+  CopyKlassSubGraphInfoToArchive(CompactHashtableWriter<T>* writer) : _writer(writer) {}
 
   bool do_entry(Klass* klass, KlassSubGraphInfo& info) {
     if (info.subgraph_object_klasses() != NULL || info.subgraph_entry_fields() != NULL) {
@@ -641,6 +645,9 @@ struct CopyKlassSubGraphInfoToArchive : StackObj {
   }
 };
 
+template struct CopyKlassSubGraphInfoToArchive<u4>;
+template struct CopyKlassSubGraphInfoToArchive<u8>;
+
 // Build the records of archived subgraph infos, which include:
 // - Entry points to all subgraphs from the containing class mirror. The entry
 //   points are static fields in the mirror. For each entry point, the field
@@ -655,10 +662,9 @@ void HeapShared::write_subgraph_info_table() {
 
   _run_time_subgraph_info_table.reset();
 
-  CompactHashtableWriter writer(d_table->_count, &stats);
-  CopyKlassSubGraphInfoToArchive copy(&writer);
+  CompactHashtableWriter<u4> writer(d_table->_count, &stats);
+  CopyKlassSubGraphInfoToArchive<u4> copy(&writer);
   d_table->iterate(&copy);
-
   writer.dump(&_run_time_subgraph_info_table, "subgraphs");
 }
 
@@ -1400,39 +1406,44 @@ void HeapShared::add_to_dumped_interned_strings(oop string) {
 // region. This way we can quickly relocate all the pointers without using
 // BasicOopIterateClosure at runtime.
 class FindEmbeddedNonNullPointers: public BasicOopIterateClosure {
-  narrowOop* _start;
+  void* _start;
   BitMap *_oopmap;
   int _num_total_oops;
   int _num_null_oops;
  public:
-  FindEmbeddedNonNullPointers(narrowOop* start, BitMap* oopmap)
+  FindEmbeddedNonNullPointers(void* start, BitMap* oopmap)
     : _start(start), _oopmap(oopmap), _num_total_oops(0),  _num_null_oops(0) {}
 
   virtual void do_oop(narrowOop* p) {
     _num_total_oops ++;
     narrowOop v = *p;
     if (!CompressedOops::is_null(v)) {
-      size_t idx = p - _start;
+      size_t idx = p - (narrowOop*)_start;
       _oopmap->set_bit(idx);
     } else {
       _num_null_oops ++;
     }
   }
-  virtual void do_oop(oop *p) {
-    ShouldNotReachHere();
+  virtual void do_oop(oop* p) {
+    _num_total_oops ++;
+    if ((*p) != NULL) {
+      size_t idx = p - (oop*)_start;
+      _oopmap->set_bit(idx);
+    } else {
+      _num_null_oops ++;
+    }
   }
   int num_total_oops() const { return _num_total_oops; }
   int num_null_oops()  const { return _num_null_oops; }
 };
 
 ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
-  assert(UseCompressedOops, "must be");
-  size_t num_bits = region.byte_size() / sizeof(narrowOop);
+  size_t num_bits = region.byte_size() / (UseCompressedOops ? sizeof(narrowOop) : sizeof(oop));
   ResourceBitMap oopmap(num_bits);
 
   HeapWord* p   = region.start();
   HeapWord* end = region.end();
-  FindEmbeddedNonNullPointers finder((narrowOop*)p, &oopmap);
+  FindEmbeddedNonNullPointers finder((void*)p, &oopmap);
   ArchiveBuilder* builder = DumpSharedSpaces ? ArchiveBuilder::current() : NULL;
 
   int num_objs = 0;

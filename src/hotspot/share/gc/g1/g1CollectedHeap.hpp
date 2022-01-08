@@ -705,6 +705,8 @@ public:
   // does not trigger a garbage collection.
   HeapWord* archive_mem_allocate(size_t word_size);
 
+  HeapWord* max_region_end();
+
   // Optionally aligns the end address and returns the allocated ranges in
   // an array of MemRegions in order of ascending addresses.
   void end_archive_alloc_range(GrowableArray<MemRegion>* ranges,

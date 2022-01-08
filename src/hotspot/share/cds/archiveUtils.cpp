@@ -264,7 +264,7 @@ void WriteClosure::do_oop(oop* o) {
   } else {
     assert(HeapShared::can_write(), "sanity");
     _dump_region->append_intptr_t(
-      (intptr_t)CompressedOops::encode_not_null(*o));
+      UseCompressedOops ? (intptr_t)CompressedOops::encode_not_null(*o) : (intptr_t)(*o));
   }
 }
 
@@ -306,13 +306,22 @@ void ReadClosure::do_tag(int tag) {
 }
 
 void ReadClosure::do_oop(oop *p) {
-  narrowOop o = CompressedOops::narrow_oop_cast(nextPtr());
-  if (CompressedOops::is_null(o) || !HeapShared::is_fully_available()) {
-    *p = NULL;
+  if (UseCompressedOops) {
+    narrowOop o = CompressedOops::narrow_oop_cast(nextPtr());
+    if (CompressedOops::is_null(o) || !HeapShared::is_fully_available()) {
+      *p = NULL;
+    } else {
+      assert(HeapShared::can_use(), "sanity");
+      assert(HeapShared::is_fully_available(), "must be");
+      *p = HeapShared::decode_from_archive(o);
+    }
   } else {
-    assert(HeapShared::can_use(), "sanity");
-    assert(HeapShared::is_fully_available(), "must be");
-    *p = HeapShared::decode_from_archive(o);
+    if (!HeapShared::is_fully_available()) {
+      tty->print_cr("HeapShared not fully available");
+      *p = NULL;
+    } else {
+      *p = cast_to_oop(nextPtr());
+    }
   }
 }
 

@@ -518,6 +518,11 @@ HeapWord* G1CollectedHeap::archive_mem_allocate(size_t word_size) {
   return _archive_allocator->archive_mem_allocate(word_size);
 }
 
+HeapWord* G1CollectedHeap::max_region_end() {
+  assert(_archive_allocator != nullptr, "_archive_allocator not initialized");
+  return _archive_allocator->max_region_end();
+}
+
 void G1CollectedHeap::end_archive_alloc_range(GrowableArray<MemRegion>* ranges,
                                               size_t end_alignment_in_bytes) {
   assert_at_safepoint_on_vm_thread();

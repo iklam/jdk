@@ -1189,15 +1189,15 @@ size_t SystemDictionaryShared::estimate_size_for_archive() {
   EstimateSizeForArchive est;
   _dumptime_table->iterate(&est);
   size_t total_size = est.total() +
-    CompactHashtableWriter::estimate_size(_dumptime_table->count_of(true)) +
-    CompactHashtableWriter::estimate_size(_dumptime_table->count_of(false));
+    CompactHashtableWriter<u4>::estimate_size(_dumptime_table->count_of(true)) +
+    CompactHashtableWriter<u4>::estimate_size(_dumptime_table->count_of(false));
   if (_dumptime_lambda_proxy_class_dictionary != NULL) {
     size_t bytesize = align_up(sizeof(RunTimeLambdaProxyClassInfo), SharedSpaceObjectAlignment);
     total_size +=
       (bytesize * _dumptime_lambda_proxy_class_dictionary->_count) +
-      CompactHashtableWriter::estimate_size(_dumptime_lambda_proxy_class_dictionary->_count);
+      CompactHashtableWriter<u4>::estimate_size(_dumptime_lambda_proxy_class_dictionary->_count);
   } else {
-    total_size += CompactHashtableWriter::estimate_size(0);
+    total_size += CompactHashtableWriter<u4>::estimate_size(0);
   }
   return total_size;
 }
@@ -1218,10 +1218,10 @@ unsigned int SystemDictionaryShared::hash_for_shared_dictionary(address ptr) {
 }
 
 class CopyLambdaProxyClassInfoToArchive : StackObj {
-  CompactHashtableWriter* _writer;
+  CompactHashtableWriter<u4>* _writer;
   ArchiveBuilder* _builder;
 public:
-  CopyLambdaProxyClassInfoToArchive(CompactHashtableWriter* writer)
+  CopyLambdaProxyClassInfoToArchive(CompactHashtableWriter<u4>* writer)
   : _writer(writer), _builder(ArchiveBuilder::current()) {}
   bool do_entry(LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info) {
     // In static dump, info._proxy_klasses->at(0) is already relocated to point to the archived class
@@ -1273,11 +1273,11 @@ public:
 };
 
 class CopySharedClassInfoToArchive : StackObj {
-  CompactHashtableWriter* _writer;
+  CompactHashtableWriter<u4>* _writer;
   bool _is_builtin;
   ArchiveBuilder *_builder;
 public:
-  CopySharedClassInfoToArchive(CompactHashtableWriter* writer,
+  CopySharedClassInfoToArchive(CompactHashtableWriter<u4>* writer,
                                bool is_builtin)
     : _writer(writer), _is_builtin(is_builtin), _builder(ArchiveBuilder::current()) {}
 
@@ -1312,7 +1312,7 @@ public:
 void SystemDictionaryShared::write_lambda_proxy_class_dictionary(LambdaProxyClassDictionary *dictionary) {
   CompactHashtableStats stats;
   dictionary->reset();
-  CompactHashtableWriter writer(_dumptime_lambda_proxy_class_dictionary->_count, &stats);
+  CompactHashtableWriter<u4> writer(_dumptime_lambda_proxy_class_dictionary->_count, &stats);
   CopyLambdaProxyClassInfoToArchive copy(&writer);
   _dumptime_lambda_proxy_class_dictionary->iterate(&copy);
   writer.dump(dictionary, "lambda proxy class dictionary");
@@ -1322,7 +1322,7 @@ void SystemDictionaryShared::write_dictionary(RunTimeSharedDictionary* dictionar
                                               bool is_builtin) {
   CompactHashtableStats stats;
   dictionary->reset();
-  CompactHashtableWriter writer(_dumptime_table->count_of(is_builtin), &stats);
+  CompactHashtableWriter<u4> writer(_dumptime_table->count_of(is_builtin), &stats);
   CopySharedClassInfoToArchive copy(&writer, is_builtin);
   assert_lock_strong(DumpTimeTable_lock);
   _dumptime_table->iterate(&copy);

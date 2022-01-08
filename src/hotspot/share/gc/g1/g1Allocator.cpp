@@ -438,6 +438,12 @@ bool G1ArchiveAllocator::alloc_new_region() {
   _allocated_regions.append(hr);
   _allocation_region = hr;
 
+  if (_max_region_end == NULL) {
+    _max_region_end = hr->end();
+  } else {
+    assert(_max_region_end > hr->end(), "regions must has descending address");
+  }
+
   // Set up _bottom and _max to begin allocating in the lowest
   // min_region_size'd chunk of the allocated G1 region.
   _bottom = hr->bottom();

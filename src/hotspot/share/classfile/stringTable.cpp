@@ -55,6 +55,9 @@
 #include "utilities/macros.hpp"
 #include "utilities/resizeableResourceHash.hpp"
 #include "utilities/utf8.hpp"
+#if INCLUDE_G1GC
+#include "gc/g1/g1CollectedHeap.hpp"
+#endif
 
 // We prefer short chains of avg 2
 const double PREF_AVG_LIST_LEN = 2.0;
@@ -73,11 +76,25 @@ inline oop read_string_from_compact_hashtable(address base_address, u4 offset) {
 }
 
 typedef CompactHashtable<
+  u4,
   const jchar*, oop,
   read_string_from_compact_hashtable,
   java_lang_String::equals> SharedStringTable;
 
 static SharedStringTable _shared_table;
+
+inline oop read_string_from_compact_hashtable_64(address base_address, u8 offset) {
+  return (oop)cast_to_oop((uintptr_t)offset);
+}
+
+typedef CompactHashtable<
+  u8,
+  const jchar*, oop,
+  read_string_from_compact_hashtable_64,
+  java_lang_String::equals> SharedStringTable_64;
+
+static SharedStringTable_64 _shared_table_64;
+
 #endif
 
 // --------------------------------------------------------------------------
@@ -706,17 +723,18 @@ void StringtableDCmd::execute(DCmdSource source, TRAPS) {
 // Sharing
 #if INCLUDE_CDS_JAVA_HEAP
 size_t StringTable::shared_entry_count() {
-  return _shared_table.entry_count();
+  return (UseCompressedOops) ? _shared_table.entry_count() : _shared_table_64.entry_count();
 }
 
 oop StringTable::lookup_shared(const jchar* name, int len, unsigned int hash) {
   assert(hash == java_lang_String::hash_code(name, len),
          "hash must be computed using java_lang_String::hash_code");
-  return _shared_table.lookup(name, hash, len);
+  return (UseCompressedOops) ? _shared_table.lookup(name, hash, len) : _shared_table_64.lookup(name, hash, len);
 }
 
 oop StringTable::lookup_shared(const jchar* name, int len) {
-  return _shared_table.lookup(name, java_lang_String::hash_code(name, len), len);
+  return (UseCompressedOops) ? _shared_table.lookup(name, java_lang_String::hash_code(name, len), len) :
+                               _shared_table_64.lookup(name, java_lang_String::hash_code(name, len), len);
 }
 
 oop StringTable::create_archived_string(oop s) {
@@ -744,10 +762,21 @@ oop StringTable::create_archived_string(oop s) {
   return new_s;
 }
 
+template <typename T>
 class CopyToArchive : StackObj {
-  CompactHashtableWriter* _writer;
+  CompactHashtableWriter<T>* _writer;
+private:
+  u4 compute_delta(oop s) {
+    HeapWord* end = G1CollectedHeap::heap()->max_region_end();
+    intx offset = ((address)(void*)end) - ((address)(void*)s);
+    assert(offset >= 0, "must be");
+    if (offset > 0xffffffff) {
+      fatal("too large");
+    }
+    return (u4)offset;
+  }
 public:
-  CopyToArchive(CompactHashtableWriter* writer) : _writer(writer) {}
+  CopyToArchive(CompactHashtableWriter<T>* writer) : _writer(writer) {}
   bool do_entry(oop s, bool value_ignored) {
     assert(s != NULL, "sanity");
     unsigned int hash = java_lang_String::hash_code(s);
@@ -757,7 +786,13 @@ public:
     }
 
     // add to the compact table
-    _writer->add(hash, CompressedOops::narrow_oop_value(new_s));
+    if (UseCompressedOops) {
+      _writer->add(hash, CompressedOops::narrow_oop_value(new_s));
+    } else {
+      //u4 delta = ArchiveBuilder::current()->buffer_to_offset_u4((address)((void*)new_s));
+      //_writer->add(hash, delta);
+      _writer->add(hash, compute_delta(new_s));
+    }
     return true;
   }
 };
@@ -765,24 +800,34 @@ public:
 void StringTable::write_to_archive(const DumpedInternedStrings* dumped_interned_strings) {
   assert(HeapShared::can_write(), "must be");
 
-  _shared_table.reset();
-  CompactHashtableWriter writer(_items_count, ArchiveBuilder::string_stats());
-
   // Copy the interned strings into the "string space" within the java heap
-  CopyToArchive copier(&writer);
-  dumped_interned_strings->iterate(&copier);
-
-  writer.dump(&_shared_table, "string");
+  if (UseCompressedOops){
+    _shared_table.reset();
+    CompactHashtableWriter<u4> writer(_items_count, ArchiveBuilder::string_stats());
+    CopyToArchive<u4> copier(&writer);
+    dumped_interned_strings->iterate(&copier);
+    writer.dump(&_shared_table, "string");
+  } else {
+    _shared_table_64.reset();
+    CompactHashtableWriter<u8> writer(_items_count, ArchiveBuilder::string_stats());
+    CopyToArchive<u8> copier(&writer);
+    dumped_interned_strings->iterate(&copier);
+    writer.dump(&_shared_table_64, "string");
+  }
 }
 
 void StringTable::serialize_shared_table_header(SerializeClosure* soc) {
-  _shared_table.serialize_header(soc);
+  if (UseCompressedOops) {
+    _shared_table.serialize_header(soc);
+  } else {
+    _shared_table_64.serialize_header(soc);
+  }
 
   if (soc->writing()) {
     // Sanity. Make sure we don't use the shared table at dump time
-    _shared_table.reset();
+    UseCompressedOops ? _shared_table.reset() : _shared_table_64.reset();
   } else if (!HeapShared::are_archived_strings_available()) {
-    _shared_table.reset();
+    UseCompressedOops ? _shared_table.reset() : _shared_table_64.reset();
   }
 
 }
@@ -817,11 +862,19 @@ void StringTable::transfer_shared_strings_to_local_table() {
   // Reset _shared_table so that during the transfer, StringTable::intern()
   // will not look up from there. Instead, it will create a new entry in
   // _local_table for each element in shared_table_copy.
-  SharedStringTable shared_table_copy = _shared_table;
-  _shared_table.reset();
+  if (UseCompressedOops) {
+    SharedStringTable shared_table_copy = _shared_table;
+    _shared_table.reset();
 
-  SharedStringTransfer transfer(THREAD);
-  shared_table_copy.iterate(&transfer);
+    SharedStringTransfer transfer(THREAD);
+    shared_table_copy.iterate(&transfer);
+  } else {
+    SharedStringTable_64 shared_table_copy = _shared_table_64;
+    _shared_table_64.reset();
+
+    SharedStringTransfer transfer(THREAD);
+    shared_table_copy.iterate(&transfer);
+  }
 }
 
 #endif //INCLUDE_CDS_JAVA_HEAP

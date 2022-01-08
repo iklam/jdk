@@ -86,6 +86,7 @@ public:
   operator Symbol*()                             { return _temp; }
 };
 
+template <typename T>
 class CompactHashtableWriter;
 class SerializeClosure;
 
@@ -209,8 +210,9 @@ public:
   // Sharing
   static void shared_symbols_do(SymbolClosure *cl);  // no safepoint iteration.
 private:
+  template <typename T>
   static void copy_shared_symbol_table(GrowableArray<Symbol*>* symbols,
-                                       CompactHashtableWriter* ch_table);
+                                       CompactHashtableWriter<T>* ch_table);
 public:
   static size_t estimate_size_for_archive() NOT_CDS_RETURN_(0);
   static void write_to_archive(GrowableArray<Symbol*>* symbols) NOT_CDS_RETURN;

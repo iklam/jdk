@@ -30,15 +30,16 @@
 #include "runtime/globals.hpp"
 #include "utilities/growableArray.hpp"
 
-
 template <
+  typename T,
   typename K,
   typename V,
-  V (*DECODE)(address base_address, u4 offset),
+  V (*DECODE)(address base_address, T offset),
   bool (*EQUALS)(V value, K key, int len)
   >
 class CompactHashtable;
 class NumberSeq;
+template <typename T>
 class SimpleCompactHashtable;
 class SerializeClosure;
 
@@ -82,17 +83,18 @@ public:
 // Buckets without entry are skipped from the table. Their offsets are
 // still written out for faster lookup.
 //
+template <typename T>
 class CompactHashtableWriter: public StackObj {
 public:
   class Entry {
     unsigned int _hash;
-    u4 _value;
+    T _value;
 
   public:
     Entry() {}
-    Entry(unsigned int hash, u4 val) : _hash(hash), _value(val) {}
+    Entry(unsigned int hash, T val) : _hash(hash), _value(val) {}
 
-    u4 value() {
+    T value() {
       return _value;
     }
     unsigned int hash() {
@@ -112,15 +114,15 @@ private:
   int _num_other_buckets;
   GrowableArray<Entry>** _buckets;
   CompactHashtableStats* _stats;
-  Array<u4>* _compact_buckets;
-  Array<u4>* _compact_entries;
+  Array<T>* _compact_buckets;
+  Array<T>* _compact_entries;
 
 public:
   // This is called at dump-time only
   CompactHashtableWriter(int num_entries, CompactHashtableStats* stats);
   ~CompactHashtableWriter();
 
-  void add(unsigned int hash, u4 value);
+  void add(unsigned int hash, T value);
 
 private:
   void allocate_table();
@@ -132,7 +134,7 @@ private:
   }
 
 public:
-  void dump(SimpleCompactHashtable *cht, const char* table_name);
+  void dump(SimpleCompactHashtable<T> *cht, const char* table_name);
 
   static size_t estimate_size(int num_entries);
 };
@@ -194,13 +196,14 @@ public:
 // See CompactHashtableWriter::dump() for how the table is written at CDS
 // dump time.
 //
+template <typename T>
 class SimpleCompactHashtable {
 protected:
   address  _base_address;
   u4  _bucket_count;
   u4  _entry_count;
-  u4* _buckets;
-  u4* _entries;
+  T* _buckets;
+  T* _entries;
 
 public:
   SimpleCompactHashtable() {
@@ -217,7 +220,7 @@ public:
     _entries = 0;
   }
 
-  void init(address base_address, u4 entry_count, u4 bucket_count, u4* buckets, u4* entries);
+  void init(address base_address, u4 entry_count, u4 bucket_count, T* buckets, T* entries);
 
   // Read/Write the table's header from/to the CDS archive
   void serialize_header(SerializeClosure* soc) NOT_CDS_RETURN;
@@ -234,27 +237,35 @@ public:
 };
 
 template <
+  typename T,
   typename K,
   typename V,
-  V (*DECODE)(address base_address, u4 offset),
+  V (*DECODE)(address base_address, T offset),
   bool (*EQUALS)(V value, K key, int len)
   >
-class CompactHashtable : public SimpleCompactHashtable {
+class CompactHashtable : public SimpleCompactHashtable<T> {
   friend class VMStructs;
 
-  V decode(u4 offset) const {
+  V decode(T offset) const {
     return DECODE(_base_address, offset);
   }
+
+private:
+  using SimpleCompactHashtable<T>::_base_address;
+  using SimpleCompactHashtable<T>::_bucket_count;
+  using SimpleCompactHashtable<T>::_entry_count;
+  using SimpleCompactHashtable<T>::_buckets;
+  using SimpleCompactHashtable<T>::_entries;
 
 public:
   // Lookup a value V from the compact table using key K
   inline V lookup(K key, unsigned int hash, int len) const {
     if (_entry_count > 0) {
       int index = hash % _bucket_count;
-      u4 bucket_info = _buckets[index];
-      u4 bucket_offset = BUCKET_OFFSET(bucket_info);
+      T bucket_info = _buckets[index];
+      T bucket_offset = BUCKET_OFFSET(bucket_info);
       int bucket_type = BUCKET_TYPE(bucket_info);
-      u4* entry = _entries + bucket_offset;
+      T* entry = (T*)(_entries + bucket_offset);
 
       if (bucket_type == VALUE_ONLY_BUCKET_TYPE) {
         V value = decode(entry[0]);
@@ -265,7 +276,7 @@ public:
         // This is a regular bucket, which has more than one
         // entries. Each entry is a pair of entry (hash, offset).
         // Seek until the end of the bucket.
-        u4* entry_max = _entries + BUCKET_OFFSET(_buckets[index + 1]);
+        T* entry_max = (T*)(_entries + BUCKET_OFFSET(_buckets[index + 1]));
         while (entry < entry_max) {
           unsigned int h = (unsigned int)(entry[0]);
           if (h == hash) {
@@ -284,15 +295,15 @@ public:
   template <class ITER>
   inline void iterate(ITER* iter) const {
     for (u4 i = 0; i < _bucket_count; i++) {
-      u4 bucket_info = _buckets[i];
-      u4 bucket_offset = BUCKET_OFFSET(bucket_info);
+      T bucket_info = _buckets[i];
+      T bucket_offset = BUCKET_OFFSET(bucket_info);
       int bucket_type = BUCKET_TYPE(bucket_info);
-      u4* entry = _entries + bucket_offset;
+      T* entry = (T*)(_entries + bucket_offset);
 
       if (bucket_type == VALUE_ONLY_BUCKET_TYPE) {
         iter->do_value(decode(entry[0]));
       } else {
-        u4*entry_max = _entries + BUCKET_OFFSET(_buckets[i + 1]);
+        T* entry_max = (T*)(_entries + BUCKET_OFFSET(_buckets[i + 1]));
         while (entry < entry_max) {
           iter->do_value(decode(entry[1]));
           entry += 2;
@@ -343,7 +354,7 @@ template <
   bool (*EQUALS)(V value, K key, int len)
   >
 class OffsetCompactHashtable : public CompactHashtable<
-    K, V, read_value_from_compact_hashtable<V>, EQUALS> {
+    u4, K, V, read_value_from_compact_hashtable<V>, EQUALS> {
 };
 
 

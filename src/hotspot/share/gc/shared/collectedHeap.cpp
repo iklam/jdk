@@ -213,14 +213,17 @@ bool CollectedHeap::supports_concurrent_gc_breakpoints() const {
 
 bool CollectedHeap::is_oop(oop object) const {
   if (!is_object_aligned(object)) {
+    tty->print_cr("is_object_aligned failed");
     return false;
   }
 
   if (!is_in(object)) {
+    tty->print_cr("is_in(object) failed");
     return false;
   }
 
   if (is_in(object->klass_or_null())) {
+    tty->print_cr("is_in(object->klass_or_null())");
     return false;
   }
 

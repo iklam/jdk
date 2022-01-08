@@ -41,7 +41,9 @@
 //
 // The compact hash table writer implementations
 //
-CompactHashtableWriter::CompactHashtableWriter(int num_entries,
+
+template <typename T>
+CompactHashtableWriter<T>::CompactHashtableWriter(int num_entries,
                                                CompactHashtableStats* stats) {
   Arguments::assert_is_dumping_archive();
   assert(num_entries >= 0, "sanity");
@@ -62,7 +64,8 @@ CompactHashtableWriter::CompactHashtableWriter(int num_entries,
   _num_other_buckets = 0;
 }
 
-CompactHashtableWriter::~CompactHashtableWriter() {
+template <typename T>
+CompactHashtableWriter<T>::~CompactHashtableWriter() {
   for (int index = 0; index < _num_buckets; index++) {
     GrowableArray<Entry>* bucket = _buckets[index];
     delete bucket;
@@ -71,7 +74,8 @@ CompactHashtableWriter::~CompactHashtableWriter() {
   FREE_C_HEAP_ARRAY(GrowableArray<Entry>*, _buckets);
 }
 
-size_t CompactHashtableWriter::estimate_size(int num_entries) {
+template <typename T>
+size_t CompactHashtableWriter<T>::estimate_size(int num_entries) {
   int num_buckets = calculate_num_buckets(num_entries);
   size_t bucket_bytes = ArchiveBuilder::ro_array_bytesize<u4>(num_buckets + 1);
 
@@ -81,17 +85,19 @@ size_t CompactHashtableWriter::estimate_size(int num_entries) {
 
   return bucket_bytes
        + entry_bytes
-       + SimpleCompactHashtable::calculate_header_size();
+       + SimpleCompactHashtable<T>::calculate_header_size();
 }
 
 // Add a symbol entry to the temporary hash table
-void CompactHashtableWriter::add(unsigned int hash, u4 value) {
+template <typename T>
+void CompactHashtableWriter<T>::add(unsigned int hash, T value) {
   int index = hash % _num_buckets;
   _buckets[index]->append_if_missing(Entry(hash, value));
   _num_entries_written++;
 }
 
-void CompactHashtableWriter::allocate_table() {
+template <typename T>
+void CompactHashtableWriter<T>::allocate_table() {
   int entries_space = 0;
   for (int index = 0; index < _num_buckets; index++) {
     GrowableArray<Entry>* bucket = _buckets[index];
@@ -108,8 +114,8 @@ void CompactHashtableWriter::allocate_table() {
                                   "Too many entries.");
   }
 
-  _compact_buckets = ArchiveBuilder::new_ro_array<u4>(_num_buckets + 1);
-  _compact_entries = ArchiveBuilder::new_ro_array<u4>(entries_space);
+  _compact_buckets = ArchiveBuilder::new_ro_array<T>(_num_buckets + 1);
+  _compact_entries = ArchiveBuilder::new_ro_array<T>(entries_space);
 
   _stats->bucket_count    = _num_buckets;
   _stats->bucket_bytes    = align_up(_compact_buckets->size() * BytesPerWord,
@@ -120,7 +126,8 @@ void CompactHashtableWriter::allocate_table() {
 }
 
 // Write the compact table's buckets
-void CompactHashtableWriter::dump_table(NumberSeq* summary) {
+template <typename T>
+void CompactHashtableWriter<T>::dump_table(NumberSeq* summary) {
   u4 offset = 0;
   for (int index = 0; index < _num_buckets; index++) {
     GrowableArray<Entry>* bucket = _buckets[index];
@@ -157,7 +164,8 @@ void CompactHashtableWriter::dump_table(NumberSeq* summary) {
 
 
 // Write the compact table
-void CompactHashtableWriter::dump(SimpleCompactHashtable *cht, const char* table_name) {
+template <typename T>
+void CompactHashtableWriter<T>::dump(SimpleCompactHashtable<T> *cht, const char* table_name) {
   NumberSeq summary;
   allocate_table();
   dump_table(&summary);
@@ -192,8 +200,8 @@ void CompactHashtableWriter::dump(SimpleCompactHashtable *cht, const char* table
 //
 // The CompactHashtable implementation
 //
-
-void SimpleCompactHashtable::init(address base_address, u4 entry_count, u4 bucket_count, u4* buckets, u4* entries) {
+template <typename T>
+void SimpleCompactHashtable<T>::init(address base_address, u4 entry_count, u4 bucket_count, T* buckets, T* entries) {
   _bucket_count = bucket_count;
   _entry_count = entry_count;
   _base_address = base_address;
@@ -201,13 +209,16 @@ void SimpleCompactHashtable::init(address base_address, u4 entry_count, u4 bucke
   _entries = entries;
 }
 
-size_t SimpleCompactHashtable::calculate_header_size() {
+template <typename T>
+size_t SimpleCompactHashtable<T>::calculate_header_size() {
   // We have 5 fields. Each takes up sizeof(intptr_t). See WriteClosure::do_u4
   size_t bytes = sizeof(intptr_t) * 5;
   return bytes;
 }
 
-void SimpleCompactHashtable::serialize_header(SerializeClosure* soc) {
+
+template <typename T>
+void SimpleCompactHashtable<T>::serialize_header(SerializeClosure* soc) {
   // NOTE: if you change this function, you MUST change the number 5 in
   // calculate_header_size() accordingly.
   soc->do_u4(&_entry_count);
@@ -450,3 +461,8 @@ void HashtableTextDump::put_utf8(outputStream* st, const char* utf8_string, int 
     }
   }
 }
+
+template class CompactHashtableWriter<u4>;
+template class CompactHashtableWriter<u8>;
+template class SimpleCompactHashtable<u4>;
+template class SimpleCompactHashtable<u8>;
