@@ -76,6 +76,7 @@ address   HeapShared::_narrow_oop_base;
 int       HeapShared::_narrow_oop_shift;
 DumpedInternedStrings *HeapShared::_dumped_interned_strings = NULL;
 
+// Support for loaded heap.
 uintptr_t HeapShared::_loaded_heap_bottom = 0;
 uintptr_t HeapShared::_loaded_heap_top = 0;
 uintptr_t HeapShared::_dumptime_base_0 = UINTPTR_MAX;
@@ -88,6 +89,10 @@ intx HeapShared::_runtime_offset_1 = 0;
 intx HeapShared::_runtime_offset_2 = 0;
 intx HeapShared::_runtime_offset_3 = 0;
 bool HeapShared::_loading_failed = false;
+
+// Suport for mapped heap (!UseCompressedOops only)
+ptrdiff_t HeapShared::_runtime_delta = 0;
+
 //
 // If you add new entries to the following tables, you should know what you're doing!
 //
@@ -1464,11 +1469,11 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
 
 // Patch all the embedded oop pointers inside an archived heap region,
 // to be consistent with the runtime oop encoding.
-class PatchEmbeddedPointers: public BitMapClosure {
+class PatchCompressedEmbeddedPointers: public BitMapClosure {
   narrowOop* _start;
 
  public:
-  PatchEmbeddedPointers(narrowOop* start) : _start(start) {}
+  PatchCompressedEmbeddedPointers(narrowOop* start) : _start(start) {}
 
   bool do_bit(size_t offset) {
     narrowOop* p = _start + offset;
@@ -1476,6 +1481,23 @@ class PatchEmbeddedPointers: public BitMapClosure {
     assert(!CompressedOops::is_null(v), "null oops should have been filtered out at dump time");
     oop o = HeapShared::decode_from_archive(v);
     RawAccess<IS_NOT_NULL>::oop_store(p, o);
+    return true;
+  }
+};
+
+class PatchUncompressedEmbeddedPointers: public BitMapClosure {
+  oop* _start;
+
+ public:
+  PatchUncompressedEmbeddedPointers(oop* start) : _start(start) {}
+
+  bool do_bit(size_t offset) {
+    oop* p = _start + offset;
+    intptr_t dumptime_oop = (intptr_t)*p;
+    assert(dumptime_oop != 0, "null oops should have been filtered out at dump time");
+    intptr_t runtime_oop = dumptime_oop + HeapShared::runtime_delta();
+  //tty->print_cr("[%p] = %p -> %p", p, (void*)dumptime_oop, (void*)runtime_oop);
+    RawAccess<IS_NOT_NULL>::oop_store(p, cast_to_oop(runtime_oop));
     return true;
   }
 };
@@ -1492,8 +1514,13 @@ void HeapShared::patch_embedded_pointers(MemRegion region, address oopmap,
   assert(bm.is_same(checkBm), "sanity");
 #endif
 
-  PatchEmbeddedPointers patcher((narrowOop*)region.start());
-  bm.iterate(&patcher);
+  if (UseCompressedOops) {
+    PatchCompressedEmbeddedPointers patcher((narrowOop*)region.start());
+    bm.iterate(&patcher);
+  } else {
+    PatchUncompressedEmbeddedPointers patcher((oop*)region.start());
+    bm.iterate(&patcher);
+  }
 }
 
 // The CDS archive remembers each heap object by its address at dump time, but

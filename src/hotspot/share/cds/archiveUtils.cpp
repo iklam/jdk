@@ -320,7 +320,13 @@ void ReadClosure::do_oop(oop *p) {
       tty->print_cr("HeapShared not fully available");
       *p = NULL;
     } else {
-      *p = cast_to_oop(nextPtr());
+      intptr_t dumptime_oop = nextPtr();
+      if (dumptime_oop == 0) {
+        *p = NULL;
+      } else {
+        intptr_t runtime_oop = dumptime_oop + HeapShared::runtime_delta();
+        *p = cast_to_oop(runtime_oop);
+      }
     }
   }
 }

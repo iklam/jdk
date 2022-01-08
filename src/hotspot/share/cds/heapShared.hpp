@@ -297,9 +297,12 @@ private:
   static void init_subgraph_entry_fields(ArchivableStaticFieldInfo fields[],
                                          int num, TRAPS);
 
-  // Used by decode_from_archive
+  // UseCompressedOops only: Used by decode_from_archive
   static address _narrow_oop_base;
   static int     _narrow_oop_shift;
+
+  // !UseCompressedOops only: used to relocate pointers to the archived objects
+  static ptrdiff_t _runtime_delta;
 
   typedef ResourceHashtable<oop, bool,
       15889, // prime number
@@ -418,6 +421,16 @@ private:
 
   // Run-time only
   static void clear_root(int index);
+
+  static void set_runtime_delta(ptrdiff_t offset) {
+    assert(!UseCompressedOops, "must be");
+    _runtime_delta = offset;
+  }
+  static ptrdiff_t runtime_delta() {
+    assert(!UseCompressedOops, "must be");
+    return _runtime_delta;
+  }
+
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:

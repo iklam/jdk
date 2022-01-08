@@ -2090,13 +2090,21 @@ void FileMapInfo::map_heap_regions_impl() {
   }
 
   log_info(cds)("CDS heap data relocation delta = " INTX_FORMAT " bytes", delta);
-  HeapShared::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
+  if (UseCompressedOops) {
+    // Need to set it for the start_address_as_decoded_from_archive() call below.
+    HeapShared::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
+  }
 
   FileMapRegion* si = space_at(MetaspaceShared::first_closed_heap_region);
-  address D = si->mapping_offset() + header()->heap_begin();
-  address R = D + delta;
-  address relocated_closed_heap_region_bottom = R;
-  if (UseCompressedOops && !is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes)) {
+  address relocated_closed_heap_region_bottom;
+  if (UseCompressedOops) {
+    relocated_closed_heap_region_bottom = start_address_as_decoded_from_archive(si);
+  } else {
+    address D = si->mapping_offset() + header()->heap_begin();
+    address R = D + delta;
+    relocated_closed_heap_region_bottom = R;
+  }
+  if (!is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes)) {
     // Align the bottom of the closed archive heap regions at G1 region boundary.
     // This will avoid the situation where the highest open region and the lowest
     // closed region sharing the same G1 region. Otherwise we will fail to map the
@@ -2106,12 +2114,18 @@ void FileMapInfo::map_heap_regions_impl() {
     log_info(cds)("CDS heap data needs to be relocated lower by a further " SIZE_FORMAT
                   " bytes to " INTX_FORMAT " to be aligned with HeapRegion::GrainBytes",
                   align, delta);
-    HeapShared::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
+    if (UseCompressedOops) {
+      HeapShared::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
+    }
     _heap_pointers_need_patching = true;
     relocated_closed_heap_region_bottom = start_address_as_decoded_from_archive(si);
   }
   assert(is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes),
          "must be");
+
+  if (!UseCompressedOops && delta != 0) {
+    HeapShared::set_runtime_delta(delta);
+  }
 
   // Map the closed heap regions: GC does not write into these regions.
   if (map_heap_regions(MetaspaceShared::first_closed_heap_region,
