@@ -84,7 +84,10 @@ typedef CompactHashtable<
 static SharedStringTable _shared_table;
 
 inline oop read_string_from_compact_hashtable_64(address base_address, u8 offset) {
-  return (oop)cast_to_oop((uintptr_t)offset);
+  intptr_t dumptime_oop = (uintptr_t)offset;
+  assert(dumptime_oop != 0, "null strings cannot be interned");
+  intptr_t runtime_oop = dumptime_oop + HeapShared::runtime_delta();
+  return (oop)cast_to_oop(runtime_oop);
 }
 
 typedef CompactHashtable<
@@ -766,7 +769,8 @@ template <typename T>
 class CopyToArchive : StackObj {
   CompactHashtableWriter<T>* _writer;
 private:
-  u4 compute_delta(oop s) {
+  T compute_delta(oop s) {
+#if 0
     HeapWord* end = G1CollectedHeap::heap()->max_region_end();
     intx offset = ((address)(void*)end) - ((address)(void*)s);
     assert(offset >= 0, "must be");
@@ -774,6 +778,9 @@ private:
       fatal("too large");
     }
     return (u4)offset;
+#else
+    return (T)((u8)s);
+#endif
   }
 public:
   CopyToArchive(CompactHashtableWriter<T>* writer) : _writer(writer) {}
