@@ -36,7 +36,6 @@ class Symbol;
 #if INCLUDE_CDS_JAVA_HEAP
 
 class CDSHeapVerifier : public KlassClosure {
-  class CheckStaticFields;
   class TraceFields;
 
   int _archived_objs;
@@ -58,7 +57,6 @@ class CDSHeapVerifier : public KlassClosure {
   void add_exclusion(const char** excl) {
     _exclusions.append(excl);
   }
-  void add_static_obj_field(InstanceKlass* ik, oop field, Symbol* name);
 
   const char** find_exclusion(InstanceKlass* ik) {
     for (int i = 0; i < _exclusions.length(); i++) {

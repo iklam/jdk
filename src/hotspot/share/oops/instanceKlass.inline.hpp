@@ -31,6 +31,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "memory/iterator.hpp"
 #include "memory/resourceArea.hpp"
+#include "oops/fieldStreams.inline.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
@@ -195,6 +196,16 @@ inline instanceOop InstanceKlass::allocate_instance(oop java_class, TRAPS) {
   ik->check_valid_for_instantiation(false, CHECK_NULL);
   ik->initialize(CHECK_NULL);
   return ik->allocate_instance(THREAD);
+}
+
+template <typename F>
+void InstanceKlass::do_local_static_fields2(F f) {
+  for (JavaFieldStream fs(this); !fs.done(); fs.next()) {
+    if (fs.access_flags().is_static()) {
+      fieldDescriptor& fd = fs.field_descriptor();
+      f(&fd);
+    }
+  }
 }
 
 #endif // SHARE_OOPS_INSTANCEKLASS_INLINE_HPP

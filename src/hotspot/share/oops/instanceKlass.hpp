@@ -1013,6 +1013,8 @@ public:
   void do_local_static_fields(FieldClosure* cl);
   void do_nonstatic_fields(FieldClosure* cl); // including inherited fields
   void do_local_static_fields(void f(fieldDescriptor*, Handle, TRAPS), Handle, TRAPS);
+  template <typename F>
+  void do_local_static_fields2(F f);
   void print_nonstatic_fields(FieldClosure* cl); // including inherited and injected fields
 
   void methods_do(void f(Method* method));

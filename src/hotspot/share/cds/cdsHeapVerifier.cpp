@@ -30,7 +30,7 @@
 #include "logging/log.hpp"
 #include "logging/logStream.hpp"
 #include "memory/resourceArea.hpp"
-#include "oops/fieldStreams.inline.hpp"
+#include "oops/instanceKlass.inline.hpp"
 #include "oops/klass.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
@@ -145,57 +145,6 @@ CDSHeapVerifier::~CDSHeapVerifier() {
   }
 }
 
-class CDSHeapVerifier::CheckStaticFields : public FieldClosure {
-  CDSHeapVerifier* _verifier;
-  InstanceKlass* _ik;
-  const char** _exclusions;
-public:
-  CheckStaticFields(CDSHeapVerifier* verifier, InstanceKlass* ik)
-    : _verifier(verifier), _ik(ik) {
-    _exclusions = _verifier->find_exclusion(_ik);
-  }
-
-  void do_field(fieldDescriptor* fd) {
-    if (fd->field_type() != T_OBJECT) {
-      return;
-    }
-
-    oop static_obj_field = _ik->java_mirror()->obj_field(fd->offset());
-    if (static_obj_field != NULL) {
-      Klass* klass = static_obj_field->klass();
-      if (_exclusions != NULL) {
-        for (const char** p = _exclusions; *p != NULL; p++) {
-          if (fd->name()->equals(*p)) {
-            return;
-          }
-        }
-      }
-
-      if (fd->is_final() && java_lang_String::is_instance(static_obj_field) && fd->has_initial_value()) {
-        // This field looks like like this in the Java source:
-        //    static final SOME_STRING = "a string literal";
-        // This string literal has been stored in the shared string table, so it's OK
-        // for the archived objects to refer to it.
-        return;
-      }
-      if (fd->is_final() && java_lang_Class::is_instance(static_obj_field)) {
-        // This field points to an archived mirror.
-        return;
-      }
-      if (klass->has_archived_enum_objs()) {
-        // This klass is a subclass of java.lang.Enum. If any instance of this klass
-        // has been archived, we will archive all static fields of this klass.
-        // See HeapShared::initialize_enum_klass().
-        return;
-      }
-
-      // This field *may* be initialized to a different value at runtime. Remember it
-      // and check later if it appears in the archived object graph.
-      _verifier->add_static_obj_field(_ik, static_obj_field, fd->name());
-    }
-  }
-};
-
 // Remember all the static object fields of every class that are currently
 // loaded.
 void CDSHeapVerifier::do_klass(Klass* k) {
@@ -209,14 +158,48 @@ void CDSHeapVerifier::do_klass(Klass* k) {
       return;
     }
 
-    CheckStaticFields csf(this, ik);
-    ik->do_local_static_fields(&csf);
-  }
-}
+    const char** exclusions = find_exclusion(ik);
+    ik->do_local_static_fields2([=] (fieldDescriptor* fd) {
+      if (fd->field_type() != T_OBJECT) {
+        return;
+      }
 
-void CDSHeapVerifier::add_static_obj_field(InstanceKlass* ik, oop field, Symbol* name) {
-  StaticFieldInfo info = {ik, name};
-  _table.put(field, info);
+      oop static_obj_field = ik->java_mirror()->obj_field(fd->offset());
+      if (static_obj_field != NULL) {
+        Klass* klass = static_obj_field->klass();
+        if (exclusions != NULL) {
+          for (const char** p = exclusions; *p != NULL; p++) {
+            if (fd->name()->equals(*p)) {
+              return;
+            }
+          }
+        }
+
+        if (fd->is_final() && java_lang_String::is_instance(static_obj_field) && fd->has_initial_value()) {
+          // This field looks like like this in the Java source:
+          //    static final SOME_STRING = "a string literal";
+          // This string literal has been stored in the shared string table, so it's OK
+          // for the archived objects to refer to it.
+          return;
+        }
+        if (fd->is_final() && java_lang_Class::is_instance(static_obj_field)) {
+          // This field points to an archived mirror.
+          return;
+        }
+        if (klass->has_archived_enum_objs()) {
+          // This klass is a subclass of java.lang.Enum. If any instance of this klass
+          // has been archived, we will archive all static fields of this klass.
+          // See HeapShared::initialize_enum_klass().
+          return;
+        }
+
+        // This field *may* be initialized to a different value at runtime. Remember it
+        // and check later if it appears in the archived object graph.
+        StaticFieldInfo info = {ik, fd->name()};
+        _table.put(static_obj_field, info);
+      }
+    });
+  }
 }
 
 inline bool CDSHeapVerifier::do_entry(oop& orig_obj, HeapShared::CachedOopInfo& value) {

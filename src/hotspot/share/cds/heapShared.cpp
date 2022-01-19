@@ -51,6 +51,7 @@
 #include "memory/universe.hpp"
 #include "oops/compressedOops.inline.hpp"
 #include "oops/fieldStreams.inline.hpp"
+#include "oops/instanceKlass.inline.hpp"
 #include "oops/objArrayOop.hpp"
 #include "oops/oop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
@@ -388,29 +389,26 @@ void HeapShared::check_enum_obj(int level,
     relocated_k->set_has_archived_enum_objs();
     oop mirror = ik->java_mirror();
 
-    for (JavaFieldStream fs(ik); !fs.done(); fs.next()) {
-      if (fs.access_flags().is_static()) {
-        fieldDescriptor& fd = fs.field_descriptor();
-        if (fd.field_type() != T_OBJECT && fd.field_type() != T_ARRAY) {
-          guarantee(false, "static field %s::%s must be T_OBJECT or T_ARRAY",
-                    ik->external_name(), fd.name()->as_C_string());
-        }
-        oop oop_field = mirror->obj_field(fd.offset());
-        if (oop_field == NULL) {
-          guarantee(false, "static field %s::%s must not be null",
-                    ik->external_name(), fd.name()->as_C_string());
-        } else if (oop_field->klass() != ik && oop_field->klass() != ik->array_klass_or_null()) {
-          guarantee(false, "static field %s::%s is of the wrong type",
-                    ik->external_name(), fd.name()->as_C_string());
-        }
-        oop archived_oop_field = archive_reachable_objects_from(level, subgraph_info, oop_field, is_closed_archive);
-        int root_index = append_root(archived_oop_field);
-        log_info(cds, heap)("Archived enum obj @%d %s::%s (" INTPTR_FORMAT " -> " INTPTR_FORMAT ")",
-                            root_index, ik->external_name(), fd.name()->as_C_string(),
-                            p2i((oopDesc*)oop_field), p2i((oopDesc*)archived_oop_field));
-        SystemDictionaryShared::add_enum_klass_static_field(ik, root_index);
+    ik->do_local_static_fields2([=] (fieldDescriptor* fd) {
+      if (fd->field_type() != T_OBJECT && fd->field_type() != T_ARRAY) {
+        guarantee(false, "static field %s::%s must be T_OBJECT or T_ARRAY",
+                  ik->external_name(), fd->name()->as_C_string());
       }
-    }
+      oop oop_field = mirror->obj_field(fd->offset());
+      if (oop_field == NULL) {
+        guarantee(false, "static field %s::%s must not be null",
+                  ik->external_name(), fd->name()->as_C_string());
+      } else if (oop_field->klass() != ik && oop_field->klass() != ik->array_klass_or_null()) {
+        guarantee(false, "static field %s::%s is of the wrong type",
+                  ik->external_name(), fd->name()->as_C_string());
+      }
+      oop archived_oop_field = archive_reachable_objects_from(level, subgraph_info, oop_field, is_closed_archive);
+      int root_index = append_root(archived_oop_field);
+      log_info(cds, heap)("Archived enum obj @%d %s::%s (" INTPTR_FORMAT " -> " INTPTR_FORMAT ")",
+                          root_index, ik->external_name(), fd->name()->as_C_string(),
+                          p2i((oopDesc*)oop_field), p2i((oopDesc*)archived_oop_field));
+      SystemDictionaryShared::add_enum_klass_static_field(ik, root_index);
+    });
   }
 }
 
@@ -430,14 +428,11 @@ bool HeapShared::initialize_enum_klass(InstanceKlass* k, TRAPS) {
 
   oop mirror = k->java_mirror();
   int i = 0;
-  for (JavaFieldStream fs(k); !fs.done(); fs.next()) {
-    if (fs.access_flags().is_static()) {
-      int root_index = info->enum_klass_static_field_root_index_at(i++);
-      fieldDescriptor& fd = fs.field_descriptor();
-      assert(fd.field_type() == T_OBJECT || fd.field_type() == T_ARRAY, "must be");
-      mirror->obj_field_put(fd.offset(), get_root(root_index, /*clear=*/true));
-    }
-  }
+  k->do_local_static_fields2([&] (fieldDescriptor* fd) {
+    int root_index = info->enum_klass_static_field_root_index_at(i++);
+    assert(fd->field_type() == T_OBJECT || fd->field_type() == T_ARRAY, "must be");
+    mirror->obj_field_put(fd->offset(), get_root(root_index, /*clear=*/true));
+  });
   return true;
 }
 
