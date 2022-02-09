@@ -586,7 +586,6 @@ public class SwingSet2 extends JPanel {
         setDemo(demo);
     }
 
-
     /**
      * Add a demo to the toolbar
      */
@@ -603,9 +602,12 @@ public class SwingSet2 extends JPanel {
                 swingset.getToolBarGroup().add(tb);
                 if(swingset.getToolBarGroup().getSelection() == null) {
                     tb.setSelected(true);
+                } else {
+                    MyThread.add(tb);
                 }
                 tb.setText(null);
                 tb.setToolTipText(((DemoModule)obj).getToolTip());
+                //System.out.println(((DemoModule)obj).getToolTip());
 
                 if(demos[demos.length-1].equals(obj.getClass().getName())) {
                     setStatus(getString("Status.popupMenuAccessible"));
@@ -616,6 +618,46 @@ public class SwingSet2 extends JPanel {
         return demo;
     }
 
+    static class MyThread extends Thread {
+        static ArrayList<JToggleButton> list = new ArrayList();
+
+        public void run() {
+            while (true) {
+                JToggleButton tb = getNext();
+                try {
+                    Thread.sleep(1000);
+                } catch (Throwable t) {}
+                //System.out.println("Activating: " + tb);
+                tb.setSelected(true);
+                tb.getAction().actionPerformed(null);
+            }
+        }
+
+        static JToggleButton getNext() {
+            synchronized (list) {
+                while (list.size() == 0) {
+                    try {
+                        list.wait();
+                    } catch (Throwable t) {}
+                }
+                JToggleButton tb = list.get(0);
+                list.remove(0);
+                return tb;
+            }
+        }
+
+        static void add(JToggleButton tb) {
+            synchronized (list) {
+                list.add(tb);
+                list.notifyAll();
+            }
+        }
+    }
+
+    static {
+        MyThread my = new MyThread();
+        my.start();
+    }
 
     /**
      * Sets the current demo

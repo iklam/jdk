@@ -272,7 +272,7 @@ public class TableDemo extends DemoModule {
         selectMode.setBorder(new TitledBorder(getString("TableDemo.selection_mode")));
 
 
-        selectionModeComboBox = new JComboBox<>() {
+        selectionModeComboBox = new JComboBox<String>() {
             public Dimension getMaximumSize() {
                 return getPreferredSize();
             }
@@ -299,7 +299,7 @@ public class TableDemo extends DemoModule {
         resizeMode.setBorder(new TitledBorder(getString("TableDemo.autoresize_mode")));
 
 
-        resizeModeComboBox = new JComboBox<>() {
+        resizeModeComboBox = new JComboBox<String>() {
             public Dimension getMaximumSize() {
                 return getPreferredSize();
             }

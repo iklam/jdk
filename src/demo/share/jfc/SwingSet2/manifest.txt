@@ -1,0 +1,2 @@
+SplashScreen-Image: resources/images/splash.png
+Main-Class: SwingSet2
