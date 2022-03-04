@@ -82,8 +82,6 @@
 #include "gc/g1/g1CollectedHeap.inline.hpp"
 #endif
 
-ReservedSpace MetaspaceShared::_symbol_rs;
-VirtualSpace MetaspaceShared::_symbol_vs;
 bool MetaspaceShared::_has_error_classes;
 bool MetaspaceShared::_archive_loading_failed = false;
 bool MetaspaceShared::_remapped_readwrite = false;
@@ -119,12 +117,6 @@ bool MetaspaceShared::_use_full_module_graph = true;
 //
 // The ca0/ca1 and oa0/oa1 regions are populated inside HeapShared::archive_objects.
 // Their layout is independent of the rw/ro regions.
-
-static DumpRegion _symbol_region("symbols");
-
-char* MetaspaceShared::symbol_space_alloc(size_t num_bytes) {
-  return _symbol_region.allocate(num_bytes);
-}
 
 // os::vm_allocation_granularity() is usually 4K for most OSes. However, on Linux/aarch64,
 // it can be either 4K or 64K and on Macosx-arm it is 16K. To generate archives that are
@@ -265,13 +257,7 @@ void MetaspaceShared::initialize_for_static_dump() {
   _requested_base_address = compute_shared_base(cds_max);
   SharedBaseAddress = (size_t)_requested_base_address;
 
-  size_t symbol_rs_size = LP64_ONLY(3 * G) NOT_LP64(128 * M);
-  _symbol_rs = ReservedSpace(symbol_rs_size);
-  if (!_symbol_rs.is_reserved()) {
-    vm_exit_during_initialization("Unable to reserve memory for symbols",
-                                  err_msg(SIZE_FORMAT " bytes.", symbol_rs_size));
-  }
-  _symbol_region.init(&_symbol_rs, &_symbol_vs);
+  InstanceKlass::disable_method_binary_search();
 }
 
 // Called by universe_post_init()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -169,7 +169,7 @@ private:
 
     GrowableArray<SourceObjInfo*>* objs() const { return _objs; }
 
-    void append(MetaspaceClosure::Ref* enclosing_ref, SourceObjInfo* src_info);
+    void append(SourceObjInfo* src_info);
     void remember_embedded_pointer(SourceObjInfo* pointing_obj, MetaspaceClosure::Ref* ref);
     void relocate(int i, ArchiveBuilder* builder);
 
@@ -231,6 +231,18 @@ public:
     ~OtherROAllocMark();
   };
 
+  static int compare_methods_alphabetically(Method* a, Method* b);
+  static int compare_symbols_alphabetically(Symbol** a, Symbol** b);
+
+  // T must have a method Symbol* T::name().
+  template <class T>
+  static int compare_by_name_alphabetically(T* a, T* b) {
+    assert(a == b || a->name() != b->name(), "no duplicated names");
+    Symbol* a_name = a->name();
+    Symbol* b_name = b->name();
+    return compare_symbols_alphabetically(&a_name, &b_name);
+  }
+
 private:
   bool is_dumping_full_module_graph();
   FollowMode get_follow_mode(MetaspaceClosure::Ref *ref);
@@ -238,6 +250,7 @@ private:
   void iterate_sorted_roots(MetaspaceClosure* it, bool is_relocating_pointers);
   void sort_symbols_and_fix_hash();
   void sort_klasses();
+  static int compare_klasses_alphabetically(Klass** a, Klass** b);
   static int compare_symbols_by_address(Symbol** a, Symbol** b);
   static int compare_klass_by_name(Klass** a, Klass** b);
 

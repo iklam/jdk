@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveBuilder.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
@@ -1750,7 +1751,15 @@ void Method::sort_methods(Array<Method*>* methods, bool set_idnums, method_compa
   int length = methods->length();
   if (length > 1) {
     if (func == NULL) {
-      func = method_comparator;
+#if INCLUDE_CDS
+      if (DumpSharedSpaces) {
+        // Methods need to be sorted alphabetically to for deterministic archive contents.
+        func = ArchiveBuilder::compare_methods_alphabetically;
+      } else
+#endif
+      {
+        func = method_comparator;        
+      }
     }
     {
       NoSafepointVerifier nsv;

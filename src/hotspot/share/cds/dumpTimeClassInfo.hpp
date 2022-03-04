@@ -168,15 +168,7 @@ public:
 };
 
 inline unsigned DumpTimeSharedClassTable_hash(InstanceKlass* const& k) {
-  if (DumpSharedSpaces) {
-    // Deterministic archive contents
-    uintx delta = k->name() - MetaspaceShared::symbol_rs_base();
-    return primitive_hash<uintx>(delta);
-  } else {
-    // Deterministic archive is not possible because classes can be loaded
-    // in multiple threads.
-    return primitive_hash<InstanceKlass*>(k);
-  }
+  return ArchiveUtils::dumptime_hash(k->name());
 }
 
 using DumpTimeSharedClassTableBaseType = ResourceHashtable<

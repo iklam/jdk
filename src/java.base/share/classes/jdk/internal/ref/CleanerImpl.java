@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,6 +34,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import jdk.internal.misc.CDS;
 import jdk.internal.misc.InnocuousThread;
 
 /**
@@ -93,6 +94,11 @@ public final class CleanerImpl implements Runnable {
      * @param threadFactory the thread factory
      */
     public void start(Cleaner cleaner, ThreadFactory threadFactory) {
+        if (CDS.isDumpingStaticArchive()) {
+            // Cleaners are not needed for CDS static dump. Avoid spawning
+            // new Java threads so that the archive can be deterministic.
+        }
+
         if (getCleanerImpl(cleaner) != this) {
             throw new AssertionError("wrong cleaner");
         }

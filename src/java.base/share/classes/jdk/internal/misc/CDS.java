@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -43,11 +43,13 @@ import jdk.internal.access.SharedSecrets;
 
 public class CDS {
     private static final boolean isDumpingClassList;
-    private static final boolean isDumpingArchive;
+    private static final boolean isDumpingStaticArchive;
+    private static final boolean isDumpingDynamicArchive;
     private static final boolean isSharingEnabled;
     static {
         isDumpingClassList = isDumpingClassList0();
-        isDumpingArchive = isDumpingArchive0();
+        isDumpingStaticArchive = isDumpingArchive0(true);
+        isDumpingDynamicArchive = isDumpingArchive0(false);
         isSharingEnabled = isSharingEnabled0();
     }
 
@@ -59,10 +61,24 @@ public class CDS {
     }
 
     /**
+      * Is the VM writing to a static CDS archive.
+      */
+    public static boolean isDumpingStaticArchive() {
+        return isDumpingStaticArchive;
+    }
+
+    /**
+      * Is the VM writing to a dynamic CDS archive.
+      */
+    public static boolean isDumpingDynamicArchive() {
+        return isDumpingDynamicArchive;
+    }
+
+    /**
       * Is the VM writing to a (static or dynamic) CDS archive.
       */
     public static boolean isDumpingArchive() {
-        return isDumpingArchive;
+        return isDumpingStaticArchive || isDumpingDynamicArchive;
     }
 
     /**
@@ -73,7 +89,7 @@ public class CDS {
     }
 
     private static native boolean isDumpingClassList0();
-    private static native boolean isDumpingArchive0();
+    private static native boolean isDumpingArchive0(boolean isStaticArchive);
     private static native boolean isSharingEnabled0();
     private static native void logLambdaFormInvoker(String line);
 

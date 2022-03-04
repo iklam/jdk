@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -29,6 +29,7 @@ import java.security.PrivilegedAction;
 import java.security.AccessController;
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.CDS;
 import jdk.internal.misc.VM;
 
 final class Finalizer extends FinalReference<Object> { /* Package-private; must be in
@@ -190,7 +191,9 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
     }
 
     static {
-        if (ENABLED) {
+        if (ENABLED && !CDS.isDumpingStaticArchive()) {
+            // Finalizers are not needed for CDS static dump. Avoid spawning
+            // new Java threads so that the archive can be deterministic.
             ThreadGroup tg = Thread.currentThread().getThreadGroup();
             for (ThreadGroup tgn = tg;
                  tgn != null;

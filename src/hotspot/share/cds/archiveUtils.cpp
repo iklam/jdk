@@ -31,6 +31,7 @@
 #include "cds/filemap.hpp"
 #include "cds/heapShared.inline.hpp"
 #include "cds/metaspaceShared.hpp"
+#include "classfile/javaClasses.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
 #include "interpreter/bootstrapInfo.hpp"
@@ -193,14 +194,8 @@ void DumpRegion::commit_to(char* newtop) {
                                           need_committed_size));
   }
 
-  const char* which;
-  if (_rs->base() == (char*)MetaspaceShared::symbol_rs_base()) {
-    which = "symbol";
-  } else {
-    which = "shared";
-  }
-  log_debug(cds)("Expanding %s spaces by " SIZE_FORMAT_W(7) " bytes [total " SIZE_FORMAT_W(9)  " bytes ending at %p]",
-                 which, commit, _vs->actual_committed_size(), _vs->high());
+  log_debug(cds)("Expanding shared spaces by " SIZE_FORMAT_W(7) " bytes [total " SIZE_FORMAT_W(9)  " bytes ending at %p]",
+                 commit, _vs->actual_committed_size(), _vs->high());
 }
 
 
@@ -359,4 +354,12 @@ void ArchiveUtils::log_to_classlist(BootstrapInfo* bootstrap_specifier, TRAPS) {
       }
     }
   }
+}
+
+unsigned int ArchiveUtils::dumptime_hash(Symbol* sym)  {
+  if (sym == NULL) {
+    // LambdaProxyClassKey::_invoked_name maybe NULL
+    return 0;
+  }
+  return java_lang_String::hash_code((const jbyte*)sym->bytes(), sym->utf8_length());
 }

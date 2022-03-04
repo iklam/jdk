@@ -45,8 +45,6 @@ enum MapArchiveResult {
 
 // Class Data Sharing Support
 class MetaspaceShared : AllStatic {
-  static ReservedSpace _symbol_rs;  // used only during -Xshare:dump
-  static VirtualSpace _symbol_vs;   // used only during -Xshare:dump
   static bool _has_error_classes;
   static bool _archive_loading_failed;
   static bool _remapped_readwrite;
@@ -94,10 +92,6 @@ private:
 
 
 public:
-  static Symbol* symbol_rs_base() {
-    return (Symbol*)_symbol_rs.base();
-  }
-
   static void initialize_for_static_dump() NOT_CDS_RETURN;
   static void initialize_runtime_shared_and_meta_spaces() NOT_CDS_RETURN;
   static void post_initialize(TRAPS) NOT_CDS_RETURN;
@@ -148,9 +142,6 @@ public:
   // print loaded classes names to file.
   static void dump_loaded_classes(const char* file_name, TRAPS);
 #endif
-
-  // Allocate a block of memory from the temporary "symbol" region.
-  static char* symbol_space_alloc(size_t num_bytes);
 
   // This is the base address as specified by -XX:SharedBaseAddress during -Xshare:dump.
   // Both the base/top archives are written using this as their base address.

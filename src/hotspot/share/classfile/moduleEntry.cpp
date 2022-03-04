@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -409,6 +409,9 @@ Array<ModuleEntry*>* ModuleEntry::write_growable_array(GrowableArray<ModuleEntry
       archived_array->at_put(i, archived_entry);
       ArchivePtrMarker::mark_pointer((address*)archived_array->adr_at(i));
     }
+
+    QuickSort::sort(archived_array->data(), length,
+                    (_sort_Fn)ArchiveBuilder::compare_by_name_alphabetically<ModuleEntry>, true);
   }
 
   return archived_array;
@@ -497,10 +500,6 @@ void ModuleEntry::clear_archived_oops() {
   HeapShared::clear_root(_archived_module_index);
 }
 
-static int compare_module_by_name(ModuleEntry* a, ModuleEntry* b) {
-  assert(a == b || a->name() != b->name(), "no duplicated names");
-  return a->name()->fast_compare(b->name());
-}
 
 void ModuleEntryTable::iterate_symbols(MetaspaceClosure* closure) {
   for (int i = 0; i < table_size(); ++i) {
@@ -520,7 +519,8 @@ Array<ModuleEntry*>* ModuleEntryTable::allocate_archived_entries() {
   }
   if (n > 1) {
     // Always allocate in the same order to produce deterministic archive.
-    QuickSort::sort(archived_modules->data(), n, (_sort_Fn)compare_module_by_name, true);
+    QuickSort::sort(archived_modules->data(), n,
+                    (_sort_Fn)ArchiveBuilder::compare_by_name_alphabetically<ModuleEntry>, true);
   }
   for (int i = 0; i < n; i++) {
     archived_modules->at_put(i, archived_modules->at(i)->allocate_archived_entry());

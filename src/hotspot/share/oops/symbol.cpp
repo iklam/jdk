@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -65,31 +65,22 @@ Symbol::Symbol(const u1* name, int length, int refcount) {
 }
 
 void* Symbol::operator new(size_t sz, int len) throw() {
-#if INCLUDE_CDS
- if (DumpSharedSpaces) {
-   MutexLocker ml(DumpRegion_lock, Mutex::_no_safepoint_check_flag);
-   // To get deterministic output from -Xshare:dump, we ensure that Symbols are allocated in
-   // increasing addresses. When the symbols are copied into the archive, we preserve their
-   // relative address order (sorted, see ArchiveBuilder::gather_klasses_and_symbols).
-   //
-   // We cannot use arena because arena chunks are allocated by the OS. As a result, for example,
-   // the archived symbol of "java/lang/Object" may sometimes be lower than "java/lang/String", and
-   // sometimes be higher. This would cause non-deterministic contents in the archive.
-   DEBUG_ONLY(static void* last = 0);
-   void* p = (void*)MetaspaceShared::symbol_space_alloc(size(len)*wordSize);
-   assert(p > last, "must increase monotonically");
-   DEBUG_ONLY(last = p);
-   return p;
- }
-#endif
   int alloc_size = size(len)*wordSize;
   address res = (address) AllocateHeap(alloc_size, mtSymbol);
+  if (DumpSharedSpaces) {
+    // For deterministic archive, clear out any debug patterns like 0xf1f1f1f1.
+    memset(res, 0, alloc_size);
+  }
   return res;
 }
 
 void* Symbol::operator new(size_t sz, int len, Arena* arena) throw() {
   int alloc_size = size(len)*wordSize;
   address res = (address)arena->AmallocWords(alloc_size);
+  if (DumpSharedSpaces) {
+    // For deterministic archive, clear out any debug patterns like 0xf1f1f1f1.
+    memset(res, 0, alloc_size);
+  }
   return res;
 }
 

@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveBuilder.hpp"
 #include "classfile/bytecodeAssembler.hpp"
 #include "classfile/defaultMethods.hpp"
 #include "classfile/symbolTable.hpp"
@@ -1038,6 +1039,17 @@ static void create_default_methods(InstanceKlass* klass,
   klass->create_new_default_vtable_indices(new_size, CHECK);
 }
 
+inline intx compare_methods(Method* a, Method * b) {
+#if INCLUDE_CDS
+  if (DumpSharedSpaces) {
+    return ArchiveBuilder::compare_methods_alphabetically(a, b);
+  } else
+#endif
+  {
+    return intx(a->name()) - intx(b->name());
+  }
+}
+
 static void sort_methods(GrowableArray<Method*>* methods) {
   // Note that this must sort using the same key as is used for sorting
   // methods in InstanceKlass.
@@ -1046,7 +1058,7 @@ static void sort_methods(GrowableArray<Method*>* methods) {
     for (int j = 0; j < i; ++j) {
       Method* m1 = methods->at(j);
       Method* m2 = methods->at(j + 1);
-      if ((uintptr_t)m1->name() > (uintptr_t)m2->name()) {
+      if (compare_methods(m1, m2) > 0) {
         methods->at_put(j, m2);
         methods->at_put(j + 1, m1);
         sorted = false;
@@ -1056,12 +1068,11 @@ static void sort_methods(GrowableArray<Method*>* methods) {
     sorted = true;
   }
 #ifdef ASSERT
-  uintptr_t prev = 0;
+  Method* prev = NULL;
   for (int i = 0; i < methods->length(); ++i) {
-    Method* mh = methods->at(i);
-    uintptr_t nv = (uintptr_t)mh->name();
-    assert(nv >= prev, "Incorrect overpass method ordering");
-    prev = nv;
+    Method* m = methods->at(i);
+    assert(i == 0 || compare_methods(prev, m) <= 0, "Incorrect method ordering");
+    prev = m;
   }
 #endif
 }
@@ -1104,7 +1115,7 @@ static void merge_in_new_methods(InstanceKlass* klass,
     }
 
     if (orig_method != NULL &&
-        (new_method == NULL || orig_method->name() < new_method->name())) {
+        (new_method == NULL || compare_methods(orig_method, new_method) < 0)) {
       merged_methods->at_put(i, orig_method);
       original_methods->at_put(orig_idx, NULL);
       if (merged_ordering->length() > 0) {
@@ -1127,12 +1138,11 @@ static void merge_in_new_methods(InstanceKlass* klass,
 
   // Verify correct order
 #ifdef ASSERT
-  uintptr_t prev = 0;
+  Method* prev = NULL;
   for (int i = 0; i < merged_methods->length(); ++i) {
-    Method* mo = merged_methods->at(i);
-    uintptr_t nv = (uintptr_t)mo->name();
-    assert(nv >= prev, "Incorrect method ordering");
-    prev = nv;
+    Method* m = merged_methods->at(i);
+    assert(i == 0 || compare_methods(prev, m) <= 0, "Incorrect method ordering");
+    prev = m;
   }
 #endif
 

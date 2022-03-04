@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,8 +24,9 @@
 
 #ifndef SHARED_CDS_LAMBDAPROXYCLASSINFO_HPP
 #define SHARED_CDS_LAMBDAPROXYCLASSINFO_HPP
+
 #include "cds/metaspaceShared.hpp"
-#include "classfile/javaClasses.hpp"
+#include "oops/instanceKlass.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/resourceHash.hpp"
 
@@ -76,20 +77,12 @@ public:
   void mark_pointers();
   unsigned int hash() const;
 
-  static unsigned int dumptime_hash(Symbol* sym)  {
-    if (sym == NULL) {
-      // _invoked_name maybe NULL
-      return 0;
-    }
-    return java_lang_String::hash_code((const jbyte*)sym->bytes(), sym->utf8_length());
-  }
-
   unsigned int dumptime_hash() const {
-    return dumptime_hash(_caller_ik->name()) +
-           dumptime_hash(_invoked_name) +
-           dumptime_hash(_invoked_type) +
-           dumptime_hash(_method_type) +
-           dumptime_hash(_instantiated_method_type);
+    return ArchiveUtils::dumptime_hash(_caller_ik->name()) +
+           ArchiveUtils::dumptime_hash(_invoked_name) +
+           ArchiveUtils::dumptime_hash(_invoked_type) +
+           ArchiveUtils::dumptime_hash(_method_type) +
+           ArchiveUtils::dumptime_hash(_instantiated_method_type);
   }
 
   static inline unsigned int DUMPTIME_HASH(LambdaProxyClassKey const& key) {

@@ -3643,8 +3643,12 @@ JVM_ENTRY(jclass, JVM_LookupLambdaProxyClassFromArchive(JNIEnv* env,
 #endif // INCLUDE_CDS
 JVM_END
 
-JVM_ENTRY(jboolean, JVM_IsCDSDumpingEnabled(JNIEnv* env))
-  return Arguments::is_dumping_archive();
+JVM_ENTRY(jboolean, JVM_IsCDSDumpingEnabled(JNIEnv* env, jboolean isStaticArchive))
+  if (isStaticArchive) {
+    return DumpSharedSpaces;
+  } else {
+    return DynamicDumpSharedSpaces;
+  }
 JVM_END
 
 JVM_ENTRY(jboolean, JVM_IsSharingEnabled(JNIEnv* env))

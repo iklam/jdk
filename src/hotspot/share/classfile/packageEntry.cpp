@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -249,11 +249,6 @@ void PackageEntry::load_from_archive() {
   JFR_ONLY(INIT_ID(this);)
 }
 
-static int compare_package_by_name(PackageEntry* a, PackageEntry* b) {
-  assert(a == b || a->name() != b->name(), "no duplicated names");
-  return a->name()->fast_compare(b->name());
-}
-
 void PackageEntryTable::iterate_symbols(MetaspaceClosure* closure) {
   for (int i = 0; i < table_size(); ++i) {
     for (PackageEntry* p = bucket(i); p != NULL; p = p->next()) {
@@ -284,7 +279,8 @@ Array<PackageEntry*>* PackageEntryTable::allocate_archived_entries() {
     }
   }
   if (n > 1) {
-    QuickSort::sort(archived_packages->data(), n, (_sort_Fn)compare_package_by_name, true);
+    QuickSort::sort(archived_packages->data(), n,
+                    (_sort_Fn)ArchiveBuilder::compare_by_name_alphabetically<PackageEntry>, true);
   }
   for (i = 0; i < n; i++) {
     archived_packages->at_put(i, archived_packages->at(i)->allocate_archived_entry());

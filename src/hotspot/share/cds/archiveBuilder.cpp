@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -66,7 +66,7 @@ ArchiveBuilder::SourceObjList::~SourceObjList() {
   delete _objs;
 }
 
-void ArchiveBuilder::SourceObjList::append(MetaspaceClosure::Ref* enclosing_ref, SourceObjInfo* src_info) {
+void ArchiveBuilder::SourceObjList::append(SourceObjInfo* src_info) {
   // Save this source object for copying
   _objs->append(src_info);
 
@@ -252,17 +252,6 @@ void ArchiveBuilder::gather_klasses_and_symbols() {
     // The only issue here is that the symbol table and the system directories may be
     // randomly ordered, so we copy the symbols and klasses into two arrays and sort
     // them deterministically.
-    //
-    // During -Xshare:dump, the order of Symbol creation is strictly determined by
-    // the SharedClassListFile (class loading is done in a single thread and the JIT
-    // is disabled). Also, Symbols are allocated in monotonically increasing addresses
-    // (see Symbol::operator new(size_t, int)). So if we iterate the Symbols by
-    // ascending address order, we ensure that all Symbols are copied into deterministic
-    // locations in the archive.
-    //
-    // TODO: in the future, if we want to produce deterministic contents in the
-    // dynamic archive, we might need to sort the symbols alphabetically (also see
-    // DynamicArchiveBuilder::sort_methods()).
     sort_symbols_and_fix_hash();
     sort_klasses();
 
@@ -272,32 +261,51 @@ void ArchiveBuilder::gather_klasses_and_symbols() {
   }
 }
 
-int ArchiveBuilder::compare_symbols_by_address(Symbol** a, Symbol** b) {
-  if (a[0] < b[0]) {
-    return -1;
+int ArchiveBuilder::compare_symbols_alphabetically(Symbol** a, Symbol** b) {
+  Symbol* sym_a = *a;
+  Symbol* sym_b = *b;
+  int len_a = sym_a->utf8_length();
+  int len_b = sym_b->utf8_length();
+  int val = strncmp((const char*)sym_a->bytes(), (const char*)sym_b->bytes(), (size_t)MIN2(len_a, len_b));
+  if (val != 0) {
+    return val;
   } else {
-    assert(a[0] > b[0], "Duplicated symbol %s unexpected", (*a)->as_C_string());
-    return 1;
+    return len_a - len_b;
   }
 }
 
 void ArchiveBuilder::sort_symbols_and_fix_hash() {
   log_info(cds)("Sorting symbols and fixing identity hash ... ");
   os::init_random(0x12345678);
-  _symbols->sort(compare_symbols_by_address);
+  _symbols->sort(compare_symbols_alphabetically);
   for (int i = 0; i < _symbols->length(); i++) {
-    assert(_symbols->at(i)->is_permanent(), "archived symbols must be permanent");
     _symbols->at(i)->update_identity_hash();
   }
 }
 
-int ArchiveBuilder::compare_klass_by_name(Klass** a, Klass** b) {
-  return a[0]->name()->fast_compare(b[0]->name());
+int ArchiveBuilder::compare_klasses_alphabetically(Klass** a, Klass** b) {
+  Symbol* name_a = (*a)->name();
+  Symbol* name_b = (*b)->name();
+  return compare_symbols_alphabetically(&name_a, &name_b);
+}
+
+
+int ArchiveBuilder::compare_methods_alphabetically(Method* a, Method* b) {
+  Symbol* name_a = a->name();
+  Symbol* name_b = b->name();
+
+  if (name_a != name_b) {
+    return compare_symbols_alphabetically(&name_a, &name_b);
+  } else {
+    Symbol* signature_a = a->signature();
+    Symbol* signature_b = b->signature();
+    return compare_symbols_alphabetically(&signature_a, &signature_b);
+  }
 }
 
 void ArchiveBuilder::sort_klasses() {
   log_info(cds)("Sorting classes ... ");
-  _klasses->sort(compare_klass_by_name);
+  _klasses->sort(compare_klasses_alphabetically);
 }
 
 size_t ArchiveBuilder::estimate_archive_size() {
@@ -457,9 +465,9 @@ bool ArchiveBuilder::gather_one_source_obj(MetaspaceClosure::Ref* enclosing_ref,
   if (created && src_info.should_copy()) {
     ref->set_user_data((void*)p);
     if (read_only) {
-      _ro_src_objs.append(enclosing_ref, p);
+      _ro_src_objs.append(p);
     } else {
-      _rw_src_objs.append(enclosing_ref, p);
+      _rw_src_objs.append(p);
     }
     return true; // Need to recurse into this ref only if we are copying it
   } else {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -45,8 +45,8 @@ Java_jdk_internal_misc_CDS_getRandomSeedForDumping(JNIEnv *env, jclass ignore) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_jdk_internal_misc_CDS_isDumpingArchive0(JNIEnv *env, jclass jcls) {
-    return JVM_IsCDSDumpingEnabled(env);
+Java_jdk_internal_misc_CDS_isDumpingArchive0(JNIEnv *env, jclass jcls, jboolean isStaticArchive) {
+    return JVM_IsCDSDumpingEnabled(env, isStaticArchive);
 }
 
 JNIEXPORT jboolean JNICALL

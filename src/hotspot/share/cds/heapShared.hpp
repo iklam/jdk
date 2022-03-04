@@ -25,6 +25,7 @@
 #ifndef SHARE_CDS_HEAPSHARED_HPP
 #define SHARE_CDS_HEAPSHARED_HPP
 
+#include "cds/archiveUtils.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/compactHashtable.hpp"
 #include "classfile/javaClasses.hpp"
@@ -253,8 +254,7 @@ private:
   static ArchivedObjectCache* _archived_object_cache;
 
   static unsigned klass_hash(Klass* const& klass) {
-    // Generate deterministic hashcode even if SharedBaseAddress is changed due to ASLR.
-    return primitive_hash<address>(address(klass) - SharedBaseAddress);
+    return ArchiveUtils::dumptime_hash(klass->name());
   }
 
   class DumpTimeKlassSubGraphInfoTable

@@ -1770,14 +1770,21 @@ NOINLINE int linear_search(const Array<Method*>* methods, const Symbol* name) {
 }
 
 inline int InstanceKlass::quick_search(const Array<Method*>* methods, const Symbol* name) {
+#if INCLUDE_CDS
   if (_disable_method_binary_search) {
-    assert(DynamicDumpSharedSpaces, "must be");
+    Arguments::assert_is_dumping_archive();
+    // Static dump:
+    // Methods are sorted alphabetically to for deterministic archive contents.
+    // See Method::sort_methods.
+    //
+    // Dynamic dump:
     // At the final stage of dynamic dumping, the methods array may not be sorted
     // by ascending addresses of their names, so we can't use binary search anymore.
     // However, methods with the same name are still laid out consecutively inside the
     // methods array, so let's look for the first one that matches.
     return linear_search(methods, name);
   }
+#endif
 
   int len = methods->length();
   int l = 0;
@@ -3816,10 +3823,12 @@ void InstanceKlass::verify_on(outputStream* st) {
     for (int j = 0; j < methods->length(); j++) {
       guarantee(methods->at(j)->is_method(), "non-method in methods array");
     }
-    for (int j = 0; j < methods->length() - 1; j++) {
-      Method* m1 = methods->at(j);
-      Method* m2 = methods->at(j + 1);
-      guarantee(m1->name()->fast_compare(m2->name()) <= 0, "methods not sorted correctly");
+    if (!_disable_method_binary_search) {
+      for (int j = 0; j < methods->length() - 1; j++) {
+        Method* m1 = methods->at(j);
+        Method* m2 = methods->at(j + 1);
+        guarantee(m1->name()->fast_compare(m2->name()) <= 0, "methods not sorted correctly");
+      }
     }
   }
 
@@ -3850,10 +3859,12 @@ void InstanceKlass::verify_on(outputStream* st) {
     for (int j = 0; j < methods->length(); j++) {
       guarantee(methods->at(j)->is_method(), "non-method in methods array");
     }
-    for (int j = 0; j < methods->length() - 1; j++) {
-      Method* m1 = methods->at(j);
-      Method* m2 = methods->at(j + 1);
-      guarantee(m1->name()->fast_compare(m2->name()) <= 0, "methods not sorted correctly");
+    if (!_disable_method_binary_search) {
+      for (int j = 0; j < methods->length() - 1; j++) {
+        Method* m1 = methods->at(j);
+        Method* m2 = methods->at(j + 1);
+        guarantee(m1->name()->fast_compare(m2->name()) <= 0, "methods not sorted correctly");
+      }
     }
   }
 
