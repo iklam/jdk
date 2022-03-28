@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "jvm.h"
 #include "jimage.hpp"
+#include "cds/cds.hpp"
 #include "cds/filemap.hpp"
 #include "classfile/classFileStream.hpp"
 #include "classfile/classLoader.inline.hpp"
@@ -450,7 +451,7 @@ bool ClassPathImageEntry::is_modules_image() const {
 
 #if INCLUDE_CDS
 void ClassLoader::exit_with_path_failure(const char* error, const char* message) {
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
   tty->print_cr("Hint: enable -Xlog:class+path=info to diagnose the failure");
   vm_exit_during_initialization(error, message);
 }
@@ -520,7 +521,7 @@ void ClassLoader::setup_bootstrap_search_path(JavaThread* current) {
 
 #if INCLUDE_CDS
 void ClassLoader::setup_app_search_path(JavaThread* current, const char *class_path) {
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
 
   ResourceMark rm(current);
   ClasspathStream cp_stream(class_path);
@@ -534,7 +535,7 @@ void ClassLoader::setup_app_search_path(JavaThread* current, const char *class_p
 void ClassLoader::add_to_module_path_entries(const char* path,
                                              ClassPathEntry* entry) {
   assert(entry != NULL, "ClassPathEntry should not be NULL");
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
 
   // The entry does not exist, add to the list
   if (_module_path_entries == NULL) {
@@ -548,7 +549,7 @@ void ClassLoader::add_to_module_path_entries(const char* path,
 
 // Add a module path to the _module_path_entries list.
 void ClassLoader::setup_module_search_path(JavaThread* current, const char* path) {
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
   struct stat st;
   if (os::stat(path, &st) != 0) {
     tty->print_cr("os::stat error %d (%s). CDS dump aborted (path was \"%s\").",
@@ -636,7 +637,7 @@ void ClassLoader::setup_bootstrap_search_path_impl(JavaThread* current, const ch
   bool set_base_piece = true;
 
 #if INCLUDE_CDS
-  if (Arguments::is_dumping_archive()) {
+  if (CDS::dumping_archive()) {
     if (!Arguments::has_jimage()) {
       vm_exit_during_initialization("CDS is not supported in exploded JDK build", NULL);
     }
@@ -1181,8 +1182,8 @@ InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TR
     //
     // DynamicDumpSharedSpaces requires UseSharedSpaces to be enabled. Since --patch-module
     // is not supported with UseSharedSpaces, it is not supported with DynamicDumpSharedSpaces.
-    assert(!DynamicDumpSharedSpaces, "sanity");
-    if (!DumpSharedSpaces) {
+    assert(!CDS::dumping_dynamic_archive(), "sanity");
+    if (!CDS::dumping_static_archive()) {
       stream = search_module_entries(THREAD, _patch_mod_entries, class_name, file_name);
     }
   }
@@ -1261,7 +1262,7 @@ char* ClassLoader::skip_uri_protocol(char* source) {
 // by the builtin loaders at dump time.
 void ClassLoader::record_result(JavaThread* current, InstanceKlass* ik,
                                 const ClassFileStream* stream, bool redefined) {
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
   assert(stream != NULL, "sanity");
 
   if (ik->is_hidden()) {
@@ -1443,13 +1444,13 @@ char* ClassLoader::lookup_vm_options() {
 
 #if INCLUDE_CDS
 void ClassLoader::initialize_shared_path(JavaThread* current) {
-  if (Arguments::is_dumping_archive()) {
+  if (CDS::dumping_archive()) {
     ClassLoaderExt::setup_search_paths(current);
   }
 }
 
 void ClassLoader::initialize_module_path(TRAPS) {
-  if (Arguments::is_dumping_archive()) {
+  if (CDS::dumping_archive()) {
     ClassLoaderExt::setup_module_paths(THREAD);
     FileMapInfo::allocate_shared_path_table(CHECK);
   }
@@ -1458,7 +1459,7 @@ void ClassLoader::initialize_module_path(TRAPS) {
 // Helper function used by CDS code to get the number of module path
 // entries during shared classpath setup time.
 int ClassLoader::num_module_path_entries() {
-  Arguments::assert_is_dumping_archive();
+  CDS::assert_dumping_archive();
   int num_entries = 0;
   ClassPathEntry* e= ClassLoader::_module_path_entries;
   while (e != NULL) {
@@ -1531,9 +1532,8 @@ void ClassLoader::classLoader_init2(JavaThread* current) {
   // As more modules are defined during module system initialization, more
   // entries will be added to the exploded build array.
   if (!has_jrt_entry()) {
-    assert(!DumpSharedSpaces, "DumpSharedSpaces not supported with exploded module builds");
-    assert(!DynamicDumpSharedSpaces, "DynamicDumpSharedSpaces not supported with exploded module builds");
-    assert(!UseSharedSpaces, "UsedSharedSpaces not supported with exploded module builds");
+    assert(!CDS::dumping_archive(), "CDS archive dumping not supported with exploded module builds");
+    assert(!CDS::enabled(), "CDS is not supported with exploded module builds");
     // Set up the boot loader's _exploded_entries list.  Note that this gets
     // done before loading any classes, by the same thread that will
     // subsequently do the first class load. So, no lock is needed for this.

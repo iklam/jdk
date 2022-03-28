@@ -22,8 +22,8 @@
  *
  */
 
-#ifndef SHARE_INCLUDE_CDS_H
-#define SHARE_INCLUDE_CDS_H
+#ifndef SHARE_INCLUDE_CDS_EXPORT_H
+#define SHARE_INCLUDE_CDS_EXPORT_H
 
 #include <stddef.h>
 
@@ -92,4 +92,4 @@ typedef struct CDSFileMapHeaderBase {
   CDSFileMapRegion _space[NUM_CDS_REGIONS];
 } CDSFileMapHeaderBase;
 
-#endif // SHARE_INCLUDE_CDS_H
+#endif // SHARE_INCLUDE_CDS_EXPORT_H

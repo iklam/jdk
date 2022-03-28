@@ -25,9 +25,10 @@
 #ifndef SHARE_CLASSFILE_COMPACTHASHTABLE_HPP
 #define SHARE_CLASSFILE_COMPACTHASHTABLE_HPP
 
+#include "cds/cds_globals.hpp"
 #include "oops/array.hpp"
 #include "oops/symbol.hpp"
-#include "runtime/globals.hpp"
+#include "runtime/globals.hpp" // Needed?
 #include "utilities/growableArray.hpp"
 
 

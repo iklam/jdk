@@ -25,6 +25,7 @@
 #ifndef SHARE_RUNTIME_FLAGS_ALLFLAGS_HPP
 #define SHARE_RUNTIME_FLAGS_ALLFLAGS_HPP
 
+#include "cds/cds_globals.hpp"
 #include "compiler/compiler_globals.hpp"
 #include "gc/shared/gc_globals.hpp"
 #include "gc/shared/tlab_globals.hpp"
@@ -55,6 +56,15 @@
   ARCH_FLAGS(                 \
     develop,                  \
     product,                  \
+    notproduct,               \
+    range,                    \
+    constraint)               \
+                              \
+  CDS_FLAGS(                  \
+    develop,                  \
+    develop_pd,               \
+    product,                  \
+    product_pd,               \
     notproduct,               \
     range,                    \
     constraint)               \

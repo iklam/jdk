@@ -26,7 +26,7 @@
 #define SHARE_CDS_FILEMAP_HPP
 
 #include "cds/metaspaceShared.hpp"
-#include "include/cds.h"
+#include "include/cds_export.h"
 #include "oops/array.hpp"
 #include "oops/compressedOops.hpp"
 #include "utilities/align.hpp"

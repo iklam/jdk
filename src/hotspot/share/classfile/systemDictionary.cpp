@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "jvm.h"
+#include "cds/cds.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/classFileParser.hpp"
 #include "classfile/classFileStream.hpp"
@@ -1654,7 +1655,7 @@ void SystemDictionary::initialize(TRAPS) {
   // Resolve basic classes
   vmClasses::resolve_all(CHECK);
   // Resolve classes used by archived heap objects
-  if (UseSharedSpaces) {
+  if (CDS::enabled()) {
     HeapShared::resolve_classes(THREAD);
   }
 }

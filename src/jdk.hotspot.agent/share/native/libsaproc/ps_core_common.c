@@ -35,7 +35,7 @@
 #include "salibelf.h"
 #endif
 #include "libproc_impl.h"
-#include "cds.h"
+#include "cds_export.h"
 
 #ifdef __APPLE__
 #include "sun_jvm_hotspot_debugger_amd64_AMD64ThreadContext.h"
