@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -213,7 +213,10 @@ public:
   // Returns java platform loader
   static oop java_platform_loader();
 
-  // Compute the java system and platform loaders
+  // Returns java boot loader
+  static oop java_boot_loader();
+
+  // Compute the java system/platform/boot loaders
   static void compute_java_loaders(TRAPS);
 
   // Register a new class loader
@@ -311,6 +314,7 @@ private:
 
   static OopHandle  _java_system_loader;
   static OopHandle  _java_platform_loader;
+  static OopHandle  _java_boot_loader;
 
   static ResolutionErrorTable* resolution_errors() { return _resolution_errors; }
   static SymbolPropertyTable* invoke_method_table() { return _invoke_method_table; }

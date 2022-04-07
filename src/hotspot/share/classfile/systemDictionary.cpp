@@ -93,6 +93,7 @@ ProtectionDomainCacheTable*   SystemDictionary::_pd_cache_table = NULL;
 
 OopHandle   SystemDictionary::_java_system_loader;
 OopHandle   SystemDictionary::_java_platform_loader;
+OopHandle   SystemDictionary::_java_boot_loader;
 
 // Default ProtectionDomainCacheSize value
 const int defaultProtectionDomainCacheSize = 1009;
@@ -120,6 +121,10 @@ oop SystemDictionary::java_platform_loader() {
   return _java_platform_loader.resolve();
 }
 
+oop SystemDictionary::java_boot_loader() {
+  return _java_boot_loader.resolve();
+}
+
 void SystemDictionary::compute_java_loaders(TRAPS) {
   JavaValue result(T_OBJECT);
   InstanceKlass* class_loader_klass = vmClasses::ClassLoader_klass();
@@ -138,6 +143,14 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
                          CHECK);
 
   _java_platform_loader = OopHandle(Universe::vm_global(), result.get_oop());
+
+  JavaCalls::call_static(&result,
+                         vmClasses::jdk_internal_loader_ClassLoaders_klass(),
+                         vmSymbols::bootLoader_name(),
+                         vmSymbols::void_BuiltinClassLoader_signature(),
+                         CHECK);
+
+  _java_boot_loader = OopHandle(Universe::vm_global(), result.get_oop());
 }
 
 ClassLoaderData* SystemDictionary::register_loader(Handle class_loader, bool create_mirror_cld) {
