@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "logging/log.hpp"
+#include "os_linux.impl.hpp"
 #include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/ostream.hpp"

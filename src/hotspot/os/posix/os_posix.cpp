@@ -30,6 +30,7 @@
 #include "jvmtifiles/jvmti.h"
 #include "logging/log.hpp"
 #include "memory/allocation.inline.hpp"
+#include "os_linux.impl.hpp"
 #include "os_posix.inline.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/osThread.hpp"
