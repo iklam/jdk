@@ -96,7 +96,7 @@ static jlong initial_time_count = 0;
 static int clock_tics_per_sec = 100;
 
 // Platform minimum stack allowed
-size_t os::_os_min_stack_allowed = PTHREAD_STACK_MIN;
+size_t os::Internal::_os_min_stack_allowed = PTHREAD_STACK_MIN;
 
 // Check core dump limit and report possible place where core can be found
 void os::check_dump_limit(char* buffer, size_t bufferSize) {
@@ -432,7 +432,7 @@ struct tm* os::gmtime_pd(const time_t* clock, struct tm*  res) {
   return gmtime_r(clock, res);
 }
 
-void os::Posix::print_load_average(outputStream* st) {
+void os::Posix::Internal::print_load_average(outputStream* st) {
   st->print("load average: ");
   double loadavg[3];
   int res = os::loadavg(loadavg, 3);
@@ -447,7 +447,7 @@ void os::Posix::print_load_average(outputStream* st) {
 // boot/uptime information;
 // unfortunately it does not work on macOS and Linux because the utx chain has no entry
 // for reboot at least on my test machines
-void os::Posix::print_uptime_info(outputStream* st) {
+void os::Posix::Internal::print_uptime_info(outputStream* st) {
   int bootsec = -1;
   int currsec = time(NULL);
   struct utmpx* ent;
@@ -489,7 +489,7 @@ static void print_rlimit(outputStream* st, const char* msg,
   }
 }
 
-void os::Posix::print_rlimit_info(outputStream* st) {
+void os::Posix::Internal::print_rlimit_info(outputStream* st) {
   st->print("rlimit (soft/hard):");
   print_rlimit(st, "STACK", RLIMIT_STACK, true);
   print_rlimit(st, ", CORE", RLIMIT_CORE, true);
@@ -525,7 +525,7 @@ void os::Posix::print_rlimit_info(outputStream* st) {
   st->cr();
 }
 
-void os::Posix::print_uname_info(outputStream* st) {
+void os::Posix::Internal::print_uname_info(outputStream* st) {
   // kernel
   st->print("uname: ");
   struct utsname name;
@@ -984,7 +984,7 @@ size_t os::Posix::get_initial_stack_size(ThreadType thr_type, size_t req_stack_s
       stack_size = JavaThread::stack_size_at_create();
     }
     stack_size = MAX2(stack_size,
-                      _java_thread_min_stack_allowed);
+                      os::Internal::_java_thread_min_stack_allowed);
     break;
   case os::compiler_thread:
     if (req_stack_size == 0 && CompilerThreadStackSize > 0) {
@@ -992,7 +992,7 @@ size_t os::Posix::get_initial_stack_size(ThreadType thr_type, size_t req_stack_s
       stack_size = (size_t)(CompilerThreadStackSize * K);
     }
     stack_size = MAX2(stack_size,
-                      _compiler_thread_min_stack_allowed);
+                      os::Internal::_compiler_thread_min_stack_allowed);
     break;
   case os::vm_thread:
   case os::gc_thread:
@@ -1004,7 +1004,7 @@ size_t os::Posix::get_initial_stack_size(ThreadType thr_type, size_t req_stack_s
     }
 
     stack_size = MAX2(stack_size,
-                      _vm_internal_thread_min_stack_allowed);
+                      os::Internal::_vm_internal_thread_min_stack_allowed);
     break;
   }
 

@@ -35,65 +35,63 @@
 // is not defined as a constant as of Glibc 2.34.
 
 // File conventions
-static const char* file_separator() { return "/"; }
-static const char* line_separator() { return "\n"; }
-static const char* path_separator() { return ":"; }
+const char* file_separator() { return "/"; }
+const char* line_separator() { return "\n"; }
+const char* path_separator() { return ":"; }
 
-class Posix {
-  friend class os;
+namespace Posix {
+  namespace Internal {
+    void print_distro_info(outputStream* st);
+    void print_rlimit_info(outputStream* st);
+    void print_uname_info(outputStream* st);
+    void print_libversion_info(outputStream* st);
+    void print_load_average(outputStream* st);
+    void print_uptime_info(outputStream* st);
+  }
 
-protected:
-  static void print_distro_info(outputStream* st);
-  static void print_rlimit_info(outputStream* st);
-  static void print_uname_info(outputStream* st);
-  static void print_libversion_info(outputStream* st);
-  static void print_load_average(outputStream* st);
-  static void print_uptime_info(outputStream* st);
-
-public:
-  static void init(void);  // early initialization - no logging available
-  static void init_2(void);// later initialization - logging available
+  void init(void);  // early initialization - no logging available
+  void init_2(void);// later initialization - logging available
 
   // Return default stack size for the specified thread type
-  static size_t default_stack_size(os::ThreadType thr_type);
-  static size_t get_initial_stack_size(ThreadType thr_type, size_t req_stack_size);
+  size_t default_stack_size(os::ThreadType thr_type);
+  size_t get_initial_stack_size(ThreadType thr_type, size_t req_stack_size);
 
   // Helper function; describes pthread attributes as short string. String is written
   // to buf with len buflen; buf is returned.
-  static char* describe_pthread_attr(char* buf, size_t buflen, const pthread_attr_t* attr);
+  char* describe_pthread_attr(char* buf, size_t buflen, const pthread_attr_t* attr);
 
   // A safe implementation of realpath which will not cause a buffer overflow if the resolved path
   //   is longer than PATH_MAX.
   // On success, returns 'outbuf', which now contains the path.
   // On error, it will return NULL and set errno. The content of 'outbuf' is undefined.
   // On truncation error ('outbuf' too small), it will return NULL and set errno to ENAMETOOLONG.
-  static char* realpath(const char* filename, char* outbuf, size_t outbuflen);
+  char* realpath(const char* filename, char* outbuf, size_t outbuflen);
 
   // Returns true if given uid is root.
-  static bool is_root(uid_t uid);
+  bool is_root(uid_t uid);
 
   // Returns true if given uid is effective or root uid.
-  static bool matches_effective_uid_or_root(uid_t uid);
+  bool matches_effective_uid_or_root(uid_t uid);
 
   // Returns true if either given uid is effective uid and given gid is
   // effective gid, or if given uid is root.
-  static bool matches_effective_uid_and_gid_or_root(uid_t uid, gid_t gid);
+  bool matches_effective_uid_and_gid_or_root(uid_t uid, gid_t gid);
 
-  static void print_umask(outputStream* st, mode_t umsk);
+  void print_umask(outputStream* st, mode_t umsk);
 
-  static void print_user_info(outputStream* st);
+  void print_user_info(outputStream* st);
 
   // Set PC into context. Needed for continuation after signal.
-  static address ucontext_get_pc(const ucontext_t* ctx);
-  static void    ucontext_set_pc(ucontext_t* ctx, address pc);
+  address ucontext_get_pc(const ucontext_t* ctx);
+  void    ucontext_set_pc(ucontext_t* ctx, address pc);
 
-  static void to_RTC_abstime(timespec* abstime, int64_t millis);
+  void to_RTC_abstime(timespec* abstime, int64_t millis);
 
-  static bool handle_stack_overflow(JavaThread* thread, address addr, address pc,
+  bool handle_stack_overflow(JavaThread* thread, address addr, address pc,
                                     const void* ucVoid,
                                     address* stub);
 
-  static void print_active_locale(outputStream* st);
+  void print_active_locale(outputStream* st);
 };
 
 /*

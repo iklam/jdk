@@ -2010,7 +2010,7 @@
   declare_toplevel_type(Universe)                                         \
   declare_toplevel_type(CompressedOops)                                   \
   declare_toplevel_type(CompressedKlassPointers)                          \
-  declare_toplevel_type(os)                                               \
+  /*declare_toplevel_type(os)*/                                               \
   declare_toplevel_type(vframeArray)                                      \
   declare_toplevel_type(vframeArrayElement)                               \
   declare_toplevel_type(Annotations*)                                     \
@@ -2834,7 +2834,7 @@ VMTypeEntry VMStructs::localHotSpotVMTypes[] = {
            GENERATE_C2_VM_TYPE_ENTRY,
            GENERATE_C2_TOPLEVEL_VM_TYPE_ENTRY)
 
-
+#if 0
   VM_TYPES_OS(GENERATE_VM_TYPE_ENTRY,
               GENERATE_TOPLEVEL_VM_TYPE_ENTRY,
               GENERATE_OOP_VM_TYPE_ENTRY,
@@ -2843,6 +2843,7 @@ VMTypeEntry VMStructs::localHotSpotVMTypes[] = {
               GENERATE_C1_TOPLEVEL_VM_TYPE_ENTRY,
               GENERATE_C2_VM_TYPE_ENTRY,
               GENERATE_C2_TOPLEVEL_VM_TYPE_ENTRY)
+#endif
 
   VM_TYPES_CPU(GENERATE_VM_TYPE_ENTRY,
                GENERATE_TOPLEVEL_VM_TYPE_ENTRY,
@@ -2853,6 +2854,7 @@ VMTypeEntry VMStructs::localHotSpotVMTypes[] = {
                GENERATE_C2_VM_TYPE_ENTRY,
                GENERATE_C2_TOPLEVEL_VM_TYPE_ENTRY)
 
+#if 0
   VM_TYPES_OS_CPU(GENERATE_VM_TYPE_ENTRY,
                   GENERATE_TOPLEVEL_VM_TYPE_ENTRY,
                   GENERATE_OOP_VM_TYPE_ENTRY,
@@ -2861,6 +2863,7 @@ VMTypeEntry VMStructs::localHotSpotVMTypes[] = {
                   GENERATE_C1_TOPLEVEL_VM_TYPE_ENTRY,
                   GENERATE_C2_VM_TYPE_ENTRY,
                   GENERATE_C2_TOPLEVEL_VM_TYPE_ENTRY)
+#endif
 
   GENERATE_VM_TYPE_LAST_ENTRY()
 };

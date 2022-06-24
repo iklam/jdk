@@ -79,16 +79,19 @@
 # include <signal.h>
 # include <errno.h>
 
-OSThread*         os::_starting_thread    = NULL;
-address           os::_polling_page       = NULL;
-volatile unsigned int os::_rand_seed      = 1234567;
-int               os::_processor_count    = 0;
-int               os::_initial_active_processor_count = 0;
-os::PageSizes     os::_page_sizes;
+using namespace os::Internal;
+
+namespace os::Internal {
+  OSThread*             _starting_thread    = NULL;
+  address               _polling_page       = NULL;
+  volatile unsigned int _rand_seed          = 1234567;
+  int                   _processor_count    = 0;
+  int                   _initial_active_processor_count = 0;
+  os::PageSizes         _page_sizes;
+  DEBUG_ONLY(bool       _mutex_init_done    = false;)
+}
 
 static size_t cur_malloc_words = 0;  // current size for MallocMaxTestWords
-
-DEBUG_ONLY(bool os::_mutex_init_done = false;)
 
 int os::snprintf(char* buf, size_t len, const char* fmt, ...) {
   va_list args;
@@ -1394,7 +1397,7 @@ bool os::stack_shadow_pages_available(Thread *thread, const methodHandle& method
   return sp > (limit + framesize_in_bytes);
 }
 
-size_t os::page_size_for_region(size_t region_size, size_t min_pages, bool must_be_aligned) {
+size_t os::Internal::page_size_for_region(size_t region_size, size_t min_pages, bool must_be_aligned) {
   assert(min_pages > 0, "sanity");
   if (UseLargePages) {
     const size_t max_page_size = region_size / min_pages;
@@ -1666,7 +1669,7 @@ bool os::is_server_class_machine() {
   return result;
 }
 
-void os::initialize_initial_active_processor_count() {
+void os::Internal::initialize_initial_active_processor_count() {
   assert(_initial_active_processor_count == 0, "Initial active processor count already set.");
   _initial_active_processor_count = active_processor_count();
   log_debug(os)("Initial active processor count set to %d" , _initial_active_processor_count);
@@ -1721,7 +1724,7 @@ bool os::commit_memory(char* addr, size_t bytes, bool executable) {
 bool os::commit_memory(char* addr, size_t size, size_t alignment_hint,
                               bool executable) {
   assert_nonempty_range(addr, size);
-  bool res = os::pd_commit_memory(addr, size, alignment_hint, executable);
+  bool res = os::Internal::pd_commit_memory(addr, size, alignment_hint, executable);
   if (res) {
     MemTracker::record_virtual_memory_commit((address)addr, size, CALLER_PC);
   }
@@ -1738,7 +1741,7 @@ void os::commit_memory_or_exit(char* addr, size_t bytes, bool executable,
 void os::commit_memory_or_exit(char* addr, size_t size, size_t alignment_hint,
                                bool executable, const char* mesg) {
   assert_nonempty_range(addr, size);
-  os::pd_commit_memory_or_exit(addr, size, alignment_hint, executable, mesg);
+  os::Internal::pd_commit_memory_or_exit(addr, size, alignment_hint, executable, mesg);
   MemTracker::record_virtual_memory_commit((address)addr, size, CALLER_PC);
 }
 
@@ -2004,7 +2007,7 @@ void os::PageSizes::print_on(outputStream* st) const {
 // To this, space for guard mechanisms is added, which depends on the
 // page size which again depends on the concrete system the VM is running
 // on. Space for libc guard pages is not included in this size.
-jint os::set_minimum_stack_sizes() {
+jint os::Internal::set_minimum_stack_sizes() {
 
   _java_thread_min_stack_allowed = _java_thread_min_stack_allowed +
                                    StackOverflow::stack_guard_zone_size() +

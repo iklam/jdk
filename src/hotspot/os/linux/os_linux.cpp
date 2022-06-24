@@ -152,26 +152,36 @@ enum CoredumpFilterBit {
   DAX_SHARED_BIT = 1 << 8
 };
 
+using namespace os::Linux::Internal;
+
 ////////////////////////////////////////////////////////////////////////////////
 // global variables
-julong os::Linux::_physical_memory = 0;
+namespace os::Linux {
+  address   _initial_thread_stack_bottom = NULL;
+  uintptr_t _initial_thread_stack_size   = 0;
 
-address   os::Linux::_initial_thread_stack_bottom = NULL;
-uintptr_t os::Linux::_initial_thread_stack_size   = 0;
+  int (*_pthread_getcpuclockid)(pthread_t, clockid_t *) = NULL;
+  int (*_pthread_setname_np)(pthread_t, const char*) = NULL;
 
-int (*os::Linux::_pthread_getcpuclockid)(pthread_t, clockid_t *) = NULL;
-int (*os::Linux::_pthread_setname_np)(pthread_t, const char*) = NULL;
-pthread_t os::Linux::_main_thread;
-int os::Linux::_page_size = -1;
-bool os::Linux::_supports_fast_thread_cpu_time = false;
-const char * os::Linux::_libc_version = NULL;
-const char * os::Linux::_libpthread_version = NULL;
-size_t os::Linux::_default_large_page_size = 0;
 
+  bool _supports_fast_thread_cpu_time = false;
+  const char * _libc_version = NULL;
+  const char * _libpthread_version = NULL;
+  size_t _default_large_page_size = 0;
+
+#if 0
 #ifdef __GLIBC__
-os::Linux::mallinfo_func_t os::Linux::_mallinfo = NULL;
-os::Linux::mallinfo2_func_t os::Linux::_mallinfo2 = NULL;
+  os::Linux::Internal::mallinfo_func_t _mallinfo = NULL;
+  os::Linux::Internal::mallinfo2_func_t _mallinfo2 = NULL;
 #endif // __GLIBC__
+#endif
+}
+
+namespace os::Linux::Internal {
+  julong _physical_memory = 0;
+  pthread_t _main_thread;
+  int _page_size = -1;
+}
 
 static int clock_tics_per_sec = 100;
 
@@ -185,10 +195,15 @@ static bool suppress_primordial_thread_resolution = false;
 // utility functions
 
 julong os::available_memory() {
-  return Linux::available_memory();
+  return os::Linux::Internal::available_memory();
 }
 
-julong os::Linux::available_memory() {
+static int foo() {
+  os::Linux::Internal::available_memory();
+  return 0;
+}
+
+julong os::Linux::Internal::available_memory() {
   // values in struct sysinfo are "unsigned long"
   struct sysinfo si;
   julong avail_mem;
@@ -227,7 +242,7 @@ julong os::physical_memory() {
                             mem_limit == OSCONTAINER_ERROR ? "failed" : "unlimited", mem_limit);
   }
 
-  phys_mem = Linux::physical_memory();
+  phys_mem = os::Linux::Internal::physical_memory();
   log_trace(os)("total system memory: " JLONG_FORMAT, phys_mem);
   return phys_mem;
 }
@@ -348,7 +363,7 @@ static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
-void os::Linux::initialize_system_info() {
+void os::Linux::Internal::initialize_system_info() {
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
@@ -518,13 +533,13 @@ void os::Linux::libpthread_init() {
   assert(n > 0, "cannot retrieve glibc version");
   char *str = (char *)malloc(n, mtInternal);
   confstr(_CS_GNU_LIBC_VERSION, str, n);
-  os::Linux::set_libc_version(str);
+  os::Linux::Internal::set_libc_version(str);
 
   n = confstr(_CS_GNU_LIBPTHREAD_VERSION, NULL, 0);
   assert(n > 0, "cannot retrieve pthread version");
   str = (char *)malloc(n, mtInternal);
   confstr(_CS_GNU_LIBPTHREAD_VERSION, str, n);
-  os::Linux::set_libpthread_version(str);
+  os::Linux::Internal::set_libpthread_version(str);
 #endif
 }
 
@@ -867,11 +882,13 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
                               thread->name(), os::errno_name(ret), os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
       // Log some OS information which might explain why creating the thread failed.
       log_info(os, thread)("Number of threads approx. running in the VM: %d", Threads::number_of_threads());
+#if 0 // FIXME
       LogStream st(Log(os, thread)::info());
       os::Posix::print_rlimit_info(&st);
       os::print_memory_info(&st);
       os::Linux::print_proc_sys_info(&st);
       os::Linux::print_container_info(&st);
+#endif
     }
 
     pthread_attr_destroy(&attr);
@@ -907,7 +924,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 
 // bootstrap the main thread
 bool os::create_main_thread(JavaThread* thread) {
-  assert(os::Linux::_main_thread == pthread_self(), "should be called inside main thread");
+  assert(os::Linux::Internal::_main_thread == pthread_self(), "should be called inside main thread");
   return create_attached_thread(thread);
 }
 
@@ -1880,55 +1897,54 @@ int os::get_loaded_modules_info(os::LoadedModulesCallbackFunc callback, void *pa
 }
 
 void os::print_os_info_brief(outputStream* st) {
-  os::Linux::print_distro_info(st);
+  os::Linux::Internal::print_distro_info(st);
 
-  os::Posix::print_uname_info(st);
+  os::Posix::Internal::print_uname_info(st);
 
-  os::Linux::print_libversion_info(st);
-
+  os::Linux::Internal::print_libversion_info(st);
 }
 
 void os::print_os_info(outputStream* st) {
   st->print_cr("OS:");
 
-  os::Linux::print_distro_info(st);
+  os::Linux::Internal::print_distro_info(st);
 
-  os::Posix::print_uname_info(st);
+  os::Posix::Internal::print_uname_info(st);
 
-  os::Linux::print_uptime_info(st);
+  os::Linux::Internal::print_uptime_info(st);
 
   // Print warning if unsafe chroot environment detected
   if (unsafe_chroot_detected) {
     st->print_cr("WARNING!! %s", unstable_chroot_error);
   }
 
-  os::Linux::print_libversion_info(st);
+  os::Linux::Internal::print_libversion_info(st);
 
-  os::Posix::print_rlimit_info(st);
+  os::Posix::Internal::print_rlimit_info(st);
 
-  os::Posix::print_load_average(st);
+  os::Posix::Internal::print_load_average(st);
   st->cr();
 
-  os::Linux::print_system_memory_info(st);
+  os::Linux::Internal::print_system_memory_info(st);
   st->cr();
 
-  os::Linux::print_process_memory_info(st);
+  os::Linux::Internal::print_process_memory_info(st);
   st->cr();
 
-  os::Linux::print_proc_sys_info(st);
+  os::Linux::Internal::print_proc_sys_info(st);
   st->cr();
 
-  if (os::Linux::print_ld_preload_file(st)) {
+  if (os::Linux::Internal::print_ld_preload_file(st)) {
     st->cr();
   }
 
-  if (os::Linux::print_container_info(st)) {
+  if (os::Linux::Internal::print_container_info(st)) {
     st->cr();
   }
 
   VM_Version::print_platform_virtualization_info(st);
 
-  os::Linux::print_steal_info(st);
+  os::Linux::Internal::print_steal_info(st);
 }
 
 // Try to identify popular distros.
@@ -1969,7 +1985,7 @@ const char* distro_files[] = {
   "/etc/os-release",
   NULL };
 
-void os::Linux::print_distro_info(outputStream* st) {
+void os::Linux::Internal::print_distro_info(outputStream* st) {
   for (int i = 0;; i++) {
     const char* file = distro_files[i];
     if (file == NULL) {
@@ -2031,7 +2047,7 @@ static void parse_os_info(char* distro, size_t length, const char* file) {
   }
 }
 
-void os::get_summary_os_info(char* buf, size_t buflen) {
+void os::Internal::get_summary_os_info(char* buf, size_t buflen) {
   for (int i = 0;; i++) {
     const char* file = distro_files[i];
     if (file == NULL) {
@@ -2053,7 +2069,7 @@ void os::get_summary_os_info(char* buf, size_t buflen) {
   }
 }
 
-void os::Linux::print_libversion_info(outputStream* st) {
+void os::Linux::Internal::print_libversion_info(outputStream* st) {
   // libc, pthread
   st->print("libc: ");
   st->print("%s ", os::Linux::libc_version());
@@ -2061,7 +2077,7 @@ void os::Linux::print_libversion_info(outputStream* st) {
   st->cr();
 }
 
-void os::Linux::print_proc_sys_info(outputStream* st) {
+void os::Linux::Internal::print_proc_sys_info(outputStream* st) {
   _print_ascii_file_h("/proc/sys/kernel/threads-max (system-wide limit on the number of threads)",
                       "/proc/sys/kernel/threads-max", st);
   _print_ascii_file_h("/proc/sys/vm/max_map_count (maximum number of memory map areas a process may have)",
@@ -2070,7 +2086,7 @@ void os::Linux::print_proc_sys_info(outputStream* st) {
                       "/proc/sys/kernel/pid_max", st);
 }
 
-void os::Linux::print_system_memory_info(outputStream* st) {
+void os::Linux::Internal::print_system_memory_info(outputStream* st) {
   _print_ascii_file_h("/proc/meminfo", "/proc/meminfo", st, false);
   st->cr();
 
@@ -2138,7 +2154,7 @@ static void print_glibc_malloc_tunables(outputStream* st) {
 }
 #endif // __GLIBC__
 
-void os::Linux::print_process_memory_info(outputStream* st) {
+void os::Linux::Internal::print_process_memory_info(outputStream* st) {
 
   st->print_cr("Process Memory:");
 
@@ -2163,7 +2179,7 @@ void os::Linux::print_process_memory_info(outputStream* st) {
   // glibc only:
   // - Print outstanding allocations using mallinfo
   // - Print glibc tunables
-#ifdef __GLIBC__
+#ifdef __GLIBC__FIXME
   size_t total_allocated = 0;
   size_t free_retained = 0;
   bool might_have_wrapped = false;
@@ -2193,11 +2209,11 @@ void os::Linux::print_process_memory_info(outputStream* st) {
 #endif
 }
 
-bool os::Linux::print_ld_preload_file(outputStream* st) {
+bool os::Linux::Internal::print_ld_preload_file(outputStream* st) {
   return _print_ascii_file("/etc/ld.so.preload", st, "/etc/ld.so.preload:");
 }
 
-void os::Linux::print_uptime_info(outputStream* st) {
+void os::Linux::Internal::print_uptime_info(outputStream* st) {
   struct sysinfo sinfo;
   int ret = sysinfo(&sinfo);
   if (ret == 0) {
@@ -2205,7 +2221,7 @@ void os::Linux::print_uptime_info(outputStream* st) {
   }
 }
 
-bool os::Linux::print_container_info(outputStream* st) {
+bool os::Linux::Internal::print_container_info(outputStream* st) {
   if (!OSContainer::is_containerized()) {
     st->print_cr("container information not found.");
     return false;
@@ -2289,7 +2305,7 @@ bool os::Linux::print_container_info(outputStream* st) {
   return true;
 }
 
-void os::Linux::print_steal_info(outputStream* st) {
+void os::Linux::Internal::print_steal_info(outputStream* st) {
   if (has_initial_tick_info) {
     CPUPerfTicks pticks;
     bool res = os::Linux::get_tick_information(&pticks, -1);
@@ -2326,7 +2342,7 @@ void os::print_memory_info(outputStream* st) {
             ((jlong)si.freeswap * si.mem_unit) >> 10);
   st->cr();
   st->print("Page Sizes: ");
-  _page_sizes.print_on(st);
+//  _page_sizes.print_on(st); FIXME
   st->cr();
 }
 
@@ -2440,7 +2456,7 @@ const char* search_string = "Processor";
 #endif
 
 // Parses the cpuinfo file for string representing the model name.
-void os::get_summary_cpu_info(char* cpuinfo, size_t length) {
+void os::Internal::get_summary_cpu_info(char* cpuinfo, size_t length) {
   FILE* fp = os::fopen("/proc/cpuinfo", "r");
   if (fp != NULL) {
     while (!feof(fp)) {
@@ -2690,7 +2706,7 @@ static void warn_fail_commit_memory(char* addr, size_t size,
 //       All it does is to check if there are enough free pages
 //       left at the time of mmap(). This could be a potential
 //       problem.
-int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
+int os::Linux::Internal::commit_memory_impl(char* addr, size_t size, bool exec) {
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
   uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
                                      MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
@@ -2711,14 +2727,14 @@ int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
   return err;
 }
 
-bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
-  return os::Linux::commit_memory_impl(addr, size, exec) == 0;
+bool os::Internal::pd_commit_memory(char* addr, size_t size, bool exec) {
+  return commit_memory_impl(addr, size, exec) == 0;
 }
 
-void os::pd_commit_memory_or_exit(char* addr, size_t size, bool exec,
+void os::Internal::pd_commit_memory_or_exit(char* addr, size_t size, bool exec,
                                   const char* mesg) {
   assert(mesg != NULL, "mesg must be specified");
-  int err = os::Linux::commit_memory_impl(addr, size, exec);
+  int err = os::Linux::Internal::commit_memory_impl(addr, size, exec);
   if (err != 0) {
     // the caller wants all commit errors to exit with the specified mesg:
     warn_fail_commit_memory(addr, size, exec, err);
@@ -2745,25 +2761,25 @@ void os::pd_commit_memory_or_exit(char* addr, size_t size, bool exec,
   #define MADV_HUGEPAGE 14
 #endif
 
-int os::Linux::commit_memory_impl(char* addr, size_t size,
-                                  size_t alignment_hint, bool exec) {
-  int err = os::Linux::commit_memory_impl(addr, size, exec);
+int os::Linux::Internal::commit_memory_impl(char* addr, size_t size,
+                                            size_t alignment_hint, bool exec) {
+  int err = commit_memory_impl(addr, size, exec);
   if (err == 0) {
     realign_memory(addr, size, alignment_hint);
   }
   return err;
 }
 
-bool os::pd_commit_memory(char* addr, size_t size, size_t alignment_hint,
+bool os::Internal::pd_commit_memory(char* addr, size_t size, size_t alignment_hint,
                           bool exec) {
-  return os::Linux::commit_memory_impl(addr, size, alignment_hint, exec) == 0;
+  return commit_memory_impl(addr, size, alignment_hint, exec) == 0;
 }
 
-void os::pd_commit_memory_or_exit(char* addr, size_t size,
-                                  size_t alignment_hint, bool exec,
-                                  const char* mesg) {
+void os::Internal::pd_commit_memory_or_exit(char* addr, size_t size,
+                                            size_t alignment_hint, bool exec,
+                                            const char* mesg) {
   assert(mesg != NULL, "mesg must be specified");
-  int err = os::Linux::commit_memory_impl(addr, size, alignment_hint, exec);
+  int err = commit_memory_impl(addr, size, alignment_hint, exec);
   if (err != 0) {
     // the caller wants all commit errors to exit with the specified mesg:
     warn_fail_commit_memory(addr, size, alignment_hint, exec, err);
@@ -2771,7 +2787,7 @@ void os::pd_commit_memory_or_exit(char* addr, size_t size,
   }
 }
 
-void os::pd_realign_memory(char *addr, size_t bytes, size_t alignment_hint) {
+void os::Internal::pd_realign_memory(char *addr, size_t bytes, size_t alignment_hint) {
   if (UseTransparentHugePages && alignment_hint > (size_t)vm_page_size()) {
     // We don't check the return value: madvise(MADV_HUGEPAGE) may not
     // be supported or the memory may already be backed by huge pages.
@@ -2779,7 +2795,7 @@ void os::pd_realign_memory(char *addr, size_t bytes, size_t alignment_hint) {
   }
 }
 
-void os::pd_free_memory(char *addr, size_t bytes, size_t alignment_hint) {
+void os::Internal::pd_free_memory(char *addr, size_t bytes, size_t alignment_hint) {
   // This method works by doing an mmap over an existing mmaping and effectively discarding
   // the existing pages. However it won't work for SHM-based large pages that cannot be
   // uncommitted at all. We don't do anything in this case to avoid creating a segment with
@@ -2882,7 +2898,7 @@ char *os::scan_pages(char *start, char* end, page_info* page_expected,
 }
 
 
-int os::Linux::sched_getcpu_syscall(void) {
+int os::Linux::Internal::sched_getcpu_syscall(void) {
   unsigned int cpu = 0;
   int retval = -1;
 
@@ -3021,7 +3037,7 @@ size_t os::Linux::default_guard_size(os::ThreadType thr_type) {
   return ((thr_type == java_thread || thr_type == compiler_thread) ? 0 : page_size());
 }
 
-void os::Linux::rebuild_nindex_to_node_map() {
+void os::Linux::Internal::rebuild_nindex_to_node_map() {
   int highest_node_number = Linux::numa_max_node();
 
   nindex_to_node()->clear();
@@ -3034,7 +3050,7 @@ void os::Linux::rebuild_nindex_to_node_map() {
 
 // rebuild_cpu_to_node_map() constructs a table mapping cpud id to node id.
 // The table is later used in get_node_by_cpu().
-void os::Linux::rebuild_cpu_to_node_map() {
+void os::Linux::Internal::rebuild_cpu_to_node_map() {
   const size_t NCPUS = 32768; // Since the buffer size computation is very obscure
                               // in libnuma (possible values are starting from 16,
                               // and continuing up with every other power of 2, but less
