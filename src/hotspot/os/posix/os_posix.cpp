@@ -43,6 +43,7 @@
 #include "runtime/atomic.hpp"
 #include "runtime/java.hpp"
 #include "runtime/orderAccess.hpp"
+#include "runtime/park.hpp"
 #include "runtime/perfMemory.hpp"
 #include "utilities/align.hpp"
 #include "utilities/events.hpp"
@@ -1504,11 +1505,6 @@ struct tm* os::localtime_pd(const time_t* clock, struct tm*  res) {
   return localtime_r(clock, res);
 }
 
-
-// Shared pthread_mutex/cond based PlatformEvent implementation.
-// Not currently usable by Solaris.
-
-
 // PlatformEvent
 //
 // Assumption:
@@ -1524,7 +1520,7 @@ struct tm* os::localtime_pd(const time_t* clock, struct tm*  res) {
 //    Having three states allows for some detection of bad usage - see
 //    comments on unpark().
 
-os::PlatformEvent::PlatformEvent() {
+PlatformEvent::PlatformEvent() {
   int status = pthread_cond_init(_cond, _condAttr);
   assert_status(status == 0, status, "cond_init");
   status = pthread_mutex_init(_mutex, _mutexAttr);
@@ -1533,7 +1529,7 @@ os::PlatformEvent::PlatformEvent() {
   _nParked = 0;
 }
 
-void os::PlatformEvent::park() {       // AKA "down()"
+void PlatformEvent::park() {       // AKA "down()"
   // Transitions for _event:
   //   -1 => -1 : illegal
   //    1 =>  0 : pass - return immediately
@@ -1575,7 +1571,7 @@ void os::PlatformEvent::park() {       // AKA "down()"
   guarantee(_event >= 0, "invariant");
 }
 
-int os::PlatformEvent::park(jlong millis) {
+int PlatformEvent::park(jlong millis) {
   // Transitions for _event:
   //   -1 => -1 : illegal
   //    1 =>  0 : pass - return immediately
@@ -1627,7 +1623,7 @@ int os::PlatformEvent::park(jlong millis) {
   return OS_OK;
 }
 
-void os::PlatformEvent::unpark() {
+void PlatformEvent::unpark() {
   // Transitions for _event:
   //    0 => 1 : just return
   //    1 => 1 : just return
@@ -1670,7 +1666,7 @@ void os::PlatformEvent::unpark() {
 
 // JSR166 support
 
- os::PlatformParker::PlatformParker() : _counter(0), _cur_index(-1) {
+ PlatformParker::PlatformParker() : _counter(0), _cur_index(-1) {
   int status = pthread_cond_init(&_cond[REL_INDEX], _condAttr);
   assert_status(status == 0, status, "cond_init rel");
   status = pthread_cond_init(&_cond[ABS_INDEX], NULL);
@@ -1679,7 +1675,7 @@ void os::PlatformEvent::unpark() {
   assert_status(status == 0, status, "mutex_init");
 }
 
-os::PlatformParker::~PlatformParker() {
+PlatformParker::~PlatformParker() {
   int status = pthread_cond_destroy(&_cond[REL_INDEX]);
   assert_status(status == 0, status, "cond_destroy rel");
   status = pthread_cond_destroy(&_cond[ABS_INDEX]);
