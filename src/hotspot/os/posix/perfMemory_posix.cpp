@@ -838,6 +838,48 @@ static int create_sharedmem_resources(const char* dirname, const char* filename,
     return -1;
   }
 
+  /*
+
+    How to reproduce the crash in https://bugs.openjdk.org/browse/JDK-8286030
+    Use two terminals [A], and [B]. Run the following in your build directory:
+
+    [A] docker run -it --tty=true --rm -v $(pwd)/images/jdk:/jdk -v /tmp/dockertmp:/tmp \
+        container-registry.oracle.com/java/openjdk /jdk/bin/java -XX:+UseNewCode -version
+
+    [B] docker run -it --tty=true --rm -v $(pwd)/images/jdk:/jdk -v /tmp/dockertmp:/tmp \
+        container-registry.oracle.com/java/openjdk /jdk/bin/java -XX:+UseNewCode -version
+
+    [A] Hit Enter to open /tmp/hsperfdata_root/1 <ENTER>
+
+    [B] Hit Enter to open /tmp/hsperfdata_root/1 <ENTER>
+
+    [A] Hit Enter to truncate /tmp/hsperfdata_root/1 <ENTER>
+
+    [A] Hit Enter to set /tmp/hsperfdata_root/1 to 32768 bytes <ENTER>
+
+    [B] Hit Enter to truncate /tmp/hsperfdata_root/1 <ENTER>
+
+    [A] Hit Enter to start using /tmp/hsperfdata_root/1 <ENTER>
+
+    I am starting to use /tmp/hsperfdata_root/1. Checking size again.
+    -rw------- 1 root root 0 Jun 29 05:04 /tmp/hsperfdata_root/1
+    #
+    # A fatal error has been detected by the Java Runtime Environment:
+    #
+    #  SIGBUS (0x7) at pc=0x00007f943c32316c, pid=1, tid=7
+    #
+    # JRE version:  (20.0) (slowdebug build )
+    # Java VM: Java HotSpot(TM) 64-Bit Server VM (slowdebug 20-internal-adhoc.iklam, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+    # Problematic frame:
+    # C  [libc.so.6+0xa416c]  __memset_sse2_unaligned_erms+0x5c
+    #
+   */
+
+  char buff[100];
+  if (UseNewCode) {
+    tty->print_cr("Hit Enter to open %s/%s", dirname, filename);
+    gets(buff);
+  }
   // Open the filename in the current directory.
   // Cannot use O_TRUNC here; truncation of an existing file has to happen
   // after the is_file_secure() check below.
@@ -867,6 +909,11 @@ static int create_sharedmem_resources(const char* dirname, const char* filename,
 
   ssize_t result;
 
+  if (UseNewCode) {
+    tty->print_cr("Hit Enter to truncate %s/%s", dirname, filename);
+    gets(buff);
+  }
+
   // truncate the file to get rid of any existing data
   RESTARTABLE(::ftruncate(fd, (off_t)0), result);
   if (result == OS_ERR) {
@@ -876,6 +923,12 @@ static int create_sharedmem_resources(const char* dirname, const char* filename,
     ::close(fd);
     return -1;
   }
+
+  if (UseNewCode) {
+    tty->print_cr("Hit Enter to set %s/%s to %d bytes", dirname, filename, (int)size);
+    gets(buff);
+  }
+
   // set the file size
   RESTARTABLE(::ftruncate(fd, (off_t)size), result);
   if (result == OS_ERR) {
@@ -900,6 +953,15 @@ static int create_sharedmem_resources(const char* dirname, const char* filename,
       }
       break;
     }
+  }
+
+  if (UseNewCode) {
+    tty->print_cr("Hit Enter to start using %s/%s", dirname, filename);
+    gets(buff);
+    char cmd[1000];
+    tty->print_cr("I am starting to use %s/%s. Checking size again.", dirname, filename);
+    sprintf(cmd, "ls -l %s/%s", dirname, filename);
+    system(cmd);
   }
 
   if (result != -1) {
