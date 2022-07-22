@@ -47,6 +47,7 @@ DumpTimeClassInfo DumpTimeClassInfo::clone() {
   clone._verifier_constraint_flags = NULL;
   clone._loader_constraints = NULL;
   clone._enum_klass_static_fields = NULL;
+  clone._saved_cpcache_entries = _saved_cpcache_entries;
   int clone_num_verifier_constraints = num_verifier_constraints();
   if (clone_num_verifier_constraints > 0) {
     clone._verifier_constraints = new (ResourceObj::C_HEAP, mtClass) GrowableArray<DTVerifierConstraint>(clone_num_verifier_constraints, mtClass);
@@ -183,7 +184,8 @@ DumpTimeClassInfo* DumpTimeSharedClassTable::get_info(InstanceKlass* k) {
   DumpTimeClassInfo* p = get(k);
   assert(p != NULL, "we must not see any non-shared InstanceKlass* that's "
          "not stored with SystemDictionaryShared::init_dumptime_info");
-  assert(p->_klass == k, "Sanity");
+  assert(p->_klass == k || p->_klass == ArchiveBuilder::get_relocated_klass(k),
+         "Sanity");
   return p;
 }
 

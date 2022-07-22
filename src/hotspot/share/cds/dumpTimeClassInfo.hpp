@@ -33,6 +33,7 @@
 #include "prims/jvmtiExport.hpp"
 #include "utilities/growableArray.hpp"
 
+class ConstantPoolCacheEntry;
 class Method;
 class Symbol;
 
@@ -77,6 +78,7 @@ public:
   GrowableArray<char>*                 _verifier_constraint_flags;
   GrowableArray<DTLoaderConstraint>*   _loader_constraints;
   GrowableArray<int>*                  _enum_klass_static_fields;
+  ConstantPoolCacheEntry*       _saved_cpcache_entries;
 
   DumpTimeClassInfo() {
     _klass = NULL;
@@ -93,6 +95,7 @@ public:
     _verifier_constraint_flags = NULL;
     _loader_constraints = NULL;
     _enum_klass_static_fields = NULL;
+    _saved_cpcache_entries = NULL;
   }
 
   void add_verification_constraint(InstanceKlass* k, Symbol* name,
@@ -164,6 +167,14 @@ public:
 
   DumpTimeClassInfo clone();
   size_t runtime_info_bytesize() const;
+
+  void save_cpcache_entries(ConstantPoolCacheEntry* entries) {
+    _saved_cpcache_entries = entries;
+  }
+
+  ConstantPoolCacheEntry* get_saved_cpcache_entries() {
+    return _saved_cpcache_entries;
+  }
 };
 
 template <typename T>

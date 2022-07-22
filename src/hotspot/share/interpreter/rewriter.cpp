@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,6 +33,7 @@
 #include "oops/constantPool.hpp"
 #include "oops/generateOopMap.hpp"
 #include "prims/methodHandles.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.inline.hpp"
 
@@ -116,10 +117,12 @@ void Rewriter::make_constant_pool_cache(TRAPS) {
     MetadataFactory::free_metadata(loader_data, cache);
     _pool->set_cache(NULL);  // so the verifier isn't confused
   } else {
-    DEBUG_ONLY(
-    if (DumpSharedSpaces) {
-      cache->verify_just_initialized();
-    })
+    // Note: archived old classes in the base archive are linked at runtime and
+    // their CpCaches are reallocated. We are not going to archive these classes
+    // again, so there's no need to save their CpCaches.
+    if (Arguments::is_dumping_archive() && !_pool->pool_holder()->is_shared()) {
+      cache->save_for_archive();
+    }
   }
 }
 
