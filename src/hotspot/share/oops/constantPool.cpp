@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "jvm.h"
 #include "cds/heapShared.hpp"
+#include "cds/archiveBuilder.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/metadataOnStackMark.hpp"
@@ -389,41 +390,64 @@ void ConstantPool::remove_unshareable_info() {
     resolved_references() != NULL ? resolved_references()->length() : 0);
   set_resolved_references(OopHandle());
 
-  int num_klasses = 0;
+
   for (int index = 1; index < length(); index++) { // Index 0 is unused
-    if (tag_at(index).is_unresolved_klass_in_error()) {
+    switch (tag_at(index).value()) {
+    case JVM_CONSTANT_UnresolvedClassInError:
       tag_at_put(index, JVM_CONSTANT_UnresolvedClass);
-    } else if (tag_at(index).is_method_handle_in_error()) {
+      break;
+    case JVM_CONSTANT_MethodHandleInError:
       tag_at_put(index, JVM_CONSTANT_MethodHandle);
-    } else if (tag_at(index).is_method_type_in_error()) {
+      break;
+    case JVM_CONSTANT_MethodTypeInError:
       tag_at_put(index, JVM_CONSTANT_MethodType);
-    } else if (tag_at(index).is_dynamic_constant_in_error()) {
+      break;
+    case JVM_CONSTANT_DynamicInError:
       tag_at_put(index, JVM_CONSTANT_Dynamic);
-    }
-    if (tag_at(index).is_klass()) {
-      // This class was resolved as a side effect of executing Java code
-      // during dump time. We need to restore it back to an UnresolvedClass,
-      // so that the proper class loading and initialization can happen
-      // at runtime.
-      bool clear_it = true;
-      if (pool_holder()->is_hidden() && index == pool_holder()->this_class_index()) {
-        // All references to a hidden class's own field/methods are through this
-        // index. We cannot clear it. See comments in ClassFileParser::fill_instance_klass.
-        clear_it = false;
-      }
-      if (clear_it) {
-        CPKlassSlot kslot = klass_slot_at(index);
-        int resolved_klass_index = kslot.resolved_klass_index();
-        int name_index = kslot.name_index();
-        assert(tag_at(name_index).is_symbol(), "sanity");
-        resolved_klasses()->at_put(resolved_klass_index, NULL);
-        tag_at_put(index, JVM_CONSTANT_UnresolvedClass);
-        assert(klass_name_at(index) == symbol_at(name_index), "sanity");
-      }
+      break;
+    case JVM_CONSTANT_Class:
+      maybe_archive_resolved_klass_at(index);
+      break;
     }
   }
+
   if (cache() != NULL) {
     cache()->remove_unshareable_info();
+  }
+}
+
+void ConstantPool::maybe_archive_resolved_klass_at(int cp_index) {
+  if (tag_at(cp_index).is_klass() && 
+      pool_holder()->is_hidden() && cp_index == pool_holder()->this_class_index()) {
+    // All references to a hidden class's own field/methods are through this
+    // index, which was resolved in ClassFileParser::fill_instance_klass. We
+    // must preserve it.
+    return;
+  }
+
+  CPKlassSlot kslot = klass_slot_at(cp_index);
+  int resolved_klass_index = kslot.resolved_klass_index();
+  Klass* k = resolved_klasses()->at(resolved_klass_index);
+  bool allowed = false;
+  if (k != NULL) {
+    // k may be NULL if the resolved class is excluded from the dump.
+    allowed = ArchiveBuilder::current()->can_archive_resolved_klass(this, k);
+    {
+      ResourceMark rm;
+      log_info(cds)("%s resolved klass: %s => %s", 
+                    allowed ? "Allowed" : "Disallowed",
+                    pool_holder()->external_name(), k->external_name());
+    }
+  }
+
+  if (!allowed) {
+    // FIX COMMENTS
+    // This class was resolved as a side effect of executing Java code
+    // during dump time. We need to restore it back to an UnresolvedClass,
+    // so that the proper class loading and initialization can happen
+    // at runtime.
+    resolved_klasses()->at_put(resolved_klass_index, NULL);
+    tag_at_put(cp_index, JVM_CONSTANT_UnresolvedClass);
   }
 }
 

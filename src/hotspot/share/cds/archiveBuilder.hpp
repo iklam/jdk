@@ -38,6 +38,7 @@
 
 struct ArchiveHeapOopmapInfo;
 class CHeapBitMap;
+class ConstantPool;
 class FileMapInfo;
 class Klass;
 class MemRegion;
@@ -201,6 +202,7 @@ private:
   SourceObjList _ro_src_objs;                 // objs to put in ro region
   ResizeableResourceHashtable<address, SourceObjInfo, ResourceObj::C_HEAP, mtClassShared> _src_obj_table;
   ResizeableResourceHashtable<address, address, ResourceObj::C_HEAP, mtClassShared> _dumped_to_src_obj_table;
+  ResourceHashtable<InstanceKlass*, bool, 15889, ResourceObj::C_HEAP, mtClassShared> _vm_classes_table;
   GrowableArray<Klass*>* _klasses;
   GrowableArray<Symbol*>* _symbols;
   GrowableArray<SpecialRefInfo>* _special_refs;
@@ -233,6 +235,9 @@ public:
   };
 
 private:
+  void add_one_vm_class(InstanceKlass* ik);
+  void init_vm_classes_table();
+
   bool is_dumping_full_module_graph();
   FollowMode get_follow_mode(MetaspaceClosure::Ref *ref);
 
@@ -386,6 +391,7 @@ public:
 
   address get_dumped_addr(address src_obj) const;
   address get_src_obj(address dumped_addr) const;
+  bool can_archive_resolved_klass(ConstantPool* cp, Klass* dumped_resolved_klass);
 
   // All klasses and symbols that will be copied into the archive
   GrowableArray<Klass*>*  klasses() const { return _klasses; }
