@@ -28,6 +28,7 @@
 #include "cds/cdsProtectionDomain.hpp"
 #include "cds/classListWriter.hpp"
 #include "cds/classListParser.hpp"
+#include "cds/constantPoolResolver.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/dumpAllocStats.hpp"
 #include "cds/filemap.hpp"
@@ -644,6 +645,8 @@ bool MetaspaceShared::link_class_for_cds(InstanceKlass* ik, TRAPS) {
 }
 
 void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
+  ConstantPoolResolver::State constant_pool_resolver_state;
+
   if (!jcmd_request) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
   }

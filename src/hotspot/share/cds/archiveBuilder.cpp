@@ -160,7 +160,7 @@ ArchiveBuilder::ArchiveBuilder() :
   _ro_src_objs(),
   _src_obj_table(INITIAL_TABLE_SIZE, MAX_TABLE_SIZE),
   _dumped_to_src_obj_table(INITIAL_TABLE_SIZE, MAX_TABLE_SIZE),
-  _vm_classes_table(),
+  _constant_pool_resolver_state(),
   _total_closed_heap_region_size(0),
   _total_open_heap_region_size(0),
   _estimated_metaspaceobj_bytes(0),
@@ -172,7 +172,6 @@ ArchiveBuilder::ArchiveBuilder() :
 
   assert(_current == NULL, "must be");
   _current = this;
-  init_vm_classes_table();
 }
 
 ArchiveBuilder::~ArchiveBuilder() {
@@ -195,112 +194,6 @@ ArchiveBuilder::~ArchiveBuilder() {
 
 bool ArchiveBuilder::is_dumping_full_module_graph() {
   return DumpSharedSpaces && MetaspaceShared::use_full_module_graph();
-}
-
-void ArchiveBuilder::add_one_vm_class(InstanceKlass* ik) {
-  bool created;
-  _vm_classes_table.put_if_absent(ik, &created);
-  if (created) {
-    InstanceKlass* super = ik->java_super();
-    if (super != NULL) {
-      add_one_vm_class(super);
-    }
-    Array<InstanceKlass*>* ifs = ik->local_interfaces();
-    for (int i = 0; i < ifs->length(); i++) {
-      add_one_vm_class(ifs->at(i));
-    }
-  }
-}
-
-void ArchiveBuilder::init_vm_classes_table() {
-  for (auto id : EnumRange<vmClassID>{}) {
-    add_one_vm_class(vmClasses::klass_at(id));
-  }
-}
-
-// Can't call Klass::is_subtype_of() because it modifies the subclass cache
-static bool is_subtype_of(InstanceKlass* k, InstanceKlass* parent) {
-  if (k == NULL) {
-    return false;
-  }
-  if (k == parent) {
-    return true;
-  }
-  if (is_subtype_of(k->java_super(), parent)) {
-    return true;
-  }
-
-  Array<InstanceKlass*>* interfaces = k->local_interfaces();
-  int num_interfaces = interfaces->length();
-  for (int index = 0; index < num_interfaces; index++) {
-    if (is_subtype_of(interfaces->at(index), parent)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-bool ArchiveBuilder::can_archive_resolved_klass(ConstantPool* dumped_cp, Klass* dumped_resolved_klass) {
-  if (!dumped_cp->pool_holder()->is_shared_boot_class() &&
-      !dumped_cp->pool_holder()->is_shared_platform_class() &&
-      !dumped_cp->pool_holder()->is_shared_app_class()) {
-    // FIXME: is this really necessary?
-    return false;
-  }
-
-  if (dumped_cp->pool_holder()->is_hidden()) {
-    // FIXME: why is this necessary?
-    return false;
-  }
-
-#if 0
-  if (dumped_cp->pool_holder()->name()->equals("com/sun/tools/javac/util/SharedNameTable")) {
-    return false;
-  }
-#endif
-
-  ConstantPool* cp = (ConstantPool*)get_src_obj((address)dumped_cp);
-  Klass* resolved_klass = dumped_resolved_klass;
-  if (is_in_buffer_space(resolved_klass)) {
-    resolved_klass = (Klass*)get_src_obj((address)dumped_resolved_klass);
-  }
-  InstanceKlass* holder = cp->pool_holder();
-
-  if (resolved_klass->is_instance_klass()) {
-    InstanceKlass* ik = InstanceKlass::cast(resolved_klass);
-    if (_vm_classes_table.get(ik) != NULL
-        ||  is_subtype_of(holder, ik)
-        //|| holder->is_subtype_of(ik)
-        ) {
-#if 0
-      Symbol* n = ik->name();
-      for (int i = 0; i < n->utf8_length(); i++) {
-        if (n->char_at(i) == '$') {
-          return false; // Huh why??
-        }
-      }
-#endif
-
-      if (dumped_cp->pool_holder()->name()->equals("com/sun/tools/javac/util/SharedNameTable")) {
-#if 0
-        if (ik->name()->equals("java/lang/ref/SoftReference")) {
-          return false;
-        }
-        if (ik->name()->equals("com/sun/tools/javac/util/SharedNameTable")) {
-          return false;
-        }
-#endif
-        if (ik->name()->equals("java/lang/System")) {
-          return false;
-        }
-      }
-
-      return true;
-    }
-  }
-
-  return false;
 }
 
 class GatherKlassesAndSymbols : public UniqueMetaspaceClosure {

@@ -24,8 +24,9 @@
 
 #include "precompiled.hpp"
 #include "jvm.h"
-#include "cds/heapShared.hpp"
 #include "cds/archiveBuilder.hpp"
+#include "cds/constantPoolResolver.hpp"
+#include "cds/heapShared.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/metadataOnStackMark.hpp"
@@ -417,8 +418,9 @@ void ConstantPool::remove_unshareable_info() {
 }
 
 void ConstantPool::maybe_archive_resolved_klass_at(int cp_index) {
-  if (tag_at(cp_index).is_klass() && 
-      pool_holder()->is_hidden() && cp_index == pool_holder()->this_class_index()) {
+  assert(tag_at(cp_index).is_klass(), "must be resolved");
+
+  if (pool_holder()->is_hidden() && cp_index == pool_holder()->this_class_index()) {
     // All references to a hidden class's own field/methods are through this
     // index, which was resolved in ClassFileParser::fill_instance_klass. We
     // must preserve it.
@@ -429,9 +431,9 @@ void ConstantPool::maybe_archive_resolved_klass_at(int cp_index) {
   int resolved_klass_index = kslot.resolved_klass_index();
   Klass* k = resolved_klasses()->at(resolved_klass_index);
   bool allowed = false;
-  if (k != NULL) {
-    // k may be NULL if the resolved class is excluded from the dump.
-    allowed = ArchiveBuilder::current()->can_archive_resolved_klass(this, k);
+  if (k != NULL) { // k may be NULL if the resolved class is excluded from the dump.
+    ConstantPool* orig_cp = (ConstantPool*)ArchiveBuilder::current()->get_src_obj((address)this);
+    allowed = ConstantPoolResolver::can_archive_resolved_klass(orig_cp, cp_index);
     {
       ResourceMark rm;
       log_info(cds)("%s resolved klass: %s => %s", 
