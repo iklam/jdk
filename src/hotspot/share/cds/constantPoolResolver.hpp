@@ -26,6 +26,8 @@
 #define SHARE_CDS_CONSTANTPOOLRESOLVER_HPP
 
 #include "memory/allStatic.hpp"
+#include "utilities/exceptions.hpp"
+#include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
 class ConstantPool;
@@ -33,8 +35,9 @@ class InstanceKlass;
 class Klass;
 
 class ConstantPoolResolver : AllStatic {
-  typedef ResourceHashtable<InstanceKlass*, bool, 15889, ResourceObj::C_HEAP, mtClassShared> VmClassesTable;
-  static VmClassesTable* _vm_classes_table;
+  typedef ResourceHashtable<InstanceKlass*, bool, 15889, ResourceObj::C_HEAP, mtClassShared> ClassesTable;
+  static ClassesTable* _processed_classes;
+  static ClassesTable* _vm_classes;
 
   static void add_one_vm_class(InstanceKlass* ik);
   static bool can_archive_resolved_vm_class(InstanceKlass* cp_holder, InstanceKlass* resolved_klass);
@@ -44,12 +47,14 @@ class ConstantPoolResolver : AllStatic {
   static bool is_in_archivebuilder_buffer(T p) {
     return is_in_archivebuilder_buffer((address)(p));
   }
+  static void dumptime_resolve_strings(InstanceKlass* ik, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
 
 public:
   static void initialize();
   static void free();
 
   static bool is_vm_class(InstanceKlass* ik);
+  static void dumptime_resolve(InstanceKlass* ik, TRAPS);
   static bool can_archive_resolved_klass(ConstantPool* cp, int cp_index);
 
   class State {

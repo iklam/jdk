@@ -29,15 +29,16 @@
 #include "oops/constantPool.hpp"
 #include "oops/instanceKlass.hpp"
 
-ConstantPoolResolver::VmClassesTable* ConstantPoolResolver::_vm_classes_table = NULL;
+ConstantPoolResolver::ClassesTable* ConstantPoolResolver::_processed_classes = NULL;
+ConstantPoolResolver::ClassesTable* ConstantPoolResolver::_vm_classes = NULL;
 
 bool ConstantPoolResolver::is_vm_class(InstanceKlass* ik) {
-  return (_vm_classes_table->get(ik) != NULL);
+  return (_vm_classes->get(ik) != NULL);
 }
 
 void ConstantPoolResolver::add_one_vm_class(InstanceKlass* ik) {
   bool created;
-  _vm_classes_table->put_if_absent(ik, &created);
+  _vm_classes->put_if_absent(ik, &created);
   if (created) {
     InstanceKlass* super = ik->java_super();
     if (super != NULL) {
@@ -51,17 +52,25 @@ void ConstantPoolResolver::add_one_vm_class(InstanceKlass* ik) {
 }
 
 void ConstantPoolResolver::initialize() {
-  assert(_vm_classes_table == NULL, "must be");
-  _vm_classes_table = new (ResourceObj::C_HEAP, mtClassShared) VmClassesTable();
+  assert(_processed_classes == NULL, "must be");
+  _processed_classes = new (ResourceObj::C_HEAP, mtClassShared) ClassesTable();
+
+  assert(_vm_classes == NULL, "must be");
+  _vm_classes = new (ResourceObj::C_HEAP, mtClassShared) ClassesTable();
+
   for (auto id : EnumRange<vmClassID>{}) {
     add_one_vm_class(vmClasses::klass_at(id));
   }
 }
 
 void ConstantPoolResolver::free() {
-  assert(_vm_classes_table != NULL, "must be");
-  delete _vm_classes_table;
-  _vm_classes_table = NULL;
+  assert(_processed_classes != NULL, "must be");
+  delete _processed_classes;
+  _processed_classes = NULL;
+
+  assert(_vm_classes != NULL, "must be");
+  delete _vm_classes;
+  _vm_classes = NULL;
 }
 
 bool ConstantPoolResolver::is_in_archivebuilder_buffer(address p) {
@@ -121,4 +130,37 @@ bool ConstantPoolResolver::can_archive_resolved_klass(ConstantPool* cp, int cp_i
   }
 
   return false;
+}
+
+#if INCLUDE_CDS_JAVA_HEAP
+void ConstantPoolResolver::dumptime_resolve_strings(InstanceKlass* ik, TRAPS) {
+  if (!DumpSharedSpaces) {
+    // The archive heap is not supported for the dynamic archive.
+    return;
+  }
+
+  ConstantPool* cp = ik->constants();
+  // The _cache may be NULL if the _pool_holder klass fails verification
+  // at dump time due to missing dependencies.
+  if (cp->cache() == NULL || cp->reference_map() == NULL) {
+    return; // nothing to do
+  }
+
+  constantPoolHandle cph(THREAD, cp);
+  for (int index = 1; index < cp->length(); index++) { // Index 0 is unused
+    if (cp->tag_at(index).is_string()) {
+      int cache_index = cph->cp_to_object_index(index);
+      cp->string_at_impl(cph, index, cache_index, CHECK);
+    }
+  }
+}
+#endif
+
+void ConstantPoolResolver::dumptime_resolve(InstanceKlass* ik, TRAPS) {
+  bool first_time;
+  _processed_classes->put_if_absent(ik, &first_time);
+
+  if (first_time) {
+    dumptime_resolve_strings(ik, CHECK); // may throw OOM when interning strings.
+  }
 }
