@@ -25,12 +25,14 @@
 #ifndef SHARE_CDS_CONSTANTPOOLRESOLVER_HPP
 #define SHARE_CDS_CONSTANTPOOLRESOLVER_HPP
 
+#include "oops/oopsHierarchy.hpp"
 #include "memory/allStatic.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
 class ConstantPool;
+class constantPoolHandle;
 class InstanceKlass;
 class Klass;
 
@@ -47,7 +49,10 @@ class ConstantPoolResolver : AllStatic {
   static bool is_in_archivebuilder_buffer(T p) {
     return is_in_archivebuilder_buffer((address)(p));
   }
-  static void dumptime_resolve_strings(InstanceKlass* ik, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static void resolve_string(constantPoolHandle cp, int cp_index, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static void maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS);
+  static bool can_archive_resolved_klass(InstanceKlass* cp_holder, Klass* resolved_klass);
+  static Klass* find_loaded_class(JavaThread* THREAD, oop class_loader, Symbol* name);
 
 public:
   static void initialize();

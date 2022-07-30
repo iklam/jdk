@@ -300,6 +300,25 @@ void ConstantPool::archive_resolved_references() {
   }
 }
 
+void ConstantPool::resolve_class_constants(TRAPS) {
+  assert(DumpSharedSpaces, "used during dump time only");
+  // The _cache may be NULL if the _pool_holder klass fails verification
+  // at dump time due to missing dependencies.
+  if (cache() == NULL || reference_map() == NULL) {
+    return; // nothing to do
+  }
+
+  constantPoolHandle cp(THREAD, this);
+  for (int index = 1; index < length(); index++) { // Index 0 is unused
+    if (tag_at(index).is_string()) {
+      int cache_index = cp->cp_to_object_index(index);
+      string_at_impl(cp, index, cache_index, CHECK);
+      ResourceMark rm;
+      tty->print_cr("RESOLVE %s %d %d", pool_holder()->external_name(), index, cache_index);
+    }
+  }
+}
+
 void ConstantPool::add_dumped_interned_strings() {
   objArrayOop rr = resolved_references();
   if (rr != NULL) {
