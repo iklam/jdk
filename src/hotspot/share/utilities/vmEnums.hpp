@@ -36,5 +36,6 @@ enum ThreadPriority : int;
 enum class vmClassID : int;
 enum class vmIntrinsicID : int;
 enum class vmSymbolID : int;
+enum WXMode : int;
 
 #endif // SHARE_UTILITIES_VMENUMS_HPP

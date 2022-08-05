@@ -130,7 +130,7 @@ enum OSReturn {
   OS_NORESOURCE = -6         // Operation failed for lack of nonmemory resource
 };
 
-enum WXMode {
+enum WXMode : int {
   WXWrite,
   WXExec
 };

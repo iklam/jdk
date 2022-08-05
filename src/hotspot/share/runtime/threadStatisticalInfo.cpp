@@ -23,8 +23,8 @@
  */
 
 
+#include "precompiled.hpp"
 #include "runtime/os.hpp"
-#include "runtime/thread.hpp"
 #include "runtime/threadStatisticalInfo.hpp"
 
 ThreadStatisticalInfo::ThreadStatisticalInfo() :
