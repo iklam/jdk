@@ -28,6 +28,7 @@
 #include "gc/shenandoah/shenandoahNumberSeq.hpp"
 #include "gc/shenandoah/shenandoahPadding.hpp"
 #include "memory/allocation.hpp"
+#include "runtime/os.hpp"
 
 class ShenandoahHeap;
 

@@ -37,6 +37,7 @@
 #include "runtime/threadPriority.hpp"
 #include "runtime/threadStatisticalInfo.hpp"
 #include "runtime/unhandledOops.hpp"
+#include "utilities/exceptions.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 #if INCLUDE_JFR
