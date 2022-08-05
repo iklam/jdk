@@ -29,6 +29,7 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/mutex.hpp"
 #include "runtime/nonJavaThread.hpp"
+#include "runtime/os.hpp"
 #include "runtime/semaphore.hpp"
 #include "utilities/resourceHash.hpp"
 #include "utilities/linkedlist.hpp"

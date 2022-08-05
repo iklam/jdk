@@ -28,6 +28,7 @@
 #include "memory/allocation.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "runtime/os.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"

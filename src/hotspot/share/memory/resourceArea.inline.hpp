@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -27,6 +27,7 @@
 
 #include "memory/resourceArea.hpp"
 
+#include "runtime/os.hpp"
 #include "services/memTracker.hpp"
 
 inline char* ResourceArea::allocate_bytes(size_t size, AllocFailType alloc_failmode) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,19 +22,17 @@
  *
  */
 
-#ifndef SHARE_UTILITIES_VMENUMS_HPP
-#define SHARE_UTILITIES_VMENUMS_HPP
+#ifndef SHARE_RUNTIME_THREADPRIORITY_HPP
+#define SHARE_RUNTIME_THREADPRIORITY_HPP
 
-// Include this header file if you just need the following enum types and
-// you don't use their members directly. This way you don't need to include the
-// complex header files that have the full definitions of these enums.
+enum ThreadPriority : int {        // JLS 20.20.1-3
+  NoPriority       = -1,     // Initial non-priority value
+  MinPriority      =  1,     // Minimum priority
+  NormPriority     =  5,     // Normal (non-daemon) priority
+  NearMaxPriority  =  9,     // High priority, used for VMThread
+  MaxPriority      = 10,     // Highest priority, used for WatcherThread
+                             // ensures that VMThread doesn't starve profiler
+  CriticalPriority = 11      // Critical thread priority
+};
 
-enum class JavaThreadStatus : int;
-enum class JVMFlagOrigin : int;
-enum JVMFlagsEnum : int;
-enum ThreadPriority : int;
-enum class vmClassID : int;
-enum class vmIntrinsicID : int;
-enum class vmSymbolID : int;
-
-#endif // SHARE_UTILITIES_VMENUMS_HPP
+#endif // SHARE_RUNTIME_THREADPRIORITY_HPP

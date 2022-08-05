@@ -27,7 +27,6 @@
 
 #include "memory/allStatic.hpp"
 #include "runtime/javaThread.hpp"
-#include "runtime/os.hpp"
 #include "runtime/vmOperation.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/waitBarrier.hpp"
@@ -275,9 +274,7 @@ public:
 
   static void statistics_exit_log();
 
-  static jlong time_since_last_safepoint_ms() {
-    return nanos_to_millis(os::javaTimeNanos() - _last_safepoint_end_time_ns);
-  }
+  static jlong time_since_last_safepoint_ms();
 
   static jlong end_of_last_safepoint_ms() {
     return nanos_to_millis(_last_safepoint_end_time_ns);

@@ -29,8 +29,9 @@
 #include "opto/machnode.hpp"
 #include "opto/optoreg.hpp"
 #include "opto/type.hpp"
-#include "runtime/rtmLocking.hpp"
 #include "runtime/deoptimization.hpp"
+#include "runtime/os.hpp"
+#include "runtime/rtmLocking.hpp"
 #include "runtime/vframe.hpp"
 
 //------------------------------OptoRuntime------------------------------------

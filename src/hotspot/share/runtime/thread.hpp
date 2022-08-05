@@ -32,9 +32,9 @@
 #include "memory/allocation.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/globals.hpp"
-#include "runtime/os.hpp"
 #include "runtime/threadHeapSampler.hpp"
 #include "runtime/threadLocalStorage.hpp"
+#include "runtime/threadPriority.hpp"
 #include "runtime/threadStatisticalInfo.hpp"
 #include "runtime/unhandledOops.hpp"
 #include "utilities/globalDefinitions.hpp"
@@ -48,6 +48,7 @@ class HandleMark;
 class ICRefillVerifier;
 class JvmtiRawMonitor;
 class Metadata;
+class Mutex;
 class OSThread;
 class ParkEvent;
 class ResourceArea;
@@ -64,6 +65,8 @@ DEBUG_ONLY(class ResourceMark;)
 class WorkerThread;
 
 class JavaThread;
+
+template <class T> class GrowableArray;
 
 // Class hierarchy
 // - Thread
@@ -367,10 +370,7 @@ class Thread: public ThreadShadow {
   static ThreadPriority get_priority(const Thread* const thread);
   static void start(Thread* thread);
 
-  void set_native_thread_name(const char *name) {
-    assert(Thread::current() == this, "set_native_thread_name can only be called on the current thread");
-    os::set_native_thread_name(name);
-  }
+  void set_native_thread_name(const char *name);
 
   // Support for Unhandled Oop detection
   // Add the field for both, fastdebug and debug, builds to keep
@@ -513,10 +513,7 @@ class Thread: public ThreadShadow {
 
   // Check if address is in the live stack of this thread (not just for locks).
   // Warning: can only be called by the current thread on itself.
-  bool is_in_live_stack(address adr) const {
-    assert(Thread::current() == this, "is_in_live_stack can only be called from current thread");
-    return is_in_stack_range_incl(adr, os::current_stack_pointer());
-  }
+  bool is_in_live_stack(address adr) const;
 
   // Sets this thread as starting thread. Returns failure if thread
   // creation fails due to lack of memory, too many threads etc.

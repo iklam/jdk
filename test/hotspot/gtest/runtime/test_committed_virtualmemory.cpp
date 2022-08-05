@@ -26,6 +26,7 @@
 // Included early because the NMT flags don't include it.
 #include "utilities/macros.hpp"
 
+#include "runtime/os.hpp"
 #include "runtime/thread.hpp"
 #include "services/memTracker.hpp"
 #include "services/virtualMemoryTracker.hpp"

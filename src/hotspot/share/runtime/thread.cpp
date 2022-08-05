@@ -40,6 +40,7 @@
 #include "runtime/javaThread.inline.hpp"
 #include "runtime/nonJavaThread.hpp"
 #include "runtime/orderAccess.hpp"
+#include "runtime/os.hpp"
 #include "runtime/osThread.hpp"
 #include "runtime/safepoint.hpp"
 #include "runtime/safepointMechanism.inline.hpp"
@@ -382,6 +383,15 @@ void Thread::set_priority(Thread* thread, ThreadPriority priority) {
   (void)os::set_priority(thread, priority);
 }
 
+void Thread::set_native_thread_name(const char *name) {
+  assert(Thread::current() == this, "set_native_thread_name can only be called on the current thread");
+  os::set_native_thread_name(name);
+}
+
+bool Thread::is_in_live_stack(address adr) const {
+  assert(Thread::current() == this, "is_in_live_stack can only be called from current thread");
+  return is_in_stack_range_incl(adr, os::current_stack_pointer());
+}
 
 void Thread::start(Thread* thread) {
   // Start is different from resume in that its safety is guaranteed by context or

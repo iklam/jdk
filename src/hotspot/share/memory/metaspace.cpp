@@ -53,6 +53,7 @@
 #include "runtime/globals_extension.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/os.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/copy.hpp"
 #include "utilities/debug.hpp"

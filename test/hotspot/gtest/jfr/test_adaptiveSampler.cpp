@@ -43,6 +43,7 @@
 #include "jfr/utilities/jfrTryLock.hpp"
 #include "logging/log.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/os.hpp"
 #include "utilities/globalDefinitions.hpp"
 
 #include "unittest.hpp"

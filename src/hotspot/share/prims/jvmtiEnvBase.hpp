@@ -37,6 +37,7 @@
 #include "runtime/vmOperation.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
+#include "runtime/os.hpp"
 
 //
 // Forward Declarations

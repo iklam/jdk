@@ -29,6 +29,7 @@
 #include "gc/z/zPhysicalMemoryBacking_windows.hpp"
 #include "logging/log.hpp"
 #include "runtime/globals.hpp"
+#include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 
 class ZPhysicalMemoryBackingImpl : public CHeapObj<mtGC> {

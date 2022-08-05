@@ -65,6 +65,7 @@
 #include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/java.hpp"
 #include "runtime/javaThread.hpp"
+#include "runtime/os.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/statSampler.hpp"
 #include "runtime/stubRoutines.hpp"
@@ -780,4 +781,25 @@ void JDK_Version::to_string(char* buffer, size_t buflen) const {
       index += rc;
     }
   }
+}
+
+
+void JDK_Version::set_java_version(const char* version) {
+  _java_version = os::strdup(version);
+}
+
+void JDK_Version::set_runtime_name(const char* name) {
+  _runtime_name = os::strdup(name);
+}
+
+void JDK_Version::set_runtime_version(const char* version) {
+  _runtime_version = os::strdup(version);
+}
+
+void JDK_Version::set_runtime_vendor_version(const char* vendor_version) {
+  _runtime_vendor_version = os::strdup(vendor_version);
+}
+
+void JDK_Version::set_runtime_vendor_vm_bug_url(const char* vendor_vm_bug_url) {
+  _runtime_vendor_vm_bug_url = os::strdup(vendor_vm_bug_url);
 }

@@ -34,6 +34,7 @@
 #include "runtime/init.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "runtime/os.hpp"
 #include "runtime/safepoint.hpp"
 
 G1ConcurrentRefineThread::G1ConcurrentRefineThread(G1ConcurrentRefine* cr, uint worker_id) :

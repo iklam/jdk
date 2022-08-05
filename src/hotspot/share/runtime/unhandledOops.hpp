@@ -27,6 +27,8 @@
 
 #ifdef CHECK_UNHANDLED_OOPS
 
+#include "utilities/growableArray.hpp"
+
 // Detect unhanded oops in VM code
 
 // The design is that when an oop is declared on the stack as a local

@@ -28,6 +28,7 @@
 #include "jvm_md.h"
 #include "metaprogramming/integralConstant.hpp"
 #include "runtime/osInfo.hpp"
+#include "runtime/threadPriority.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/macros.hpp"
@@ -127,16 +128,6 @@ enum OSReturn {
   OS_TIMEOUT    = -3,        // Operation timed out
   OS_NOMEM      = -5,        // Operation failed for lack of memory
   OS_NORESOURCE = -6         // Operation failed for lack of nonmemory resource
-};
-
-enum ThreadPriority {        // JLS 20.20.1-3
-  NoPriority       = -1,     // Initial non-priority value
-  MinPriority      =  1,     // Minimum priority
-  NormPriority     =  5,     // Normal (non-daemon) priority
-  NearMaxPriority  =  9,     // High priority, used for VMThread
-  MaxPriority      = 10,     // Highest priority, used for WatcherThread
-                             // ensures that VMThread doesn't starve profiler
-  CriticalPriority = 11      // Critical thread priority
 };
 
 enum WXMode {

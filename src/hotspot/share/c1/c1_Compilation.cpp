@@ -36,6 +36,7 @@
 #include "compiler/compileLog.hpp"
 #include "compiler/compilerDirectives.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/os.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/timerTrace.hpp"
 

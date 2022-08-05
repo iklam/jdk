@@ -1015,6 +1015,10 @@ void SafepointTracing::init() {
   _last_safepoint_end_time_ns = os::javaTimeNanos();
 }
 
+jlong SafepointTracing::time_since_last_safepoint_ms() {
+  return nanos_to_millis(os::javaTimeNanos() - _last_safepoint_end_time_ns);
+}
+
 // Helper method to print the header.
 static void print_header(outputStream* st) {
   // The number of spaces is significant here, and should match the format

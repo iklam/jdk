@@ -30,6 +30,7 @@
 #include "logging/log.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
+#include "runtime/os.hpp"
 
 size_t EpsilonArguments::conservative_max_heap_alignment() {
   return UseLargePages ? os::large_page_size() : os::vm_page_size();

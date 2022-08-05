@@ -38,6 +38,7 @@
 #include "jfr/periodic/jfrOSInterface.hpp"
 #include "jfr/utilities/jfrTime.hpp"
 #include "jfr/utilities/jfrTypes.hpp"
+#include "runtime/os.hpp"
 #include "runtime/os_perf.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"

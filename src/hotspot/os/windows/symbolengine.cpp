@@ -23,8 +23,9 @@
  */
 
 #include "precompiled.hpp"
-#include "utilities/globalDefinitions.hpp"
+#include "runtime/os.hpp"
 #include "symbolengine.hpp"
+#include "utilities/globalDefinitions.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/ostream.hpp"
 #include "windbghelp.hpp"

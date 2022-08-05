@@ -37,6 +37,7 @@
 #include "gc/shared/workerThread.hpp"
 #include "gc/shared/workerUtils.hpp"
 #include "memory/allocation.hpp"
+#include "runtime/os.hpp"
 #include "utilities/compilerWarnings.hpp"
 #include "utilities/numberSeq.hpp"
 

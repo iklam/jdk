@@ -26,6 +26,7 @@
 #define CGROUP_V2_SUBSYSTEM_LINUX_HPP
 
 #include "cgroupSubsystem_linux.hpp"
+#include "runtime/os.hpp"
 
 class CgroupV2Controller: public CgroupController {
   private:

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,19 +22,14 @@
  *
  */
 
-#ifndef SHARE_UTILITIES_VMENUMS_HPP
-#define SHARE_UTILITIES_VMENUMS_HPP
 
-// Include this header file if you just need the following enum types and
-// you don't use their members directly. This way you don't need to include the
-// complex header files that have the full definitions of these enums.
+#include "runtime/os.hpp"
+#include "runtime/thread.hpp"
+#include "runtime/threadStatisticalInfo.hpp"
 
-enum class JavaThreadStatus : int;
-enum class JVMFlagOrigin : int;
-enum JVMFlagsEnum : int;
-enum ThreadPriority : int;
-enum class vmClassID : int;
-enum class vmIntrinsicID : int;
-enum class vmSymbolID : int;
+ThreadStatisticalInfo::ThreadStatisticalInfo() :
+  _start_time_stamp(os::javaTimeNanos()), _define_class_count(0) {}
 
-#endif // SHARE_UTILITIES_VMENUMS_HPP
+uint64_t ThreadStatisticalInfo::getElapsedTime() const {
+  return nanos_to_millis(os::javaTimeNanos() - _start_time_stamp);
+}

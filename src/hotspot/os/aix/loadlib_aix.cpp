@@ -35,6 +35,7 @@
 #include "loadlib_aix.hpp"
 #include "misc_aix.hpp"
 #include "porting_aix.hpp"
+#include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/ostream.hpp"
 

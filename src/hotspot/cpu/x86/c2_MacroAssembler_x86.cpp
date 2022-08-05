@@ -34,6 +34,7 @@
 #include "opto/opcodes.hpp"
 #include "opto/subnode.hpp"
 #include "runtime/objectMonitor.hpp"
+#include "runtime/os.hpp"
 #include "runtime/stubRoutines.hpp"
 
 #ifdef PRODUCT

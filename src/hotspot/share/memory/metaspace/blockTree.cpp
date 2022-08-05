@@ -27,6 +27,7 @@
 #include "memory/metaspace/chunklevel.hpp"
 #include "memory/metaspace/blockTree.hpp"
 #include "memory/resourceArea.hpp"
+#include "runtime/os.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"

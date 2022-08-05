@@ -28,6 +28,7 @@
 #include "cds/metaspaceShared.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/javaThread.hpp"
+#include "runtime/os.hpp"
 
 frame JavaThread::pd_last_frame() {
   assert(has_last_Java_frame(), "must have last_Java_sp() when suspended");
