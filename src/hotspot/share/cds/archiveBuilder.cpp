@@ -160,6 +160,7 @@ ArchiveBuilder::ArchiveBuilder() :
   _ro_src_objs(),
   _src_obj_table(INITIAL_TABLE_SIZE, MAX_TABLE_SIZE),
   _dumped_to_src_obj_table(INITIAL_TABLE_SIZE, MAX_TABLE_SIZE),
+  _constant_pool_resolver_state(),
   _total_closed_heap_region_size(0),
   _total_open_heap_region_size(0),
   _estimated_metaspaceobj_bytes(0),

@@ -82,6 +82,7 @@ class ConstantPool : public Metadata {
   friend class JVMCIVMStructs;
   friend class BytecodeInterpreter;  // Directly extracts a klass in the pool for fast instanceof/checkcast
   friend class Universe;             // For null constructor
+  friend class ConstantPoolResolver; // CDS
  private:
   // If you add a new field that points to any metaspace object, you
   // must add this field to ConstantPool::metaspace_pointers_do().
@@ -695,7 +696,6 @@ class ConstantPool : public Metadata {
   // CDS support
   void archive_resolved_references() NOT_CDS_JAVA_HEAP_RETURN;
   void add_dumped_interned_strings() NOT_CDS_JAVA_HEAP_RETURN;
-  void resolve_class_constants(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   void remove_unshareable_info();
   void restore_unshareable_info(TRAPS);
   // The ConstantPool vtable is restored by this call when the ConstantPool is
@@ -703,6 +703,8 @@ class ConstantPool : public Metadata {
   // all the gory details.  SA, dtrace and pstack helpers distinguish metadata
   // by their vtable.
   void restore_vtable() { guarantee(is_constantPool(), "vtable restored by this call"); }
+
+  bool maybe_archive_resolved_klass_at(int cp_index);
 
  private:
   enum { _no_index_sentinel = -1, _possible_index_sentinel = -2 };

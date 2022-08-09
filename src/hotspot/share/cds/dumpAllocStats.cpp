@@ -101,4 +101,9 @@ void DumpAllocStats::print_stats(int ro_all, int rw_all) {
          ro_all, all_ro_bytes, rw_all, all_rw_bytes);
 
 #undef fmt_stats
+  
+  msg.debug("Class CP entries = %d, resolved = %d (%3.1f%%)",
+            _num_klass_cp_entries, _num_klass_cp_entries_resolved,
+            percent_of(_num_klass_cp_entries_resolved, _num_klass_cp_entries));
+
 }

@@ -65,12 +65,17 @@ public:
   int _counts[2][_number_of_types];
   int _bytes [2][_number_of_types];
 
+  int _num_klass_cp_entries;
+  int _num_klass_cp_entries_resolved;
+
 public:
   enum { RO = 0, RW = 1 };
 
   DumpAllocStats() {
     memset(_counts, 0, sizeof(_counts));
     memset(_bytes,  0, sizeof(_bytes));
+    _num_klass_cp_entries = 0;
+    _num_klass_cp_entries_resolved = 0;
   };
 
   CompactHashtableStats* symbol_stats() { return &_symbol_stats; }
@@ -95,6 +100,11 @@ public:
 
   void record_cpp_vtables(int byte_size) {
     _bytes[RW][CppVTablesType] += byte_size;
+  }
+
+  void record_klass_cp_entry(bool resolved) {
+    _num_klass_cp_entries ++;
+    _num_klass_cp_entries_resolved += resolved ? 1 : 0;
   }
 
   void print_stats(int ro_all, int rw_all);

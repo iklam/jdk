@@ -26,6 +26,7 @@
 #define SHARE_CDS_ARCHIVEBUILDER_HPP
 
 #include "cds/archiveUtils.hpp"
+#include "cds/constantPoolResolver.hpp"
 #include "cds/dumpAllocStats.hpp"
 #include "memory/metaspaceClosure.hpp"
 #include "oops/array.hpp"
@@ -201,6 +202,7 @@ private:
   SourceObjList _ro_src_objs;                 // objs to put in ro region
   ResizeableResourceHashtable<address, SourceObjInfo, ResourceObj::C_HEAP, mtClassShared> _src_obj_table;
   ResizeableResourceHashtable<address, address, ResourceObj::C_HEAP, mtClassShared> _dumped_to_src_obj_table;
+  ConstantPoolResolver::State _constant_pool_resolver_state;
   GrowableArray<Klass*>* _klasses;
   GrowableArray<Symbol*>* _symbols;
   GrowableArray<SpecialRefInfo>* _special_refs;
@@ -395,6 +397,8 @@ public:
   template <typename T> T get_src_obj(T dumped_addr) const {
     return (T)get_src_obj((address)dumped_addr);
   }
+
+  bool can_archive_resolved_klass(ConstantPool* cp, Klass* dumped_resolved_klass);
 
   // All klasses and symbols that will be copied into the archive
   GrowableArray<Klass*>*  klasses() const { return _klasses; }
