@@ -56,6 +56,7 @@
 #include "oops/typeArrayOop.inline.hpp"
 #include "prims/jvmtiExport.hpp"
 #include "runtime/atomic.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/javaCalls.hpp"
@@ -374,6 +375,8 @@ void ConstantPool::remove_unshareable_info() {
     resolved_references() != NULL ? resolved_references()->length() : 0);
   set_resolved_references(OopHandle());
 
+  ResourceMark rm;
+  GrowableArray<bool> keep_cpcache;
   bool resolved = false;
   for (int index = 1; index < length(); index++) { // Index 0 is unused
     switch (tag_at(index).value()) {
@@ -393,12 +396,23 @@ void ConstantPool::remove_unshareable_info() {
       resolved = maybe_archive_resolved_klass_at(index);
       ArchiveBuilder::alloc_stats()->record_klass_cp_entry(resolved);
       break;
+    case JVM_CONSTANT_Fieldref:
+      resolved = maybe_archive_resolved_fieldref_at(index, keep_cpcache.length()); // FIXME this is cpc_index
+      keep_cpcache.append(resolved);
+      ArchiveBuilder::alloc_stats()->record_field_cp_entry(resolved);
+      break;
+    case JVM_CONSTANT_Methodref:
+      keep_cpcache.append(false);
+      break;
+    case JVM_CONSTANT_InterfaceMethodref:
+      keep_cpcache.append(false);
+      break;
     }
   }
 
   if (cache() != NULL) {
     // cache() is NULL if this class is not yet linked.
-    cache()->remove_unshareable_info();
+    cache()->remove_unshareable_info(&keep_cpcache);
   }
 }
 
@@ -438,6 +452,35 @@ bool ConstantPool::maybe_archive_resolved_klass_at(int cp_index) {
   }
 
   return allowed;
+}
+
+bool ConstantPool::maybe_archive_resolved_fieldref_at(int cp_index, int cpc_index) {
+  if (!pool_holder()->is_shared_boot_class()) {
+    // TMP
+    return false;
+  }
+
+  int klass_cp_index = uncached_klass_ref_index_at(cp_index);
+  Klass* k;
+  if ((k = ConstantPoolResolver::get_resolved_klass_or_null(this, klass_cp_index)) == NULL) {
+    // k may be NULL if the resolved class is excluded from the dump.
+    return false;
+  }
+
+  ConstantPool* orig_cp = ArchiveBuilder::current()->get_src_obj(this);
+  if (!ConstantPoolResolver::can_archive_resolved_field(orig_cp, cp_index)) {
+    return false;
+  }
+
+#if 0
+  if (log_is_enabled(Debug, cds, resolve)) {
+    // FIXME: also log failed cases?
+    log_info(cds)("Allow caching (field): %s -> %s::%s type = %s", pool_holder()->external_name(),
+                  k->external_name(), field_name->as_C_string(), field_sig->as_C_string());
+  }
+#endif
+
+  return cache()->entry_at(cpc_index)->is_resolved(Bytecodes::_getfield);
 }
 
 int ConstantPool::cp_to_object_index(int cp_index) {

@@ -705,6 +705,7 @@ class ConstantPool : public Metadata {
   void restore_vtable() { guarantee(is_constantPool(), "vtable restored by this call"); }
 
   bool maybe_archive_resolved_klass_at(int cp_index);
+  bool maybe_archive_resolved_fieldref_at(int cp_index, int cpc_index);
 
  private:
   enum { _no_index_sentinel = -1, _possible_index_sentinel = -2 };

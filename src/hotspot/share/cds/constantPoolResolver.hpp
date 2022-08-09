@@ -25,8 +25,9 @@
 #ifndef SHARE_CDS_CONSTANTPOOLRESOLVER_HPP
 #define SHARE_CDS_CONSTANTPOOLRESOLVER_HPP
 
-#include "oops/oopsHierarchy.hpp"
+#include "interpreter/bytecodes.hpp"
 #include "memory/allStatic.hpp"
+#include "oops/oopsHierarchy.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
@@ -51,7 +52,8 @@ class ConstantPoolResolver : AllStatic {
     return is_in_archivebuilder_buffer((address)(p));
   }
   static void resolve_string(constantPoolHandle cp, int cp_index, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
-  static void maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS);
+  static Klass* maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS);
+  static void maybe_resolve_field(InstanceKlass* ik, Method* m, Bytecodes::Code bytecode, int cpc_index, TRAPS);
   static bool can_archive_resolved_klass(InstanceKlass* cp_holder, Klass* resolved_klass);
   static Klass* find_loaded_class(JavaThread* THREAD, oop class_loader, Symbol* name);
 
@@ -61,7 +63,9 @@ public:
 
   static bool is_vm_class(InstanceKlass* ik);
   static void dumptime_resolve(InstanceKlass* ik, TRAPS);
+  static Klass* get_resolved_klass_or_null(ConstantPool* cp, int cp_index);
   static bool can_archive_resolved_klass(ConstantPool* cp, int cp_index);
+  static bool can_archive_resolved_field(ConstantPool* cp, int cp_index);
 
   class State {
   public:

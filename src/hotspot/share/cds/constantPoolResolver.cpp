@@ -27,10 +27,14 @@
 #include "cds/constantPoolResolver.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
+#include "interpreter/bytecodeStream.hpp"
+#include "interpreter/linkResolver.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.hpp"
+#include "oops/cpCache.inline.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.inline.hpp"
 
 ConstantPoolResolver::ClassesTable* ConstantPoolResolver::_processed_classes = NULL;
@@ -129,18 +133,54 @@ bool ConstantPoolResolver::can_archive_resolved_klass(InstanceKlass* cp_holder, 
   return false;
 }
 
+Klass* ConstantPoolResolver::get_resolved_klass_or_null(ConstantPool* cp, int cp_index) {
+  if (cp->tag_at(cp_index).is_klass()) {
+    CPKlassSlot kslot = cp->klass_slot_at(cp_index);
+    int resolved_klass_index = kslot.resolved_klass_index();
+    return cp->resolved_klasses()->at(resolved_klass_index);
+  } else {
+    // klass is not resolved yet
+    assert(cp->tag_at(cp_index).is_unresolved_klass() ||
+           cp->tag_at(cp_index).is_unresolved_klass_in_error(), "must be");
+    return NULL;
+  }
+}
+
 bool ConstantPoolResolver::can_archive_resolved_klass(ConstantPool* cp, int cp_index) {
   assert(!is_in_archivebuilder_buffer(cp), "sanity");
   assert(cp->tag_at(cp_index).is_klass(), "must be resolved");
 
-  InstanceKlass* cp_holder = cp->pool_holder();
-
-  CPKlassSlot kslot = cp->klass_slot_at(cp_index);
-  int resolved_klass_index = kslot.resolved_klass_index();
-  Klass* resolved_klass = cp->resolved_klasses()->at(resolved_klass_index);
+  Klass* resolved_klass = get_resolved_klass_or_null(cp, cp_index);
   assert(resolved_klass != NULL, "must be");
 
-  return can_archive_resolved_klass(cp_holder, resolved_klass);
+  return can_archive_resolved_klass(cp->pool_holder(), resolved_klass);
+}
+
+bool ConstantPoolResolver::can_archive_resolved_field(ConstantPool* cp, int cp_index) {
+  assert(!is_in_archivebuilder_buffer(cp), "sanity");
+  assert(cp->tag_at(cp_index).is_field(), "must be");
+
+  int klass_cp_index = cp->uncached_klass_ref_index_at(cp_index);
+  Klass* k = get_resolved_klass_or_null(cp, klass_cp_index);
+  if (k == NULL) {
+    return false;
+  }
+  if (!can_archive_resolved_klass(cp->pool_holder(), k)) {
+    // When we access this field at runtime, the target klass may
+    // have a different definition.
+    return false;
+  }
+
+  Symbol* field_name = cp->uncached_name_ref_at(cp_index);
+  Symbol* field_sig = cp->uncached_signature_ref_at(cp_index);
+  fieldDescriptor fd;
+  if (k->find_field(field_name, field_sig, &fd) == NULL || fd.access_flags().is_static()) {
+    // Static field resolution at runtime may trigger initialization, so we can't
+    // archive it.
+    return false;
+  }
+
+  return true;
 }
 
 void ConstantPoolResolver::dumptime_resolve(InstanceKlass* ik, TRAPS) {
@@ -168,6 +208,23 @@ void ConstantPoolResolver::dumptime_resolve(InstanceKlass* ik, TRAPS) {
       break;
     }
   }
+
+  // Resolve all getfield/setfield bytecodes if possible.
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    BytecodeStream bcs(methodHandle(THREAD, m));
+    while (!bcs.is_last_bytecode()) {
+      bcs.next();
+      switch (bcs.raw_code()) {
+      case Bytecodes::_getfield:
+      case Bytecodes::_putfield:
+        maybe_resolve_field(ik, m, bcs.raw_code(), bcs.get_index_u2_cpcache(), CHECK);
+        break;
+      default:
+        break;
+      }
+    }
+  }
 }
 
 Klass* ConstantPoolResolver::find_loaded_class(JavaThread* THREAD, oop class_loader, Symbol* name) {
@@ -187,7 +244,8 @@ Klass* ConstantPoolResolver::find_loaded_class(JavaThread* THREAD, oop class_loa
   return NULL;
 }
 
-void ConstantPoolResolver::maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS) {
+Klass* ConstantPoolResolver::maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS) {
+  assert(!is_in_archivebuilder_buffer(cp()), "sanity");
   InstanceKlass* cp_holder = cp->pool_holder();
   if (!cp_holder->is_shared_boot_class() &&
       !cp_holder->is_shared_platform_class() &&
@@ -196,7 +254,7 @@ void ConstantPoolResolver::maybe_resolve_class(constantPoolHandle cp, int cp_ind
     // when resolving classes.
     //
     // TODO: we should be able to trust the supertypes of cp_holder.
-    return;
+    return NULL;
   }
 
   CPKlassSlot kslot = cp->klass_slot_at(cp_index);
@@ -204,11 +262,60 @@ void ConstantPoolResolver::maybe_resolve_class(constantPoolHandle cp, int cp_ind
   Symbol* name = cp->symbol_at(name_index);
   Klass* resolved_klass = find_loaded_class(THREAD, cp_holder->class_loader(), name);
   if (resolved_klass != NULL && can_archive_resolved_klass(cp_holder, resolved_klass)) {
-    Klass* k = ConstantPool::klass_at_impl(cp, cp_index, CHECK); // Should fail only with OOM
+    Klass* k = ConstantPool::klass_at_impl(cp, cp_index, CHECK_NULL); // Should fail only with OOM
     assert(k == resolved_klass, "must be");
   }
+
+  return resolved_klass;
 }
 
+void ConstantPoolResolver::maybe_resolve_field(InstanceKlass* ik, Method* m, Bytecodes::Code bytecode, int cpc_index, TRAPS) {
+  assert(!is_in_archivebuilder_buffer(ik), "sanity");
+
+  methodHandle mh(THREAD, m);
+  constantPoolHandle cp(THREAD, m->constants());
+
+  int d = cp->decode_cpcache_index(cpc_index);
+  ConstantPoolCacheEntry* cp_cache_entry = cp->cache()->entry_at(d);
+  if (cp_cache_entry->is_resolved(bytecode) || 1) {
+    return;
+  }
+
+  int cp_index = cp->remap_instruction_operand_from_cache(cpc_index);
+  int klass_cp_index = cp->uncached_klass_ref_index_at(cp_index);
+  Klass* k = maybe_resolve_class(cp, klass_cp_index, CHECK); // Should fail only with OOM
+  if (k == NULL) {
+    // When we access this field at runtime, the target klass may
+    // have a different definition.
+    return;
+  }
+
+  if (!can_archive_resolved_field(cp(), cp_index)) {
+    // Field doesn't exist, or is a static field
+    return;
+  }
+
+  fieldDescriptor info;
+  LinkResolver::resolve_field_access(info, cp, cpc_index, mh, bytecode, CHECK); // Should fail only with OOM
+
+  // compute auxiliary field attributes
+  TosState state  = as_TosState(info.field_type());
+
+  Bytecodes::Code get_code = Bytecodes::_getfield;
+  Bytecodes::Code put_code = Bytecodes::_putfield;
+
+  cp_cache_entry->set_field(
+    get_code,
+    put_code,
+    info.field_holder(),
+    info.index(),
+    info.offset(),
+    state,
+    info.access_flags().is_final(),
+    info.access_flags().is_volatile()
+  );
+
+}
 
 #if INCLUDE_CDS_JAVA_HEAP
 void ConstantPoolResolver::resolve_string(constantPoolHandle cp, int cp_index, TRAPS) {

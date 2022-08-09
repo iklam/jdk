@@ -694,7 +694,7 @@ void ConstantPoolCache::save_for_archive() {
 #endif
 }
 
-void ConstantPoolCache::remove_unshareable_info() {
+void ConstantPoolCache::remove_unshareable_info(const GrowableArray<bool>* keep_cpcache) {
 #if INCLUDE_CDS
   Arguments::assert_is_dumping_archive();
   // <this> is the copy to be written into the archive. It's in
@@ -705,7 +705,9 @@ void ConstantPoolCache::remove_unshareable_info() {
   for (int i=0; i<length(); i++) {
     // Restore each entry to the initial state -- just after Rewriter::make_constant_pool_cache()
     // has finished.
-    *entry_at(i) = saved[i];
+    if (i >= keep_cpcache->length() || !keep_cpcache->at(i)) {
+      *entry_at(i) = saved[i];
+    }
   }
 #endif
 }

@@ -105,5 +105,8 @@ void DumpAllocStats::print_stats(int ro_all, int rw_all) {
   msg.debug("Class CP entries = %d, resolved = %d (%3.1f%%)",
             _num_klass_cp_entries, _num_klass_cp_entries_resolved,
             percent_of(_num_klass_cp_entries_resolved, _num_klass_cp_entries));
+  msg.debug("Field CP entries = %d, resolved = %d (%3.1f%%)",
+            _num_field_cp_entries, _num_field_cp_entries_resolved,
+            percent_of(_num_field_cp_entries_resolved, _num_field_cp_entries));
 
 }

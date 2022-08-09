@@ -453,7 +453,7 @@ class ConstantPoolCache: public MetaspaceObj {
   static int resolved_references_offset_in_bytes() { return offset_of(ConstantPoolCache, _resolved_references); }
 
   // CDS support
-  void remove_unshareable_info();
+  void remove_unshareable_info(const GrowableArray<bool>* keep_cpcache);
   void save_for_archive();
  private:
   void walk_entries_for_initialization(bool check_only);
