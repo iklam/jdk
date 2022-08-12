@@ -25,6 +25,7 @@
 #ifndef SHARE_C1_C1_COMPILATION_HPP
 #define SHARE_C1_C1_COMPILATION_HPP
 
+#include "asm/codeBuffer.hpp"
 #include "ci/ciEnv.hpp"
 #include "ci/ciMethodData.hpp"
 #include "code/exceptionHandlerTable.hpp"

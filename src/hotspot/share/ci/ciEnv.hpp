@@ -29,15 +29,18 @@
 #include "ci/ciObjectFactory.hpp"
 #include "ci/ciReplay.hpp"
 #include "classfile/vmClassMacros.hpp"
-#include "code/debugInfoRec.hpp"
-#include "code/dependencies.hpp"
-#include "code/exceptionHandlerTable.hpp"
 #include "compiler/compilerThread.hpp"
 #include "oops/methodData.hpp"
-#include "runtime/javaThread.hpp"
 
+class CodeBuffer;
+class CodeOffsets;
 class CompileTask;
+class DebugInformationRecorder;
+class Dependencies;
+class ExceptionHandlerTable;
+class ImplicitExceptionTable;
 class OopMapSet;
+class OopRecorder;
 
 // ciEnv
 //

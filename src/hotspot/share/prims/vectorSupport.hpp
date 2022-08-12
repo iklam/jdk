@@ -26,11 +26,15 @@
 #define SHARE_PRIMS_VECTORSUPPORT_HPP
 
 #include "jni.h"
-#include "code/debugInfo.hpp"
 #include "memory/allStatic.hpp"
 #include "oops/typeArrayOop.hpp"
-#include "runtime/registerMap.hpp"
 #include "utilities/exceptions.hpp"
+
+class InstanceKlass;
+class Location;
+class ObjectValue;
+class RegisterMap;
+class ScopeValue;
 
 extern "C" {
   void JNICALL JVM_RegisterVectorSupportMethods(JNIEnv* env, jclass vsclass);

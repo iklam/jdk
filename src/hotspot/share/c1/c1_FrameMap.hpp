@@ -28,6 +28,7 @@
 #include "asm/macroAssembler.hpp"
 #include "c1/c1_Defs.hpp"
 #include "c1/c1_LIR.hpp"
+#include "code/location.hpp"
 #include "code/vmreg.hpp"
 #include "memory/allocation.hpp"
 #include "runtime/frame.hpp"

@@ -26,6 +26,7 @@
 #define SHARE_C1_C1_IR_HPP
 
 #include "c1/c1_Instruction.hpp"
+#include "code/debugInfoRec.hpp"
 #include "ci/ciExceptionHandler.hpp"
 #include "ci/ciMethod.hpp"
 #include "ci/ciStreams.hpp"

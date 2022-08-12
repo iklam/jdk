@@ -26,6 +26,7 @@
 #define SHARE_C1_C1_RUNTIME1_HPP
 
 #include "c1/c1_FrameMap.hpp"
+#include "code/codeBlob.hpp"
 #include "code/stubs.hpp"
 #include "interpreter/interpreter.hpp"
 #include "memory/allStatic.hpp"

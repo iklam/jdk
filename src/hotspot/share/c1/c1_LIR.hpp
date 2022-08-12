@@ -25,6 +25,7 @@
 #ifndef SHARE_C1_C1_LIR_HPP
 #define SHARE_C1_C1_LIR_HPP
 
+#include "asm/assembler.hpp"
 #include "c1/c1_Defs.hpp"
 #include "c1/c1_ValueType.hpp"
 #include "oops/method.hpp"
