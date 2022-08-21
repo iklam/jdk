@@ -508,7 +508,7 @@ void Dictionary::print_size(outputStream* st) const {
                table_size(), number_of_entries(), BOOL_TO_STR(_resizable));
 }
 
-void Dictionary::print_on(outputStream* st) const {
+void Dictionary::print_on(outputStream* st, bool verbose) const {
   ResourceMark rm;
 
   assert(loader_data() != NULL, "loader data should not be null");
@@ -520,23 +520,24 @@ void Dictionary::print_on(outputStream* st) const {
     for (DictionaryEntry* probe = bucket(index);
                           probe != NULL;
                           probe = probe->next()) {
-      Klass* e = probe->instance_klass();
-      bool is_defining_class =
+      InstanceKlass* e = probe->instance_klass();
+      bool is_defined_by_this_loader =
          (loader_data() == e->class_loader_data());
-      st->print("%4d: %s%s", index, is_defining_class ? " " : "^", e->external_name());
-      ClassLoaderData* cld = e->class_loader_data();
-      if (!loader_data()->is_the_null_class_loader_data()) {
-        // Class loader output for the dictionary for the null class loader data is
-        // redundant and obvious.
+      st->print("%4d: ", index);
+      if (verbose) {
+        st->print(INTPTR_FORMAT " ", p2i(e));
+      }
+      st->print("%s%s", is_defined_by_this_loader ? " " : "^", e->external_name());
+      if (!is_defined_by_this_loader) { // print the defining loader as well.
         st->print(", ");
-        cld->print_value_on(st);
+        e->class_loader_data()->print_value_on(st);
         st->print(", ");
         probe->print_count(st);
       }
       st->cr();
     }
   }
-  tty->cr();
+  st->cr();
 }
 
 void DictionaryEntry::verify() {

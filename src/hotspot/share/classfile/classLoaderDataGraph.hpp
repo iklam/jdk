@@ -101,7 +101,7 @@ class ClassLoaderDataGraph : public AllStatic {
   static void adjust_saved_class(Klass* klass);
 
   static void verify_dictionary();
-  static void print_dictionary(outputStream* st);
+  static void print_dictionary(outputStream* st, bool verbose = false);
   static void print_table_statistics(outputStream* st);
 
   static int resize_dictionaries();

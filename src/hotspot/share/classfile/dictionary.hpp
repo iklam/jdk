@@ -78,7 +78,7 @@ public:
                                   Handle protection_domain,
                                   TRAPS);
 
-  void print_on(outputStream* st) const;
+  void print_on(outputStream* st, bool verbose = false) const;
   void print_size(outputStream* st) const;
   void verify();
 

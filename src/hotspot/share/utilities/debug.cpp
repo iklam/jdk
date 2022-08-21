@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "jvm.h"
+#include "classfile/classPrinter.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "code/codeCache.hpp"
 #include "code/icBuffer.hpp"
@@ -636,8 +637,31 @@ extern "C" JNIEXPORT void findpc(intptr_t x) {
   os::print_location(tty, x, true);
 }
 
+// flags must be OR'ed from ClassPrinter::Mode for the next 3 functions.
+// Examples (in gdb):
+//   call findclass("java/lang/Object", 0x3)
+//   call findmethod("*ang/Object*", "wait", 0x7)
+//   call findmethod2("*ang/Object*", "wait", "(J*", 0x1)
+extern "C" JNIEXPORT void findclass(const char* class_name_pattern, int flags) {
+  Command c("findclass");
+  ClassPrinter::print_classes_unlocked(class_name_pattern, flags);
+}
 
-// Need method pointer to find bcp, when not in permgen.
+extern "C" JNIEXPORT void findmethod(const char* class_name_pattern,
+                                     const char* method_name_pattern, int flags) {
+  Command c("findmethod");
+  ClassPrinter::print_methods_unlocked(class_name_pattern, method_name_pattern, flags);
+}
+
+extern "C" JNIEXPORT void findmethod2(const char* class_name_pattern,
+                                      const char* method_name_pattern,
+                                      const char* method_signature_pattern, int flags) {
+  Command c("findmethod2");
+  ClassPrinter::print_methods_unlocked(class_name_pattern, method_name_pattern,
+                                       method_signature_pattern, flags);
+}
+
+// Need method pointer to find bcp
 extern "C" JNIEXPORT void findbcp(intptr_t method, intptr_t bcp) {
   Command c("findbcp");
   Method* mh = (Method*)method;

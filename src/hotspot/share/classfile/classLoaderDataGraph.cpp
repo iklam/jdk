@@ -427,12 +427,12 @@ void ClassLoaderDataGraph::verify_dictionary() {
                                 while (ClassLoaderData* X = iter.get_next()) \
                                   if (X->dictionary() != NULL)
 
-void ClassLoaderDataGraph::print_dictionary(outputStream* st) {
+void ClassLoaderDataGraph::print_dictionary(outputStream* st, bool verbose) {
   FOR_ALL_DICTIONARY(cld) {
     st->print("Dictionary for ");
     cld->print_value_on(st);
     st->cr();
-    cld->dictionary()->print_on(st);
+    cld->dictionary()->print_on(st, verbose);
     st->cr();
   }
 }
