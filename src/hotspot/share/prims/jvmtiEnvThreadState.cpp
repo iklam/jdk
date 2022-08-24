@@ -37,6 +37,7 @@
 #include "runtime/signature.hpp"
 #include "runtime/vframe.hpp"
 #include "runtime/vmOperations.hpp"
+#include "runtime/vmThread.hpp"
 
 
 ///////////////////////////////////////////////////////////////

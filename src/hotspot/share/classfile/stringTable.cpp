@@ -50,6 +50,7 @@
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/timerTrace.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
+#include "runtime/vmThread.hpp"
 #include "services/diagnosticCommand.hpp"
 #include "utilities/concurrentHashTable.inline.hpp"
 #include "utilities/concurrentHashTableTasks.inline.hpp"

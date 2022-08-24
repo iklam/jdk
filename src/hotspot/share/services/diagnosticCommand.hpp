@@ -31,7 +31,7 @@
 #include "classfile/vmSymbols.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/os.hpp"
-#include "runtime/vmThread.hpp"
+#include "runtime/vmOperation.hpp"
 #include "services/diagnosticArgument.hpp"
 #include "services/diagnosticCommand.hpp"
 #include "services/diagnosticFramework.hpp"

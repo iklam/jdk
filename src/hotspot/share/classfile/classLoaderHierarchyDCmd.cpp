@@ -24,13 +24,13 @@
  */
 
 #include "precompiled.hpp"
-
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/classLoaderHierarchyDCmd.hpp"
 #include "memory/allocation.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/safepoint.hpp"
+#include "runtime/vmThread.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
 

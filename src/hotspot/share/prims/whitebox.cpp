@@ -87,6 +87,7 @@
 #include "runtime/threadSMR.hpp"
 #include "runtime/vframe.hpp"
 #include "runtime/vm_version.hpp"
+#include "runtime/vmThread.hpp"
 #include "services/mallocSiteTable.hpp"
 #include "services/memoryService.hpp"
 #include "services/memTracker.hpp"

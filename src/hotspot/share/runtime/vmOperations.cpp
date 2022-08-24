@@ -48,6 +48,7 @@
 #include "runtime/threads.hpp"
 #include "runtime/threadSMR.inline.hpp"
 #include "runtime/vmOperations.hpp"
+#include "runtime/vmThread.hpp"
 #include "services/threadService.hpp"
 
 #define VM_OP_NAME_INITIALIZE(name) #name,

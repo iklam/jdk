@@ -32,7 +32,7 @@
 #include "oops/method.hpp"
 #include "runtime/frame.hpp"
 #include "runtime/javaThread.hpp"
-#include "runtime/vmThread.hpp"
+#include "runtime/thread.hpp"
 
 // This file contains the platform-independent parts
 // of the abstract interpreter and the abstract interpreter generator.

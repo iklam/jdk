@@ -30,6 +30,7 @@
 #include "memory/metaspaceUtils.hpp"
 #include "memory/resourceArea.hpp"
 #include "runtime/vmOperations.hpp"
+#include "runtime/vmThread.hpp"
 #include "services/diagnosticCommand.hpp"
 #include "services/nmtCommon.hpp"
 

@@ -43,7 +43,6 @@
 #include "runtime/deoptimization.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/timerTrace.hpp"
-#include "runtime/vmThread.hpp"
 #include "utilities/ticks.hpp"
 
 class AbstractLockNode;
