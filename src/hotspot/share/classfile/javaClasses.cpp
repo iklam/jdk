@@ -1504,9 +1504,9 @@ BasicType java_lang_Class::primitive_type(oop java_class) {
     // Note: create_basic_type_mirror above initializes ak to a non-null value.
     type = ArrayKlass::cast(ak)->element_type();
   } else {
-    assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
+    //assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
   }
-  assert(Universe::java_mirror(type) == java_class, "must be consistent");
+  //assert(Universe::java_mirror(type) == java_class, "must be consistent");
   return type;
 }
 
@@ -5422,6 +5422,13 @@ void JavaClasses::serialize_offsets(SerializeClosure* soc) {
 bool JavaClasses::is_supported_for_archiving(oop obj) {
   Klass* klass = obj->klass();
 
+  if (klass == vmClasses::ResolvedMethodName_klass() ||
+      klass == vmClasses::MemberName_klass() ||
+      klass == vmClasses::Context_klass()) {
+    obj->print();
+    tty->cr();
+  }
+#if 0
   if (klass == vmClasses::ClassLoader_klass() ||  // ClassLoader::loader_data is malloc'ed.
       // The next 3 classes are used to implement java.lang.invoke, and are not used directly in
       // regular Java code. The implementation of java.lang.invoke uses generated hidden classes
@@ -5438,6 +5445,16 @@ bool JavaClasses::is_supported_for_archiving(oop obj) {
       klass->is_subclass_of(vmClasses::Reference_klass())) {
     return false;
   }
+#else
+  if (klass == vmClasses::ClassLoader_klass()) {
+    return false;
+  }
+  if (klass->is_subclass_of(vmClasses::Reference_klass())) {
+    // It's problematic to archive Reference objects. One of the reasons is that
+    // Reference::discovered may pull in unwanted objects (see JDK-8284336)
+    return false;
+  }
+#endif
 
   return true;
 }

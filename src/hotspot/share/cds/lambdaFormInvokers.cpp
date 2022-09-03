@@ -79,11 +79,11 @@ void LambdaFormInvokers::append(char* line) {
 
 // The regenerated Klass is not added to any class loader, so we need
 // to keep its java_mirror alive to avoid class unloading.
-void LambdaFormInvokers::add_regenerated_class(oop regenerated_class) {
+void LambdaFormInvokers::add_regenerated_mirror(oop regenerated_mirror) {
   if (_regenerated_mirrors == nullptr) {
     _regenerated_mirrors = new GrowableArrayCHeap<OopHandle, mtClassShared>(150);
   }
-  _regenerated_mirrors->append(OopHandle(Universe::vm_global(), regenerated_class));
+  _regenerated_mirrors->append(OopHandle(Universe::vm_global(), regenerated_mirror));
 }
 
 void LambdaFormInvokers::cleanup_regenerated_classes() {
@@ -207,7 +207,8 @@ void LambdaFormInvokers::regenerate_class(char* class_name, ClassFileStream& st,
                                                    CHECK);
 
   assert(result->java_mirror() != nullptr, "must be");
-  add_regenerated_class(result->java_mirror());
+  add_regenerated_mirror(result->java_mirror()); // TODO: this should be maintained in SystemDictionary as well.
+  SystemDictionaryShared::add_regenerated_klass(InstanceKlass::cast(klass), result);
 
   {
     MutexLocker mu_r(THREAD, Compile_lock); // add_to_hierarchy asserts this.

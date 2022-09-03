@@ -120,6 +120,8 @@ class RunTimeSharedDictionary;
 class DumpTimeLambdaProxyClassDictionary;
 class LambdaProxyClassKey;
 
+template <typename T> class GrowableArray;
+
 class SharedClassLoadingMark {
  private:
   Thread* THREAD;
@@ -167,6 +169,7 @@ private:
   static DumpTimeSharedClassTable* _cloned_dumptime_table;
   static DumpTimeLambdaProxyClassDictionary* _dumptime_lambda_proxy_class_dictionary;
   static DumpTimeLambdaProxyClassDictionary* _cloned_dumptime_lambda_proxy_class_dictionary;
+  static GrowableArray<InstanceKlass*>* _regenerated_klasses;
 
   static ArchiveInfo _static_archive;
   static ArchiveInfo _dynamic_archive;
@@ -289,6 +292,8 @@ public:
     return (k->shared_classpath_index() != UNREGISTERED_INDEX);
   }
   static bool add_unregistered_class(Thread* current, InstanceKlass* k);
+  static void add_regenerated_klass(InstanceKlass* orig_klass, InstanceKlass* new_klass);
+  static InstanceKlass* get_regenerated_klass(InstanceKlass* orig_klass);
 
   // For repeatable dumping, we
   //   1. clone DumpTimeSharedClassTable, same for DumpTimeLambdaProxyClassDictionary

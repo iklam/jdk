@@ -70,6 +70,7 @@
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/resourceHash.hpp"
 #include "utilities/stringUtils.hpp"
 
@@ -80,6 +81,7 @@ DumpTimeSharedClassTable* SystemDictionaryShared::_dumptime_table = NULL;
 DumpTimeSharedClassTable* SystemDictionaryShared::_cloned_dumptime_table = NULL;
 DumpTimeLambdaProxyClassDictionary* SystemDictionaryShared::_dumptime_lambda_proxy_class_dictionary = NULL;
 DumpTimeLambdaProxyClassDictionary* SystemDictionaryShared::_cloned_dumptime_lambda_proxy_class_dictionary = NULL;
+GrowableArray<InstanceKlass*>* SystemDictionaryShared::_regenerated_klasses = NULL;
 
 // Used by NoClassLoadingMark
 DEBUG_ONLY(bool SystemDictionaryShared::_class_loading_may_happen = true;)
@@ -498,11 +500,31 @@ void SystemDictionaryShared::set_shared_class_misc_info(InstanceKlass* k, ClassF
   info->_clsfile_crc32 = ClassLoader::crc32(0, (const char*)cfs->buffer(), cfs->length());
 }
 
+void SystemDictionaryShared::add_regenerated_klass(InstanceKlass* orig_klass, InstanceKlass* new_klass) {
+  MutexLocker ml(DumpTimeTable_lock, Mutex::_no_safepoint_check_flag);
+  Arguments::assert_is_dumping_archive();
+  _regenerated_klasses->append(orig_klass);
+  _regenerated_klasses->append(new_klass);
+}
+
+InstanceKlass* SystemDictionaryShared::get_regenerated_klass(InstanceKlass* orig_klass) { // renamed -> _locked
+  assert_lock_strong(DumpTimeTable_lock);
+  Arguments::assert_is_dumping_archive();
+  for (int i = 0; i < _regenerated_klasses->length(); i+= 2) {
+    if (orig_klass ==  _regenerated_klasses->at(i)) {
+        return _regenerated_klasses->at(i + 1);
+    }
+  }
+  return NULL;
+}
+
 void SystemDictionaryShared::initialize() {
   if (Arguments::is_dumping_archive()) {
     _dumptime_table = new (ResourceObj::C_HEAP, mtClass) DumpTimeSharedClassTable;
     _dumptime_lambda_proxy_class_dictionary =
                       new (ResourceObj::C_HEAP, mtClass) DumpTimeLambdaProxyClassDictionary;
+    _regenerated_klasses = new (ResourceObj::C_HEAP, mtClassShared) GrowableArray<InstanceKlass*>(8, mtClassShared);
+
   }
 }
 

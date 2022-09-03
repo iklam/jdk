@@ -135,6 +135,11 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
                                                          "ZERO_INT");              // E
   ADD_EXCL("sun/security/util/SecurityConstants",        "PROVIDER_VER");          // C
 
+  ADD_EXCL("java/lang/invoke/DirectMethodHandle",        "LONG_OBJ_TYPE", // TEMP archive MethodTypes
+                                                         "OBJ_OBJ_TYPE");  // TEMP archive MethodTypes
+
+  ADD_EXCL("sun/invoke/util/Wrapper",                    "FLOAT_ZERO",     // ? there is a cache??
+                                                         "DOUBLE_ZERO");   // ? there is a cache??
 
 # undef ADD_EXCL
 

@@ -70,6 +70,7 @@
 #include "runtime/arguments.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -838,6 +839,19 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
 #if INCLUDE_CDS_JAVA_HEAP
   if (use_full_module_graph()) {
     HeapShared::reset_archived_object_states(CHECK);
+  }
+#endif
+
+#ifndef PRODUCT
+  if (!UseNewCode) {
+    // Do this just before going into the safepoint.
+    // We also assume no other Java threads are running
+    // This makes sure that the MethodType and MethodTypeForm objects are clean (no new invokers, etc)
+    JavaValue result(T_VOID);
+    JavaCalls::call_static(&result, vmClasses::MethodType_klass(),
+                           vmSymbols::dumpSharedArchive(),
+                           vmSymbols::void_method_signature(),
+                           CHECK);
   }
 #endif
 
