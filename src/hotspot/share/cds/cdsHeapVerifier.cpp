@@ -135,6 +135,11 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
                                                          "ZERO_INT");              // E
   ADD_EXCL("sun/security/util/SecurityConstants",        "PROVIDER_VER");          // C
 
+  ADD_EXCL("java/lang/invoke/DirectMethodHandle",        "LONG_OBJ_TYPE", // TEMP archive MethodTypes
+                                                         "OBJ_OBJ_TYPE");  // TEMP archive MethodTypes
+
+  ADD_EXCL("sun/invoke/util/Wrapper",                    "FLOAT_ZERO",     // ? there is a cache??
+                                                         "DOUBLE_ZERO");   // ? there is a cache??
 
 # undef ADD_EXCL
 
@@ -219,6 +224,14 @@ void CDSHeapVerifier::do_klass(Klass* k) {
 }
 
 void CDSHeapVerifier::add_static_obj_field(InstanceKlass* ik, oop field, Symbol* name) {
+  if (field->klass() == vmClasses::MethodType_klass() ||
+      field->klass() == vmClasses::LambdaForm_klass()) {
+    // LambdaForm and MethodType are non-modifiable and are not tested for object equality, so
+    // it's OK if the static fields are reinitialized at runtime with alternative instances.
+    // (TODO: double check is fhis is correct)
+    // 
+    return;
+  }
   StaticFieldInfo info = {ik, name};
   _table.put(field, info);
 }

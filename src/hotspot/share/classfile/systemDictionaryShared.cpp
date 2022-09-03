@@ -70,6 +70,7 @@
 #include "runtime/java.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/resourceHash.hpp"
 #include "utilities/stringUtils.hpp"
 
@@ -80,6 +81,8 @@ DumpTimeSharedClassTable* SystemDictionaryShared::_dumptime_table = NULL;
 DumpTimeSharedClassTable* SystemDictionaryShared::_cloned_dumptime_table = NULL;
 DumpTimeLambdaProxyClassDictionary* SystemDictionaryShared::_dumptime_lambda_proxy_class_dictionary = NULL;
 DumpTimeLambdaProxyClassDictionary* SystemDictionaryShared::_cloned_dumptime_lambda_proxy_class_dictionary = NULL;
+GrowableArray<InstanceKlass*>* SystemDictionaryShared::_regenerated_klasses = NULL;
+static Array<InstanceKlass*>* _archived_lambda_form_classes = NULL;
 
 // Used by NoClassLoadingMark
 DEBUG_ONLY(bool SystemDictionaryShared::_class_loading_may_happen = true;)
@@ -310,9 +313,12 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
   }
 
   if (k->is_hidden() && !is_registered_lambda_proxy_class(k)) {
-    ResourceMark rm;
-    log_debug(cds)("Skipping %s: Hidden class", k->name()->as_C_string());
-    return true;
+    if (k->name()->starts_with("java/lang/invoke/LambdaForm$")) {
+      // let's try to save DMH classes ...
+    } else {
+      log_debug(cds)("Skipping %s: Hidden class", k->name()->as_C_string());
+      return true;
+    }
   }
 
   InstanceKlass* super = k->java_super();
@@ -498,11 +504,64 @@ void SystemDictionaryShared::set_shared_class_misc_info(InstanceKlass* k, ClassF
   info->_clsfile_crc32 = ClassLoader::crc32(0, (const char*)cfs->buffer(), cfs->length());
 }
 
+void SystemDictionaryShared::add_regenerated_klass(InstanceKlass* orig_klass, InstanceKlass* new_klass) {
+  MutexLocker ml(DumpTimeTable_lock, Mutex::_no_safepoint_check_flag);
+  Arguments::assert_is_dumping_archive();
+  _regenerated_klasses->append(orig_klass);
+  _regenerated_klasses->append(new_klass);
+}
+
+InstanceKlass* SystemDictionaryShared::get_regenerated_klass(InstanceKlass* orig_klass) { // renamed -> _locked
+  assert_lock_strong(DumpTimeTable_lock);
+  Arguments::assert_is_dumping_archive();
+  for (int i = 0; i < _regenerated_klasses->length(); i+= 2) {
+    if (orig_klass == _regenerated_klasses->at(i)) {
+      return _regenerated_klasses->at(i + 1);
+    }
+  }
+  return NULL;
+}
+
+// If ptr is an InstanceKlass or Method that have been regenerated, return the regenerated version.
+// Otherwise return the ptr itself.
+Metadata* SystemDictionaryShared::maybe_get_regenerated_metadata(Metadata* ptr) {
+  if (ptr->is_klass()) {
+    Klass* k = (Klass*)ptr;
+    if (k->is_instance_klass()) {
+      InstanceKlass* ik = InstanceKlass::cast(k);
+      InstanceKlass* regened_ik = SystemDictionaryShared::get_regenerated_klass(ik);
+      if (regened_ik != NULL) {
+        return regened_ik;
+      }
+    }
+  } else if (ptr->is_method()) {
+    Method* m = (Method*)ptr;
+    InstanceKlass* holder = m->method_holder();
+    InstanceKlass* regened_holder = SystemDictionaryShared::get_regenerated_klass(holder);
+    if (regened_holder != NULL) {
+      Array<Method*>* methods = regened_holder->methods();
+      for (int i = 0; i < methods->length(); i++) {
+        Method* regened_m = methods->at(i);
+        if (m->name() == regened_m->name() && m->signature() == regened_m->signature()) {
+          return regened_m;
+        }
+      }
+      // If a Holder class is regenerated, it must have all the methods in the original
+      // class (see JDK-8295102)
+      ShouldNotReachHere();
+    }
+  }
+
+  return ptr;
+}
+
 void SystemDictionaryShared::initialize() {
   if (Arguments::is_dumping_archive()) {
     _dumptime_table = new (ResourceObj::C_HEAP, mtClass) DumpTimeSharedClassTable;
     _dumptime_lambda_proxy_class_dictionary =
                       new (ResourceObj::C_HEAP, mtClass) DumpTimeLambdaProxyClassDictionary;
+    _regenerated_klasses = new (ResourceObj::C_HEAP, mtClassShared) GrowableArray<InstanceKlass*>(8, mtClassShared);
+
   }
 }
 
@@ -567,7 +626,11 @@ void SystemDictionaryShared::validate_before_archiving(InstanceKlass* k) {
   guarantee(!info->is_excluded(), "Should not attempt to archive excluded class %s", name);
   if (is_builtin(k)) {
     if (k->is_hidden()) {
+#if 0
       assert(is_registered_lambda_proxy_class(k), "unexpected hidden class %s", name);
+#else
+      return;
+#endif
     }
     guarantee(!k->is_shared_unregistered_class(),
               "Class loader type must be set for BUILTIN class %s", name);
@@ -1030,6 +1093,27 @@ bool SystemDictionaryShared::check_linking_constraints(Thread* current, Instance
 }
 
 bool SystemDictionaryShared::is_supported_invokedynamic(BootstrapInfo* bsi) {
+  if (bsi->is_method_call() && bsi->bsm().not_null()) { // already resolved
+    int bsm_index = bsi->bsm_index();
+    const constantPoolHandle& pool = bsi->pool();
+
+    if (bsi->pool()->tag_at(bsm_index).is_method_handle()) {
+      int ref_kind       = pool()->method_handle_ref_kind_at(bsm_index);
+      int callee_index   = pool()->method_handle_klass_index_at(bsm_index);
+      Symbol*  name      = pool()->method_handle_name_ref_at(bsm_index);
+      Symbol*  signature = pool()->method_handle_signature_ref_at(bsm_index);
+      constantTag m_tag  = pool()->tag_at(pool()->method_handle_index_at(bsm_index));
+      Klass* callee = ConstantPool::klass_at_if_loaded(pool, callee_index);
+      if (ref_kind == JVM_REF_invokeStatic &&
+          callee != NULL &&
+          callee->name()->equals("java/lang/invoke/StringConcatFactory") &&
+          name->equals("makeConcatWithConstants") &&
+          signature->equals("(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;")) {
+        return true;
+      }
+    }
+  }
+
   LogTarget(Debug, cds, lambda) log;
   if (bsi->arg_values() == NULL || !bsi->arg_values()->is_objArray()) {
     if (log.is_enabled()) {
@@ -1268,6 +1352,7 @@ void SystemDictionaryShared::serialize_vm_classes(SerializeClosure* soc) {
   for (auto id : EnumRange<vmClassID>{}) {
     soc->do_ptr((void**)vmClasses::klass_addr_at(id));
   }
+  soc->do_ptr((void**)&_archived_lambda_form_classes);
 }
 
 const RunTimeClassInfo*
@@ -1550,3 +1635,52 @@ void SystemDictionaryShared::cleanup_lambda_proxy_class_dictionary() {
   CleanupDumpTimeLambdaProxyClassTable cleanup_proxy_classes;
   _dumptime_lambda_proxy_class_dictionary->unlink(&cleanup_proxy_classes);
 }
+
+void SystemDictionaryShared::record_archived_lambda_form_classes() {
+  GrowableArray<Klass*>* klasses = ArchiveBuilder::current()->klasses();
+  GrowableArray<InstanceKlass*> list;
+
+  for (int i = 0; i < klasses->length(); i++) {
+    Klass* k = klasses->at(i);
+    assert(ArchiveBuilder::current()->is_in_buffer_space(k), "must be");
+    if (k->is_instance_klass()) {
+      InstanceKlass* ik = InstanceKlass::cast(k);
+      if (ik->is_hidden() && (ik->name()->starts_with("java/lang/invoke/LambdaForm$MH+") ||
+                              ik->name()->starts_with("java/lang/invoke/LambdaForm$DMH+"))) {
+        list.append(ik);
+      }
+    }
+  }
+
+  _archived_lambda_form_classes = ArchiveBuilder::new_ro_array<InstanceKlass*>(list.length());
+  for (int i = 0; i < list.length(); i++) {
+    _archived_lambda_form_classes->at_put(i, list.at(i));
+    ArchivePtrMarker::mark_pointer(_archived_lambda_form_classes->adr_at(i));
+  }
+}
+
+void SystemDictionaryShared::init_archived_lambda_form_classes(TRAPS) {
+  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
+  Handle null_domain;
+
+  for (int i = 0; i < _archived_lambda_form_classes->length(); i++) {
+    InstanceKlass* ik = _archived_lambda_form_classes->at(i);
+    if (log_is_enabled(Debug, cds, heap)) {
+      ResourceMark rm;
+      log_debug(cds, heap)("Init archived lambda form class: %s ", ik->external_name());
+    }
+
+    assert(ik->super() == vmClasses::Object_klass(), "must be");
+    assert(ik->local_interfaces()->length() == 0, "must be");
+
+    ik->restore_unshareable_info(loader_data, null_domain, NULL, CHECK);
+    SystemDictionary::load_shared_class_misc(ik, loader_data);
+    {
+      MutexLocker mu_r(THREAD, Compile_lock); // add_to_hierarchy asserts this.
+      SystemDictionary::add_to_hierarchy(ik);
+    }
+    assert(ik->is_loaded(), "Must be in at least loaded state");
+    ik->link_class(CHECK); // also set it to initialized ??
+  }
+}
+

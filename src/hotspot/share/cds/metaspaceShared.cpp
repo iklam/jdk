@@ -70,6 +70,7 @@
 #include "runtime/arguments.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -522,6 +523,7 @@ char* VM_PopulateDumpSharedSpace::dump_read_only_tables() {
 
   SystemDictionaryShared::write_to_archive();
   MetaspaceShared::write_method_handle_intrinsics();
+  SystemDictionaryShared::record_archived_lambda_form_classes();
 
   // Write lambform lines into archive
   LambdaFormInvokers::dump_static_archive_invokers();
@@ -672,11 +674,11 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
   // intrinsics that are not useful for normal apps, so save only what we have
   // at this point.
   _method_handle_intrinsics = new (ResourceObj::C_HEAP, mtClassShared) GrowableArray<Method*>(256, mtClassShared);
-  SystemDictionary::get_all_method_handle_intrinsics(_method_handle_intrinsics);
 
   if (!jcmd_request) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
   }
+  SystemDictionary::get_all_method_handle_intrinsics(_method_handle_intrinsics);
 
   // Collect all loaded ClassLoaderData.
   CollectCLDClosure collect_cld(THREAD);
@@ -854,6 +856,19 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
     HeapShared::reset_archived_object_states(CHECK);
   }
 #endif
+
+//#ifndef PRODUCT
+  if (!UseNewCode) {
+    // Do this just before going into the safepoint.
+    // We also assume no other Java threads are running
+    // This makes sure that the MethodType and MethodTypeForm objects are clean (no new invokers, etc)
+    JavaValue result(T_VOID);
+    JavaCalls::call_static(&result, vmClasses::MethodType_klass(),
+                           vmSymbols::dumpSharedArchive(),
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+  }
+//#endif
 
   VM_PopulateDumpSharedSpace op;
   VMThread::execute(&op);

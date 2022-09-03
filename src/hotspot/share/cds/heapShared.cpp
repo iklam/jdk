@@ -31,6 +31,7 @@
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/classLoaderDataShared.hpp"
+#include "classfile/classPrinter.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/moduleEntry.hpp"
 #include "classfile/stringTable.hpp"
@@ -117,9 +118,10 @@ static ArchivableStaticFieldInfo open_archive_subgraph_entry_fields[] = {
   {"java/lang/ModuleLayer",                       "EMPTY_LAYER"},
   {"java/lang/module/Configuration",              "EMPTY_CONFIGURATION"},
   {"jdk/internal/math/FDBigInteger",              "archivedCaches"},
-#ifndef PRODUCT
+  {"java/lang/invoke/DirectMethodHandle",         "archivedObjects"},
+  {"java/lang/invoke/MethodType",                 "archivedObjects"},
+  {"java/lang/invoke/LambdaForm$NamedFunction",   "archivedObjects"},
   {NULL, NULL}, // Extra slot for -XX:ArchiveHeapTestClass
-#endif
   {NULL, NULL},
 };
 
@@ -212,6 +214,7 @@ void HeapShared::reset_archived_object_states(TRAPS) {
 
 HeapShared::ArchivedObjectCache* HeapShared::_archived_object_cache = NULL;
 HeapShared::OriginalObjectTable* HeapShared::_original_object_table = NULL;
+
 oop HeapShared::find_archived_heap_object(oop obj) {
   assert(DumpSharedSpaces, "dump-time only");
   ArchivedObjectCache* cache = archived_object_cache();
@@ -221,6 +224,34 @@ oop HeapShared::find_archived_heap_object(oop obj) {
   } else {
     return NULL;
   }
+}
+
+oop HeapShared::find_archived_mirror(oop orig_mirror) {
+  oop archived = find_archived_heap_object(orig_mirror);
+  if (archived == NULL) {
+    Klass* kk = java_lang_Class::as_Klass(orig_mirror);
+    if (kk == NULL) {
+      log_error(cds, heap)("Unknown java.lang.Class object is in the archived sub-graph: " INTPTR_FORMAT,
+                           p2i(orig_mirror));
+      os::_exit(-1);
+    } else {
+      InstanceKlass* rr = SystemDictionaryShared::get_regenerated_klass(InstanceKlass::cast(kk));
+      if (rr == NULL) {
+        log_error(cds, heap)("Unknown java.lang.Class object is in the archived sub-graph: %s",
+                             kk->external_name());
+        os::_exit(-1);
+      }
+      archived = find_archived_heap_object(rr->java_mirror());
+    }
+  }
+
+  if (archived == NULL) {
+    log_error(cds, heap)("Unknown (2) java.lang.Class object is in the archived sub-graph: " INTPTR_FORMAT,
+                         p2i(orig_mirror));
+    os::_exit(-1);
+  }
+
+  return archived;
 }
 
 int HeapShared::append_root(oop obj) {
@@ -299,6 +330,11 @@ oop HeapShared::archive_object(oop obj) {
     return NULL;
   }
 
+  if (UseNewCode2) {
+    obj->print();
+    tty->cr();
+  }
+
   oop archived_oop = cast_to_oop(G1CollectedHeap::heap()->archive_mem_allocate(len));
   if (archived_oop != NULL) {
     Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(obj), cast_from_oop<HeapWord*>(archived_oop), len);
@@ -327,6 +363,14 @@ oop HeapShared::archive_object(oop obj) {
       log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT " : %s",
                            p2i(obj), p2i(archived_oop), obj->klass()->external_name());
     }
+    if (log_is_enabled(Trace, cds, heap, oops)) {
+      ResourceMark rm;
+      LogTarget(Trace, cds, heap, oops) log;
+      LogStream out(log);
+      out.print("Archived heap object: ");
+      obj->print_on(&out);
+      out.cr();
+    }
   } else {
     log_error(cds, heap)(
       "Cannot allocate space for object " PTR_FORMAT " in archived heap region",
@@ -344,10 +388,15 @@ void HeapShared::archive_klass_objects() {
   for (int i = 0; i < klasses->length(); i++) {
     Klass* k = ArchiveBuilder::get_buffered_klass(klasses->at(i));
 
-    // archive mirror object
+    // archive mirror object and cleaned its fields.
     java_lang_Class::archive_mirror(k);
+  }
 
-    // archive the resolved_referenes array
+  for (int i = 0; i < klasses->length(); i++) {
+    // The resolved_referenes array may contain java mirrors. We
+    // archive them after all the mirrors have been cleaned up in
+    // the above loop.
+    Klass* k = ArchiveBuilder::get_buffered_klass(klasses->at(i));
     if (k->is_instance_klass()) {
       InstanceKlass* ik = InstanceKlass::cast(k);
       ik->constants()->archive_resolved_references();
@@ -359,12 +408,15 @@ void HeapShared::relocate_native_pointers(oop orig_obj, oop archived_obj) {
   if (java_lang_Class::is_instance(orig_obj)) {
     relocate_one_native_pointer(archived_obj, java_lang_Class::klass_offset());
     relocate_one_native_pointer(archived_obj, java_lang_Class::array_klass_offset());
+  } else if (java_lang_invoke_ResolvedMethodName::is_instance(orig_obj)) {
+    relocate_one_native_pointer(archived_obj, java_lang_invoke_ResolvedMethodName::vmtarget_offset());
   }
 }
 
 void HeapShared::relocate_one_native_pointer(oop archived_obj, int offset) {
   Metadata* ptr = archived_obj->metadata_field_acquire(offset);
   if (ptr != NULL) {
+    ptr = SystemDictionaryShared::maybe_get_regenerated_metadata(ptr);
     address buffer_addr = ArchiveBuilder::current()->get_buffered_addr((address)ptr);
     address requested_addr = ArchiveBuilder::current()->to_requested(buffer_addr);
     archived_obj->metadata_field_put(offset, (Metadata*)requested_addr);
@@ -413,26 +465,78 @@ void HeapShared::check_enum_obj(int level,
     oop mirror = ik->java_mirror();
 
     for (JavaFieldStream fs(ik); !fs.done(); fs.next()) {
+      // FIXME -- assert only static final
       if (fs.access_flags().is_static()) {
+        int v;
         fieldDescriptor& fd = fs.field_descriptor();
-        if (fd.field_type() != T_OBJECT && fd.field_type() != T_ARRAY) {
-          guarantee(false, "static field %s::%s must be T_OBJECT or T_ARRAY",
-                    ik->external_name(), fd.name()->as_C_string());
+        switch (fd.field_type()) {
+        case T_OBJECT:
+        case T_ARRAY:
+          {
+            oop oop_field = mirror->obj_field(fd.offset());
+            if (oop_field == NULL) {
+              guarantee(false, "static field %s::%s must not be null",
+                        ik->external_name(), fd.name()->as_C_string());
+            } else if (oop_field->klass() != ik && oop_field->klass() != ik->array_klass_or_null()) {
+              // Allow certain types .....
+              // guarantee(false, "static field %s::%s is of the wrong type",
+              //          ik->external_name(), fd.name()->as_C_string());
+            }
+            oop archived_oop_field = archive_reachable_objects_from(level, subgraph_info, oop_field, is_closed_archive);
+            v = append_root(archived_oop_field);
+            log_info(cds, heap)("Archived enum obj @%d %s::%s (" INTPTR_FORMAT " -> " INTPTR_FORMAT ")",
+                                v, ik->external_name(), fd.name()->as_C_string(),
+                                p2i((oopDesc*)oop_field), p2i((oopDesc*)archived_oop_field));
+            SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          }
+          break;
+        case T_BOOLEAN:
+          v = mirror->bool_field(fd.offset());
+          SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          break;
+        case T_BYTE:
+          v = mirror->byte_field(fd.offset());
+          SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          break;
+        case T_SHORT:
+          v = mirror->short_field(fd.offset());
+          SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          break;
+        case T_CHAR:
+          v = mirror->char_field(fd.offset());
+          SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          break;
+        case T_INT:
+          v = mirror->int_field(fd.offset());
+          SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          break;
+        case T_LONG:
+          {
+            jlong value = mirror->long_field(fd.offset());
+            v = value & 0xffffffff;
+            SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+            v = value > 32;
+            SystemDictionaryShared::add_enum_klass_static_field(ik, v);
+          }
+          break;
+        case T_FLOAT:
+          {            
+            jfloat value = mirror->float_field(fd.offset());
+            int* p = (int*)(&value);
+            SystemDictionaryShared::add_enum_klass_static_field(ik, *p);
+          }
+          break;
+         case T_DOUBLE:
+          {
+            jdouble value = mirror->double_field(fd.offset());
+            int* p = (int*)(&value);
+            SystemDictionaryShared::add_enum_klass_static_field(ik, p[0]);
+            SystemDictionaryShared::add_enum_klass_static_field(ik, p[1]);
+          }
+          break;
+        default:
+          ShouldNotReachHere();
         }
-        oop oop_field = mirror->obj_field(fd.offset());
-        if (oop_field == NULL) {
-          guarantee(false, "static field %s::%s must not be null",
-                    ik->external_name(), fd.name()->as_C_string());
-        } else if (oop_field->klass() != ik && oop_field->klass() != ik->array_klass_or_null()) {
-          guarantee(false, "static field %s::%s is of the wrong type",
-                    ik->external_name(), fd.name()->as_C_string());
-        }
-        oop archived_oop_field = archive_reachable_objects_from(level, subgraph_info, oop_field, is_closed_archive);
-        int root_index = append_root(archived_oop_field);
-        log_info(cds, heap)("Archived enum obj @%d %s::%s (" INTPTR_FORMAT " -> " INTPTR_FORMAT ")",
-                            root_index, ik->external_name(), fd.name()->as_C_string(),
-                            p2i((oopDesc*)oop_field), p2i((oopDesc*)archived_oop_field));
-        SystemDictionaryShared::add_enum_klass_static_field(ik, root_index);
       }
     }
   }
@@ -456,10 +560,56 @@ bool HeapShared::initialize_enum_klass(InstanceKlass* k, TRAPS) {
   int i = 0;
   for (JavaFieldStream fs(k); !fs.done(); fs.next()) {
     if (fs.access_flags().is_static()) {
-      int root_index = info->enum_klass_static_field_root_index_at(i++);
+      int v = info->enum_klass_static_field_root_index_at(i++);
       fieldDescriptor& fd = fs.field_descriptor();
-      assert(fd.field_type() == T_OBJECT || fd.field_type() == T_ARRAY, "must be");
-      mirror->obj_field_put(fd.offset(), get_root(root_index, /*clear=*/true));
+      switch (fd.field_type()) {
+      case T_OBJECT:
+      case T_ARRAY:
+        mirror->obj_field_put(fd.offset(), get_root(v, /*clear=*/true));
+        break;
+      case T_BOOLEAN:
+        mirror->bool_field_put(fd.offset(), v ? true : false);
+        break;
+      case T_BYTE:
+        mirror->byte_field_put(fd.offset(), (jbyte)v);
+        break;
+      case T_SHORT:
+        mirror->short_field_put(fd.offset(), (jshort)v);
+        break;
+      case T_CHAR:
+        mirror->char_field_put(fd.offset(), (jchar)v);
+        break;
+      case T_INT:
+        mirror->int_field_put(fd.offset(), v);
+        break;
+      case T_LONG:
+        {
+          int v2 = info->enum_klass_static_field_root_index_at(i++);
+          jlong lv = v2;
+          lv <<= 32;
+          lv += v;
+          mirror->long_field_put(fd.offset(), lv);
+        }
+        break;
+      case T_FLOAT:
+        {            
+          jfloat* p = (float*)&v;
+          mirror->float_field_put(fd.offset(), *p);
+        }
+        break;
+      case T_DOUBLE:
+        {
+          int v2 = info->enum_klass_static_field_root_index_at(i++);
+          jdouble d = 0;
+          int* p = (int*)(&d);
+          p[0] = v;
+          p[1] = v2;
+          mirror->double_field_put(fd.offset(), d);
+        }
+        break;
+      default:
+        ShouldNotReachHere();
+      }
     }
   }
   return true;
@@ -923,6 +1073,24 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
   }
 }
 
+void HeapShared::init_prelinked_invokedynamic(InstanceKlass* ik, TRAPS) {
+  if (!UseSharedSpaces) {
+    return;
+  }
+  if (
+#ifndef PRODUCT
+      (_test_class_name != NULL && ik->name()->equals(_test_class_name)) ||
+#endif
+      (ik->name()->starts_with("Concat"))) {
+    resolve_or_init("java/lang/invoke/Invokers$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/MethodHandle", true, CHECK);
+    resolve_or_init("java/lang/invoke/DirectMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/DelegatingMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/LambdaForm$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/BoundMethodHandle$Species_L", true, CHECK);
+  }
+}
+
 void HeapShared::initialize_from_archived_subgraph(JavaThread* current, Klass* k) {
   JavaThread* THREAD = current;
   if (!ArchiveHeapLoader::is_fully_available()) {
@@ -1006,6 +1174,16 @@ HeapShared::resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAP
   }
 
   return record;
+}
+
+void HeapShared::resolve_or_init(const char* klass_name, bool do_init, TRAPS) {
+  TempNewSymbol klass_name_sym =  SymbolTable::new_symbol(klass_name);
+  InstanceKlass* k = SystemDictionaryShared::find_builtin_class(klass_name_sym);
+  assert(k != NULL && k->is_shared_boot_class(), "sanity");
+  resolve_or_init(k, false, CHECK);
+  if (do_init) {
+    resolve_or_init(k, true, CHECK);
+  }
 }
 
 void HeapShared::resolve_or_init(Klass* k, bool do_init, TRAPS) {
@@ -1107,6 +1285,10 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
   template <class T> void do_oop_work(T *p) {
     oop obj = RawAccess<>::oop_load(p);
     if (!CompressedOops::is_null(obj)) {
+      if (obj->klass()->is_subtype_of(vmClasses::Reference_klass())) {
+        tty->print_cr("Reference: " INTPTR_FORMAT, p2i(obj));
+      }
+
       assert(!HeapShared::is_archived_object_during_dumptime(obj),
              "original objects must not point to archived objects");
 
@@ -1211,14 +1393,14 @@ oop HeapShared::archive_reachable_objects_from(int level,
     os::_exit(1);
   }
 
-  // java.lang.Class instances cannot be included in an archived object sub-graph. We only support
-  // them as Klass::_archived_mirror because they need to be specially restored at run time.
-  //
-  // If you get an error here, you probably made a change in the JDK library that has added a Class
-  // object that is referenced (directly or indirectly) by static fields.
   if (java_lang_Class::is_instance(orig_obj)) {
-    log_error(cds, heap)("(%d) Unknown java.lang.Class object is in the archived sub-graph", level);
-    os::_exit(1);
+    oop archived_mirror = find_archived_mirror(orig_obj);
+    assert(archived_mirror != NULL, "VM would have exited");
+    // Don't follow the fields -- they have been nulled out when the mirror was copied
+
+    // FIXME - we should preserve the static fields of LambdaForm classes (and other hidden classes?)
+    // so we need to walk the oop fields.
+    return archived_mirror;
   }
 
   oop archived_obj = find_archived_heap_object(orig_obj);
@@ -1238,6 +1420,14 @@ oop HeapShared::archive_reachable_objects_from(int level,
   bool record_klasses_only = (archived_obj != NULL);
   if (archived_obj == NULL) {
     ++_num_new_archived_objs;
+
+    if (java_lang_invoke_LambdaForm::is_instance(orig_obj)) {
+      // FIXME -- ideally, we want to leave the orig_obj alone, but clear the
+      // transformCache in the archived_obj, but WalkOopAndArchiveClosure doesn't
+      // support that yet.
+      java_lang_invoke_LambdaForm::clear_transform_cache(orig_obj);
+    }
+
     archived_obj = archive_object(orig_obj);
     if (archived_obj == NULL) {
       // Skip archiving the sub-graph referenced from the current entry field.
@@ -1424,11 +1614,17 @@ void HeapShared::verify_reachable_objects_from(oop obj, bool is_archived) {
       assert(find_archived_heap_object(obj) == NULL, "must be");
     } else {
       assert(!is_archived_object_during_dumptime(obj), "must be");
-      assert(find_archived_heap_object(obj) != NULL, "must be");
+      if (java_lang_Class::is_instance(obj)) {
+        assert(find_archived_mirror(obj) != NULL, "must be");
+      } else {
+        assert(find_archived_heap_object(obj) != NULL, "must be");
+      }
     }
 
-    VerifySharedOopClosure walker(is_archived);
-    obj->oop_iterate(&walker);
+    if (!java_lang_Class::is_instance(obj)) {
+      VerifySharedOopClosure walker(is_archived);
+      obj->oop_iterate(&walker);
+    }
   }
 }
 #endif
@@ -1658,6 +1854,15 @@ void HeapShared::init_for_dumping(TRAPS) {
     _dumped_interned_strings = new (ResourceObj::C_HEAP, mtClass)DumpedInternedStrings();
     _native_pointers = new GrowableArrayCHeap<Metadata**, mtClassShared>(2048);
     init_subgraph_entry_fields(CHECK);
+
+
+    if (log_is_enabled(Trace, cds, heap, oops)) {
+      ResourceMark rm;
+      LogTarget(Trace, cds, heap, oops) log;
+      LogStream out(log);
+      ClassPrinter::print_classes("ConcatA", 0xff, &out);
+      out.print_cr("======================================================================");
+    }
   }
 }
 

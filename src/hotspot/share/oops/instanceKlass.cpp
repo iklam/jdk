@@ -1015,6 +1015,9 @@ void InstanceKlass::clean_initialization_error_table() {
 void InstanceKlass::initialize_impl(TRAPS) {
   HandleMark hm(THREAD);
 
+  // FIXME -- check for circular dependency?
+  HeapShared::init_prelinked_invokedynamic(this, CHECK);
+
   // Make sure klass is linked (verified) before initialization
   // A class could already be verified, since it has been reflected upon.
   link_class(CHECK);
@@ -3650,6 +3653,10 @@ const char* InstanceKlass::internal_name() const {
   return external_name();
 }
 
+void xxxx() {
+
+}
+
 void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
                                              const ModuleEntry* module_entry,
                                              const ClassFileStream* cfs) const {
@@ -3657,6 +3664,9 @@ void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
     ClassListWriter::write(this, cfs);
   }
 
+  if (name()->equals("ConcatA") || name()->starts_with("Concat") || name()->equals("java/lang/invoke/Invokers$Holder")) {
+    xxxx();
+  }
   if (!log_is_enabled(Info, class, load)) {
     return;
   }

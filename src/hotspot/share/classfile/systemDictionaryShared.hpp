@@ -120,6 +120,8 @@ class RunTimeSharedDictionary;
 class DumpTimeLambdaProxyClassDictionary;
 class LambdaProxyClassKey;
 
+template <typename T> class GrowableArray;
+
 class SharedClassLoadingMark {
  private:
   Thread* THREAD;
@@ -167,6 +169,7 @@ private:
   static DumpTimeSharedClassTable* _cloned_dumptime_table;
   static DumpTimeLambdaProxyClassDictionary* _dumptime_lambda_proxy_class_dictionary;
   static DumpTimeLambdaProxyClassDictionary* _cloned_dumptime_lambda_proxy_class_dictionary;
+  static GrowableArray<InstanceKlass*>* _regenerated_klasses;
 
   static ArchiveInfo _static_archive;
   static ArchiveInfo _dynamic_archive;
@@ -289,6 +292,9 @@ public:
     return (k->shared_classpath_index() != UNREGISTERED_INDEX);
   }
   static bool add_unregistered_class(Thread* current, InstanceKlass* k);
+  static void add_regenerated_klass(InstanceKlass* orig_klass, InstanceKlass* new_klass);
+  static InstanceKlass* get_regenerated_klass(InstanceKlass* orig_klass);
+  static Metadata* maybe_get_regenerated_metadata(Metadata* ptr);
 
   // For repeatable dumping, we
   //   1. clone DumpTimeSharedClassTable, same for DumpTimeLambdaProxyClassDictionary
@@ -320,6 +326,9 @@ public:
   static bool is_dumptime_table_empty() NOT_CDS_RETURN_(true);
   static bool is_supported_invokedynamic(BootstrapInfo* bsi) NOT_CDS_RETURN_(false);
   DEBUG_ONLY(static bool class_loading_may_happen() {return _class_loading_may_happen;})
+
+  static void record_archived_lambda_form_classes();
+  static void init_archived_lambda_form_classes(TRAPS);
 
 #ifdef ASSERT
   // This object marks a critical period when writing the CDS archive. During this

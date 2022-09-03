@@ -272,34 +272,89 @@ void ConstantPool::archive_resolved_references() {
 
   objArrayOop rr = resolved_references();
   Array<u2>* ref_map = reference_map();
-  if (rr != NULL) {
-    int ref_map_len = ref_map == NULL ? 0 : ref_map->length();
-    int rr_len = rr->length();
-    for (int i = 0; i < rr_len; i++) {
-      oop obj = rr->obj_at(i);
-      rr->obj_at_put(i, NULL);
-      if (obj != NULL && i < ref_map_len) {
-        int index = object_to_cp_index(i);
-        if (tag_at(index).is_string()) {
-          oop archived_string = HeapShared::find_archived_heap_object(obj);
-          // Update the reference to point to the archived copy
-          // of this string.
-          // If the string is too large to archive, NULL is
-          // stored into rr. At run time, string_at_impl() will create and intern
-          // the string.
-          rr->obj_at_put(i, archived_string);
+  if (rr == NULL) {
+    return;
+  }
+
+  ResourceMark rm;
+  int ref_map_len = ref_map == NULL ? 0 : ref_map->length();
+  int rr_len = rr->length();
+  GrowableArray<bool> keep_ref(rr_len, rr_len, false);
+
+  // Walk over the first part -- keep only the strings
+  for (int i = 0; i < ref_map_len; i++) {
+    oop obj = rr->obj_at(i);
+    if (obj != NULL) {
+      int index = object_to_cp_index(i);
+      if (tag_at(index).is_string()) {
+        oop archived_string = HeapShared::find_archived_heap_object(obj);
+        // Update the reference to point to the archived copy
+        // of this string.
+        // If the string is too large to archive, NULL is
+        // stored into rr. At run time, string_at_impl() will create and intern
+        // the string.
+        rr->obj_at_put(i, archived_string);
+        keep_ref.at_put(i, true);
+      }
+    }
+  }
+
+  // See what should be kept in the second part
+  Thread* current = Thread::current();
+  if (ik->name()->equals("ConcatA") || ik->name()->starts_with("Concat")) {
+    constantPoolHandle cph(current, this);
+    KlassSubGraphInfo subgraph_info(ik, false);
+    HeapShared::init_seen_objects_table();
+
+    for (int i = 0; i < ik->methods()->length(); i++) {
+      Method* m = ik->methods()->at(i);
+      RawBytecodeStream bcs(methodHandle(current, m));
+      while (!bcs.is_last_bytecode()) {
+        Bytecodes::Code opcode = bcs.raw_next();
+        if (opcode == Bytecodes::_invokedynamic) {
+          int indy_index = Bytes::get_native_u4(bcs.bcp() + 1);
+          int cpc_index = invokedynamic_cp_cache_index(indy_index);
+          ConstantPoolCacheEntry* cpce = cache()->entry_at(cpc_index);
+          if (cpce->method_if_resolved(cph) != NULL &&
+              cpce->appendix_if_resolved(cph) != NULL) {
+            assert(cpce->has_appendix(), "must be");
+            int ref_index = cpce->f2_as_index();
+            assert(ref_index >= ref_map_len, "must be");
+            tty->print_cr("Hello! keep %d", ref_index);
+
+            log_trace(cds, heap, oops)("IOISTART============================================");
+
+            oop orig = cpce->appendix_if_resolved(cph);
+            oop archived = HeapShared::archive_reachable_objects_from(1, &subgraph_info, orig, false);
+
+            rr->obj_at_put(ref_index, archived);
+            keep_ref.at_put(ref_index, true);
+
+            log_trace(cds, heap, oops)("IOIEND============================================");
+          }
         }
       }
     }
 
-    oop archived = HeapShared::archive_object(rr);
-    // If the resolved references array is not archived (too large),
-    // the 'archived' object is NULL. No need to explicitly check
-    // the return value of archive_object() here. At runtime, the
-    // resolved references will be created using the normal process
-    // when there is no archived value.
-    _cache->set_archived_references(archived);
+    HeapShared::delete_seen_objects_table();
   }
+
+  for (int i = 0; i < rr_len; i++) {
+    if (!keep_ref.at(i)) {
+      rr->obj_at_put(i, NULL);
+      if (ik->name()->equals("ConcatA")) {
+        tty->print_cr("%d = %d", i, keep_ref.at(i));
+      }
+    }
+  }
+
+  oop archived = HeapShared::archive_object(rr);
+  // If the resolved references array is not archived (too large),
+  // the 'archived' object is NULL. No need to explicitly check
+  // the return value of archive_object() here. At runtime, the
+  // resolved references will be created using the normal process
+  // when there is no archived value.
+  _cache->set_archived_references(archived);
 }
 
 void ConstantPool::add_dumped_interned_strings() {
@@ -423,9 +478,39 @@ void ConstantPool::remove_unshareable_info() {
     }
   }
 
+  maybe_archive_invokedynamic_callsites(&keep_cpcache);
+
   if (cache() != NULL) {
     // cache() is NULL if this class is not yet linked.
     cache()->remove_unshareable_info(&keep_cpcache);
+  }
+}
+
+void ConstantPool::maybe_archive_invokedynamic_callsites(GrowableArray<bool>* keep_cpcache) {
+  InstanceKlass* ik = pool_holder();
+  Thread* current = Thread::current();
+
+  if (!ik->name()->equals("ConcatA") && !ik->name()->starts_with("Concat")) {
+    return;
+  }
+
+  constantPoolHandle cph(current, this);
+
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    RawBytecodeStream bcs(methodHandle(current, m));
+    while (!bcs.is_last_bytecode()) {
+      Bytecodes::Code opcode = bcs.raw_next();
+      if (opcode == Bytecodes::_invokedynamic) {
+        int indy_index = Bytes::get_native_u4(bcs.bcp() + 1);
+        int cpc_index = invokedynamic_cp_cache_index(indy_index);
+        ConstantPoolCacheEntry* cpce = cache()->entry_at(cpc_index);
+        if (cpce->is_resolved(Bytecodes::_invokedynamic)) {
+          cpce->mark_and_relocate();
+          keep_cpcache->at_put(cpc_index, 1);
+        }
+      }
+    }
   }
 }
 

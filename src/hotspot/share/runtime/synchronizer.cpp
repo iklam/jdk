@@ -866,7 +866,16 @@ static inline intptr_t get_next_hash(Thread* current, oop obj) {
   return value;
 }
 
+static void cccc() {}
+
 intptr_t ObjectSynchronizer::FastHashCode(Thread* current, oop obj) {
+  if (UseNewCode2) {
+    if (obj != NULL && (obj->klass() == vmClasses::MethodType_klass() || obj->klass()->is_subclass_of(vmClasses::MethodHandle_klass()))) {
+      obj->print();
+      tty->cr();
+      cccc();
+    }
+  }
 
   while (true) {
     ObjectMonitor* monitor = NULL;

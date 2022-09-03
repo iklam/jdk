@@ -40,7 +40,7 @@ class LambdaFormInvokers : public AllStatic {
   static Array<Array<char>*>* _static_archive_invokers;
   static GrowableArrayCHeap<OopHandle, mtClassShared>* _regenerated_mirrors;
   static void regenerate_class(char* name, ClassFileStream& st, TRAPS);
-  static void add_regenerated_class(oop regenerated_class);
+  static void add_regenerated_mirror(oop regenerated_mirror);
  public:
   static void append(char* line);
   static void dump_static_archive_invokers();

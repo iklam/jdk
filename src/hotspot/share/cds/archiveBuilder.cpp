@@ -625,6 +625,10 @@ void ArchiveBuilder::make_shallow_copy(DumpRegion *dump_region, SourceObjInfo* s
     if (klass->is_instance_klass()) {
       SystemDictionaryShared::validate_before_archiving(InstanceKlass::cast(klass));
       dump_region->allocate(sizeof(address));
+      if (InstanceKlass::cast(klass)->is_hidden()) {
+        ResourceMark rm;
+        log_debug(cds)("Archived hidden class %s", klass->name()->as_C_string());
+      }
     }
   }
   dest = dump_region->allocate(bytes);

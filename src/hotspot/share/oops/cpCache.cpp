@@ -640,12 +640,25 @@ void ConstantPoolCacheEntry::verify(outputStream* st) const {
 
 #if INCLUDE_CDS
 void ConstantPoolCacheEntry::mark_and_relocate() {
-  assert(is_resolved(Bytecodes::_getfield), "only this is implemented for now");
-  Klass* klass = (Klass*)_f1;
-  assert(klass != NULL && klass->is_klass(), "must be");
-  Klass* buffered = ArchiveBuilder::get_buffered_klass(klass);
-  _f1 = buffered;
-  ArchivePtrMarker::mark_pointer((address*)(&_f1));
+  if (is_resolved(Bytecodes::_getfield)) {
+    Klass* klass = (Klass*)_f1;
+    assert(klass != NULL && klass->is_klass(), "must be");
+    Klass* buffered = ArchiveBuilder::get_buffered_klass(klass);
+    _f1 = buffered;
+    ArchivePtrMarker::mark_pointer((address*)(&_f1));
+  } else if (is_resolved(Bytecodes::_invokedynamic)) {
+    Method* method = (Method*)_f1;
+    assert(method != NULL && method->is_method(), "must be");
+    Method* m = (Method*)SystemDictionaryShared::maybe_get_regenerated_metadata(method);
+    if (m != method) {
+      tty->print_cr("**** found regen method %p -> %p", method, m);
+    }
+    Method* buffered = ArchiveBuilder::current()->get_buffered_addr<Method*>(m);
+    _f1 = buffered;
+    ArchivePtrMarker::mark_pointer((address*)(&_f1));
+  } else {
+    ShouldNotReachHere();
+  }
 }
 #endif
 

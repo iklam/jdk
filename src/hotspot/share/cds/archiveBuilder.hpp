@@ -418,6 +418,9 @@ public:
   template <typename T> T get_source_addr(T buffered_addr) const {
     return (T)get_source_addr((address)buffered_addr);
   }
+  template <typename T> T get_buffered_addr(T buffered_addr) const {
+    return (T)get_buffered_addr((address)buffered_addr);
+  }
 
   // All klasses and symbols that will be copied into the archive
   GrowableArray<Klass*>*  klasses() const { return _klasses; }

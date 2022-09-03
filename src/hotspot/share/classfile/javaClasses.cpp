@@ -1173,7 +1173,9 @@ oop java_lang_Class::archive_mirror(Klass* k) {
           ik->is_shared_app_class())) {
       // Archiving mirror for classes from non-builtin loaders is not
       // supported.
-      return NULL;
+      if (!ik->is_hidden()) { // FIXME
+        return NULL;
+      }
     }
   }
 
@@ -1504,9 +1506,9 @@ BasicType java_lang_Class::primitive_type(oop java_class) {
     // Note: create_basic_type_mirror above initializes ak to a non-null value.
     type = ArrayKlass::cast(ak)->element_type();
   } else {
-    assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
+    //assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
   }
-  assert(Universe::java_mirror(type) == java_class, "must be consistent");
+  //assert(Universe::java_mirror(type) == java_class, "must be consistent");
   return type;
 }
 
@@ -4055,6 +4057,7 @@ int java_lang_invoke_MemberName::_vmindex_offset;
 int java_lang_invoke_ResolvedMethodName::_vmtarget_offset;
 int java_lang_invoke_ResolvedMethodName::_vmholder_offset;
 
+int java_lang_invoke_LambdaForm::_transformCache_offset;
 int java_lang_invoke_LambdaForm::_vmentry_offset;
 
 #define METHODHANDLE_FIELDS_DO(macro) \
@@ -4105,7 +4108,8 @@ void java_lang_invoke_ResolvedMethodName::serialize_offsets(SerializeClosure* f)
 #endif
 
 #define LAMBDAFORM_FIELDS_DO(macro) \
-  macro(_vmentry_offset, k, "vmentry", java_lang_invoke_MemberName_signature, false)
+  macro(_transformCache_offset, k, "transformCache", object_signature, false); \
+  macro(_vmentry_offset, k, "vmentry", java_lang_invoke_MemberName_signature, false);
 
 void java_lang_invoke_LambdaForm::compute_offsets() {
   InstanceKlass* k = vmClasses::LambdaForm_klass();
@@ -4430,6 +4434,12 @@ oop java_lang_invoke_LambdaForm::vmentry(oop lform) {
   return lform->obj_field(_vmentry_offset);
 }
 
+#if INCLUDE_CDS_JAVA_HEAP
+void java_lang_invoke_LambdaForm::clear_transform_cache(oop lform) {
+  assert(is_instance(lform), "wrong type");
+  lform->obj_field_put(_transformCache_offset, NULL);
+}
+#endif
 
 // Support for java_lang_invoke_MethodType
 
@@ -5403,6 +5413,18 @@ void JavaClasses::serialize_offsets(SerializeClosure* soc) {
 bool JavaClasses::is_supported_for_archiving(oop obj) {
   Klass* klass = obj->klass();
 
+#if 0
+  if (klass == vmClasses::ResolvedMethodName_klass() ||
+      klass == vmClasses::MemberName_klass() ||
+      klass == vmClasses::Context_klass()) {
+    if (!UseNewCode2) {
+      obj->print();
+      tty->cr();
+    }
+  }
+#endif
+
+#if 0
   if (klass == vmClasses::ClassLoader_klass() ||  // ClassLoader::loader_data is malloc'ed.
       // The next 3 classes are used to implement java.lang.invoke, and are not used directly in
       // regular Java code. The implementation of java.lang.invoke uses generated hidden classes
@@ -5419,6 +5441,16 @@ bool JavaClasses::is_supported_for_archiving(oop obj) {
       klass->is_subclass_of(vmClasses::Reference_klass())) {
     return false;
   }
+#else
+  if (klass == vmClasses::ClassLoader_klass()) {
+    return false;
+  }
+  if (klass->is_subclass_of(vmClasses::Reference_klass())) {
+    // It's problematic to archive Reference objects. One of the reasons is that
+    // Reference::discovered may pull in unwanted objects (see JDK-8284336)
+    return false;
+  }
+#endif
 
   return true;
 }

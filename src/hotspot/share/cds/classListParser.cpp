@@ -491,6 +491,20 @@ InstanceKlass* ClassListParser::load_class_from_source(Symbol* class_name, TRAPS
   return k;
 }
 
+static char* quote(Symbol* symbol) {
+  // This is almost what we want, except we need to escape the space character, which
+  // is used as the token separator in the classlist
+  stringStream stream;
+  for (char* s = symbol->as_quoted_ascii(); *s != '\0'; s++) {
+    if (*s == ' ') {
+      stream.print("\\u0020");
+    } else {
+      stream.print("%c", *s);
+    }
+  }
+  return stream.as_string();
+}
+
 void ClassListParser::populate_cds_indy_info(const constantPoolHandle &pool, int cp_index, CDSIndyInfo* cii, TRAPS) {
   // Caller needs to allocate ResourceMark.
   int type_index = pool->bootstrap_name_and_type_ref_index_at(cp_index);
@@ -512,6 +526,9 @@ void ClassListParser::populate_cds_indy_info(const constantPoolHandle &pool, int
         cii->add_item(callee->name()->as_C_string());
         cii->add_item(pool->method_handle_name_ref_at(arg)->as_C_string());
         cii->add_item(pool->method_handle_signature_ref_at(arg)->as_C_string());
+      } else if (tag == JVM_CONSTANT_String) {
+        Symbol* s = pool->unresolved_string_at(arg);
+        cii->add_item(quote(s));
       } else {
         ShouldNotReachHere();
       }
@@ -591,9 +608,9 @@ void ClassListParser::resolve_indy_impl(Symbol* class_name_symbol, TRAPS) {
             // resolve it
             Handle recv;
             LinkResolver::resolve_invoke(info, recv, pool, indy_index, Bytecodes::_invokedynamic, CHECK);
-            break;
           }
           cpce->set_dynamic_call(pool, info);
+          break;
         }
       }
     }

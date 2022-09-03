@@ -1075,8 +1075,8 @@ class java_lang_invoke_LambdaForm: AllStatic {
   friend class JavaClasses;
 
  private:
-  static int _vmentry_offset;  // type is MemberName
-
+  static int _transformCache_offset;  // type is Object
+  static int _vmentry_offset;         // type is MemberName
   static void compute_offsets();
 
  public:
@@ -1084,6 +1084,10 @@ class java_lang_invoke_LambdaForm: AllStatic {
 
   // Accessors
   static oop            vmentry(oop lform);
+
+#if INCLUDE_CDS_JAVA_HEAP
+  static void           clear_transform_cache(oop lform);
+#endif
 
   // Testers
   static bool is_subclass(Klass* klass) {

@@ -263,6 +263,7 @@ private:
   static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots;
   static OopHandle _roots;
 
+public: // TEMP
   static void init_seen_objects_table() {
     assert(_seen_objects_table == NULL, "must be");
     _seen_objects_table = new (ResourceObj::C_HEAP, mtClass)SeenObjectsTable();
@@ -272,6 +273,7 @@ private:
     delete _seen_objects_table;
     _seen_objects_table = NULL;
   }
+private: // TEMP
 
   // Statistics (for one round of start_recording_subgraph ... done_recording_subgraph)
   static int _num_new_walked_objs;
@@ -300,6 +302,7 @@ private:
   static void clear_archived_roots_of(Klass* k);
   static const ArchivedKlassSubGraphInfoRecord*
                resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAPS);
+  static void resolve_or_init(const char* klass_name, bool do_init, TRAPS);
   static void resolve_or_init(Klass* k, bool do_init, TRAPS);
   static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record);
 
@@ -314,6 +317,8 @@ private:
   static void fill_failed_loaded_region();
   static void relocate_native_pointers(oop orig_obj, oop archived_obj);
   static void relocate_one_native_pointer(oop archived_obj, int offset);
+  static oop find_archived_mirror(oop orig_mirror);
+
  public:
   static void reset_archived_object_states(TRAPS);
   static void create_archived_object_cache(bool create_orig_table) {
@@ -420,6 +425,7 @@ private:
     return cast_to_oop(to_requested_address(cast_from_oop<address>(dumptime_oop)));
   }
   static bool is_a_test_class_in_unnamed_module(Klass* ik) NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static void init_prelinked_invokedynamic(InstanceKlass* ik, TRAPS);
 };
 
 #if INCLUDE_CDS_JAVA_HEAP
