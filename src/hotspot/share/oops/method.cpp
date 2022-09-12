@@ -1506,6 +1506,16 @@ methodHandle Method::make_method_handle_intrinsic(vmIntrinsics::ID iid,
   return m;
 }
 
+#if INCLUDE_CDS
+void Method::restore_archived_method_handle_intrinsic(methodHandle m, TRAPS) {
+  m->link_method(m, CHECK);
+
+  if (m->intrinsic_id() == vmIntrinsics::_linkToNative) {
+    m->set_interpreter_entry(m->adapter()->get_i2c_entry());
+  }
+}
+#endif
+
 Klass* Method::check_non_bcp_klass(Klass* klass) {
   if (klass != NULL && klass->class_loader() != NULL) {
     if (klass->is_objArray_klass())
