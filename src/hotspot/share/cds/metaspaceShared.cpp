@@ -673,11 +673,11 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
   // intrinsics that are not useful for normal apps, so save only what we have
   // at this point.
   _method_handle_intrinsics = new (ResourceObj::C_HEAP, mtClassShared) GrowableArray<Method*>(256, mtClassShared);
-  SystemDictionary::get_all_method_handle_intrinsics(_method_handle_intrinsics);
 
-  if (!jcmd_request) {
+  if (!jcmd_request && 0) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
   }
+  SystemDictionary::get_all_method_handle_intrinsics(_method_handle_intrinsics);
 
   // Collect all loaded ClassLoaderData.
   CollectCLDClosure collect_cld(THREAD);

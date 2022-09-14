@@ -1679,6 +1679,9 @@ s.writeObject(this.parameterArray());
             //    System.out.println("archived: " +  t.toStringFull());
             //}
         }
+
+        DirectMethodHandle.dumpSharedArchive();
+        LambdaForm.NamedFunction.dumpSharedArchive();
     }
 
     static final boolean DUMP_SET = !"false".equals(sun.security.action.GetPropertyAction.privilegedGetProperty("ioi.dumpset"));

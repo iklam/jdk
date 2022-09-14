@@ -118,7 +118,9 @@ static ArchivableStaticFieldInfo open_archive_subgraph_entry_fields[] = {
   {"java/lang/module/Configuration",              "EMPTY_CONFIGURATION"},
   {"jdk/internal/math/FDBigInteger",              "archivedCaches"},
 #ifndef PRODUCT
+  {"java/lang/invoke/DirectMethodHandle",         "archivedObjects"},
   {"java/lang/invoke/MethodType",                 "archivedObjects"},
+  {"java/lang/invoke/LambdaForm$NamedFunction",   "archivedObjects"},
   {NULL, NULL}, // Extra slot for -XX:ArchiveHeapTestClass
 #endif
   {NULL, NULL},

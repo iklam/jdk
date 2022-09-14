@@ -557,10 +557,16 @@ void Exceptions::debug_check_abort_helper(Handle exception, const char* message)
   debug_check_abort(exception()->klass()->external_name(), message);
 }
 
+static void aaaa() {}
+
 // for logging exceptions
 void Exceptions::log_exception(Handle exception, const char* message) {
   ResourceMark rm;
   Symbol* detail_message = java_lang_Throwable::detail_message(exception());
+  char* s  = exception->print_value_string();
+  if (strstr(s, "NullPo")) {
+    aaaa();
+  }
   if (detail_message != NULL) {
     log_info(exceptions)("Exception <%s: %s>\n thrown in %s",
                          exception->print_value_string(),
