@@ -27,10 +27,14 @@
 #include "cds/classPrelinker.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
+#include "interpreter/bytecodeStream.hpp"
+#include "interpreter/linkResolver.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.hpp"
+#include "oops/cpCache.inline.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
+#include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/handles.inline.hpp"
 
 ClassPrelinker* ClassPrelinker::_singleton = NULL;
@@ -134,6 +138,33 @@ bool ClassPrelinker::can_archive_resolved_klass(ConstantPool* cp, int cp_index) 
   return can_archive_resolved_klass(cp->pool_holder(), resolved_klass);
 }
 
+bool ClassPrelinker::can_archive_resolved_field(ConstantPool* cp, int cp_index) {
+  assert(!is_in_archivebuilder_buffer(cp), "sanity");
+  assert(cp->tag_at(cp_index).is_field(), "must be");
+
+  int klass_cp_index = cp->uncached_klass_ref_index_at(cp_index);
+  Klass* k = get_resolved_klass_or_null(cp, klass_cp_index);
+  if (k == NULL) {
+    return false;
+  }
+  if (!can_archive_resolved_klass(cp->pool_holder(), k)) {
+    // When we access this field at runtime, the target klass may
+    // have a different definition.
+    return false;
+  }
+
+  Symbol* field_name = cp->uncached_name_ref_at(cp_index);
+  Symbol* field_sig = cp->uncached_signature_ref_at(cp_index);
+  fieldDescriptor fd;
+  if (k->find_field(field_name, field_sig, &fd) == NULL || fd.access_flags().is_static()) {
+    // Static field resolution at runtime may trigger initialization, so we can't
+    // archive it.
+    return false;
+  }
+
+  return true;
+}
+
 void ClassPrelinker::dumptime_resolve(InstanceKlass* ik, TRAPS) {
   constantPoolHandle cp(THREAD, ik->constants());
   if (cp->cache() == NULL || cp->reference_map() == NULL) {
@@ -157,6 +188,23 @@ void ClassPrelinker::dumptime_resolve(InstanceKlass* ik, TRAPS) {
     case JVM_CONSTANT_String:
       resolve_string(cp, cp_index, CHECK); // may throw OOM when interning strings.
       break;
+    }
+  }
+
+  // Resolve all getfield/setfield bytecodes if possible.
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    BytecodeStream bcs(methodHandle(THREAD, m));
+    while (!bcs.is_last_bytecode()) {
+      bcs.next();
+      switch (bcs.raw_code()) {
+      case Bytecodes::_getfield:
+      case Bytecodes::_putfield:
+        maybe_resolve_field(ik, m, bcs.raw_code(), bcs.get_index_u2_cpcache(), CHECK);
+        break;
+      default:
+        break;
+      }
     }
   }
 }
@@ -199,6 +247,53 @@ Klass* ClassPrelinker::maybe_resolve_class(constantPoolHandle cp, int cp_index, 
   }
 
   return resolved_klass;
+}
+
+void ClassPrelinker::maybe_resolve_field(InstanceKlass* ik, Method* m, Bytecodes::Code bytecode, int cpc_index, TRAPS) {
+  assert(!is_in_archivebuilder_buffer(ik), "sanity");
+
+  methodHandle mh(THREAD, m);
+  constantPoolHandle cp(THREAD, m->constants());
+
+  int d = cp->decode_cpcache_index(cpc_index);
+  ConstantPoolCacheEntry* cp_cache_entry = cp->cache()->entry_at(d);
+  if (cp_cache_entry->is_resolved(bytecode) || 1) {
+    return;
+  }
+
+  int cp_index = cp->remap_instruction_operand_from_cache(cpc_index);
+  int klass_cp_index = cp->uncached_klass_ref_index_at(cp_index);
+  Klass* k = maybe_resolve_class(cp, klass_cp_index, CHECK); // Should fail only with OOM
+  if (k == NULL) {
+    // When we access this field at runtime, the target klass may
+    // have a different definition.
+    return;
+  }
+
+  if (!can_archive_resolved_field(cp(), cp_index)) {
+    // Field doesn't exist, or is a static field
+    return;
+  }
+
+  fieldDescriptor info;
+  LinkResolver::resolve_field_access(info, cp, cpc_index, mh, bytecode, CHECK); // Should fail only with OOM
+
+  // compute auxiliary field attributes
+  TosState state  = as_TosState(info.field_type());
+
+  Bytecodes::Code get_code = Bytecodes::_getfield;
+  Bytecodes::Code put_code = Bytecodes::_putfield;
+
+  cp_cache_entry->set_field(
+    get_code,
+    put_code,
+    info.field_holder(),
+    info.index(),
+    info.offset(),
+    state,
+    info.access_flags().is_final(),
+    info.access_flags().is_volatile()
+  );
 }
 
 #if INCLUDE_CDS_JAVA_HEAP

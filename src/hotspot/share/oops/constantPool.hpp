@@ -697,6 +697,7 @@ class ConstantPool : public Metadata {
   void archive_resolved_references() NOT_CDS_JAVA_HEAP_RETURN;
   void add_dumped_interned_strings() NOT_CDS_JAVA_HEAP_RETURN;
   bool maybe_archive_resolved_klass_at(int cp_index);
+  bool maybe_archive_resolved_fieldref_at(int cp_index, int cpc_index);
   void remove_unshareable_info();
   void restore_unshareable_info(TRAPS);
 #endif
