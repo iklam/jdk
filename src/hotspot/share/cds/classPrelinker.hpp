@@ -25,8 +25,9 @@
 #ifndef SHARE_CDS_CLASSPRELINKER_HPP
 #define SHARE_CDS_CLASSPRELINKER_HPP
 
-#include "oops/oopsHierarchy.hpp"
+#include "interpreter/bytecodes.hpp"
 #include "memory/allocation.hpp"
+#include "oops/oopsHierarchy.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
@@ -63,11 +64,12 @@ class ClassPrelinker :  public StackObj {
   static bool is_in_archivebuilder_buffer(T p) {
     return is_in_archivebuilder_buffer((address)(p));
   }
+
   void resolve_string(constantPoolHandle cp, int cp_index, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   Klass* maybe_resolve_class(constantPoolHandle cp, int cp_index, TRAPS);
+  void maybe_resolve_field(InstanceKlass* ik, Method* m, Bytecodes::Code bytecode, int cpc_index, TRAPS);
   bool can_archive_resolved_klass(InstanceKlass* cp_holder, Klass* resolved_klass);
   Klass* find_loaded_class(JavaThread* THREAD, oop class_loader, Symbol* name);
-  Klass* get_resolved_klass_or_null(ConstantPool* cp, int cp_index);
 
   static ClassPrelinker* _singleton;
 public:
@@ -92,6 +94,13 @@ public:
   // the result in the CDS archive? Returns true if cp_index is guaranteed to
   // resolve to the same InstanceKlass* at both dump time and run time.
   bool can_archive_resolved_klass(ConstantPool* cp, int cp_index);
+
+  // Similar to can_archive_resolved_klass() -- returns true if cp_index is
+  // guaranteed to resolve to the same result both dump time and run time.
+  bool can_archive_resolved_field(ConstantPool* cp, int cp_index);
+
+  // Helper function
+  Klass* get_resolved_klass_or_null(ConstantPool* cp, int cp_index);
 };
 
 #endif // SHARE_CDS_CLASSPRELINKER_HPP
