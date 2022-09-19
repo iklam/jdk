@@ -365,7 +365,7 @@ void HeapShared::relocate_native_pointers(oop orig_obj, oop archived_obj) {
 void HeapShared::relocate_one_native_pointer(oop archived_obj, int offset) {
   Metadata* ptr = archived_obj->metadata_field_acquire(offset);
   if (ptr != NULL) {
-    address buffer_addr = ArchiveBuilder::current()->get_dumped_addr((address)ptr);
+    address buffer_addr = ArchiveBuilder::current()->get_buffered_addr((address)ptr);
     address requested_addr = ArchiveBuilder::current()->to_requested(buffer_addr);
     archived_obj->metadata_field_put(offset, (Metadata*)requested_addr);
 
