@@ -331,6 +331,11 @@ oop HeapShared::archive_object(oop obj) {
     return NULL;
   }
 
+  if (UseNewCode2) {
+    obj->print();
+    tty->cr();
+  }
+
   oop archived_oop = cast_to_oop(G1CollectedHeap::heap()->archive_mem_allocate(len));
   if (archived_oop != NULL) {
     Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(obj), cast_from_oop<HeapWord*>(archived_oop), len);
@@ -377,7 +382,7 @@ void HeapShared::archive_klass_objects() {
     Klass* k = ArchiveBuilder::get_buffered_klass(klasses->at(i));
 
     // archive mirror object
-    java_lang_Class::archive_mirror(k);
+    oop x = java_lang_Class::archive_mirror(k);
 
     // archive the resolved_referenes array
     if (k->is_instance_klass()) {
@@ -396,9 +401,42 @@ void HeapShared::relocate_native_pointers(oop orig_obj, oop archived_obj) {
   }
 }
 
+static Metadata* maybe_get_regenerated_metadata(Metadata* ptr) {
+  // FIXME -- only Metadata types are supported.
+  if (ptr->is_klass()) {
+    Klass* k = (Klass*)ptr;
+    if (k->is_instance_klass()) {
+      InstanceKlass* ik = InstanceKlass::cast(k);
+      InstanceKlass* regened_ik = SystemDictionaryShared::get_regenerated_klass(ik);
+      if (regened_ik != NULL) {
+        return regened_ik;
+      }
+    }
+  } else if (ptr->is_method()) {
+    Method* m = (Method*)ptr;
+    InstanceKlass* holder = m->method_holder();
+    InstanceKlass* regened_holder = SystemDictionaryShared::get_regenerated_klass(holder);
+    if (regened_holder != NULL) {
+      Array<Method*>* methods = regened_holder->methods();
+      for (int i = 0; i < methods->length(); i++) {
+        Method* regened_m = methods->at(i);
+        if (m->name() == regened_m->name() && m->signature() == regened_m->signature()) {
+          return regened_m;
+        }
+      }
+      // FIXME -- if we use a custom class list, the regenerated Holder class may not have all the methods
+      // that are in the original Holder class.
+      ShouldNotReachHere();
+    }
+  }
+
+  return ptr;
+}
+
 void HeapShared::relocate_one_native_pointer(oop archived_obj, int offset) {
   Metadata* ptr = archived_obj->metadata_field_acquire(offset);
   if (ptr != NULL) {
+    ptr = maybe_get_regenerated_metadata(ptr);
     address buffer_addr = ArchiveBuilder::current()->get_buffered_addr((address)ptr);
     address requested_addr = ArchiveBuilder::current()->to_requested(buffer_addr);
     archived_obj->metadata_field_put(offset, (Metadata*)requested_addr);

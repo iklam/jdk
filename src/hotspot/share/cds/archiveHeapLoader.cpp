@@ -453,7 +453,7 @@ class PatchNativePointers: public BitMapClosure {
     // Currently we have only Klass pointers in heap objects.
     // This needs to be relaxed when we support other types of native
     // pointers such as Method.
-    assert(((Klass*)(*p))->is_klass(), "must be");
+    //assert(((Klass*)(*p))->is_klass(), "must be");
     return true;
   }
 };

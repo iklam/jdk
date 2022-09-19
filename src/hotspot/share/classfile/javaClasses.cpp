@@ -1173,7 +1173,9 @@ oop java_lang_Class::archive_mirror(Klass* k) {
           ik->is_shared_app_class())) {
       // Archiving mirror for classes from non-builtin loaders is not
       // supported.
-      return NULL;
+      if (!ik->is_hidden()) { // FIXME
+        return NULL;
+      }
     }
   }
 
@@ -5425,8 +5427,10 @@ bool JavaClasses::is_supported_for_archiving(oop obj) {
   if (klass == vmClasses::ResolvedMethodName_klass() ||
       klass == vmClasses::MemberName_klass() ||
       klass == vmClasses::Context_klass()) {
-    obj->print();
-    tty->cr();
+    if (!UseNewCode2) {
+      obj->print();
+      tty->cr();
+    }
   }
 #if 0
   if (klass == vmClasses::ClassLoader_klass() ||  // ClassLoader::loader_data is malloc'ed.

@@ -59,16 +59,15 @@ class Invokers {
             INV_LIMIT          =  VH_INV_GENERIC + VarHandle.AccessMode.COUNT;
 
     static boolean savedOne = false;
-    void clean() {
+    void cleanInvokers() {
         for (int i = 0; i < invokers.length; i++) {
             if (invokers[i] != null) {
                 MethodHandle mh = invokers[i];
                 if (mh instanceof DirectMethodHandle) {
+                    // OK to archive all DirectMethodHandles
+                    // FIXME -- test more combinations with custom HelloLambda classlist
                     if (!savedOne) {
-                        savedOne = true;
-                        //DirectMethodHandle dmh = (DirectMethodHandle)mh;
-                        //System.out.println(dmh);
-                        //System.out.println(dmh.internalForm());
+                        //savedOne = true;
                         continue;
                     }
                 }

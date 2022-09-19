@@ -313,8 +313,13 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
 
   if (k->is_hidden() && !is_registered_lambda_proxy_class(k)) {
     ResourceMark rm;
-    log_debug(cds)("Skipping %s: Hidden class", k->name()->as_C_string());
-    return true;
+    char* s = k->name()->as_C_string();
+    if (strstr(s, "java/lang/invoke/LambdaForm$DMH+") == s) {
+      // let's try to save DMH classes ...
+    } else {
+      log_debug(cds)("Skipping %s: Hidden class", k->name()->as_C_string());
+      return true;
+    }
   }
 
   InstanceKlass* super = k->java_super();
@@ -589,7 +594,11 @@ void SystemDictionaryShared::validate_before_archiving(InstanceKlass* k) {
   guarantee(!info->is_excluded(), "Should not attempt to archive excluded class %s", name);
   if (is_builtin(k)) {
     if (k->is_hidden()) {
+#if 0
       assert(is_registered_lambda_proxy_class(k), "unexpected hidden class %s", name);
+#else
+      return;
+#endif
     }
     guarantee(!k->is_shared_unregistered_class(),
               "Class loader type must be set for BUILTIN class %s", name);

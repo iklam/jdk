@@ -1596,7 +1596,19 @@ s.writeObject(this.parameterArray());
         ArrayList<MethodType> archived = new ArrayList<>();
 
         boolean canArchive(Class<?> c) {
-            if (c == String.class || c == Object.class || c.isPrimitive()) {
+            if (c == String.class || c == Object.class || c.isPrimitive()
+                || c == DelegatingMethodHandle.class
+                || c == DirectMethodHandle.class
+                || c == BoundMethodHandle.class
+                || c == CallSite.class
+                || c == Class.class
+                || c == LambdaForm.class
+                || c == MethodHandle.class
+                || c == MethodType.class
+                || c == MemberName.class
+                || c == MethodHandles.Lookup.class
+                || c == Object[].class
+                ) {
                 return true;
             } else {
                 return false;
@@ -1634,22 +1646,25 @@ s.writeObject(this.parameterArray());
             //}
 
             if (!canArchive(t.rtype) || !canArchive(t.ptypes)) {
+                //System.out.println(t);
                 droppedTypes.add(t);
                 return null;
             }
 
             if (t != t.form.erasedType && clean(t.form.erasedType) == null) {
+                //System.out.println(t);
                 droppedTypes.add(t);
                 return null;
             }
             if (t != t.form.basicType && clean(t.form.basicType) == null) {
+                //System.out.println(t);
                 droppedTypes.add(t);
                 return null;
             }
 
-            t.form.clean();
+            t.form.cleanMethodTypeForm();
             if (t.invokers != null) {
-                t.invokers.clean();
+                t.invokers.cleanInvokers();
             }
 
             archived.add(t);
