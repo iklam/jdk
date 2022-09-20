@@ -31,6 +31,7 @@
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/classLoaderDataShared.hpp"
+#include "classfile/classPrinter.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/moduleEntry.hpp"
 #include "classfile/stringTable.hpp"
@@ -363,6 +364,14 @@ oop HeapShared::archive_object(oop obj) {
       ResourceMark rm;
       log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT " : %s",
                            p2i(obj), p2i(archived_oop), obj->klass()->external_name());
+    }
+    if (log_is_enabled(Trace, cds, heap, oops)) {
+      ResourceMark rm;
+      LogTarget(Trace, cds, heap, oops) log;
+      LogStream out(log);
+      out.print("Archived heap object: ");
+      obj->print_on(&out);
+      out.cr();
     }
   } else {
     log_error(cds, heap)(
@@ -1850,6 +1859,15 @@ void HeapShared::init_for_dumping(TRAPS) {
     _dumped_interned_strings = new (ResourceObj::C_HEAP, mtClass)DumpedInternedStrings();
     _native_pointers = new GrowableArrayCHeap<Metadata**, mtClassShared>(2048);
     init_subgraph_entry_fields(CHECK);
+
+
+    if (log_is_enabled(Trace, cds, heap, oops)) {
+      ResourceMark rm;
+      LogTarget(Trace, cds, heap, oops) log;
+      LogStream out(log);
+      ClassPrinter::print_classes("ConcatA", 0xff, &out);
+      out.print_cr("======================================================================");
+    }
   }
 }
 
