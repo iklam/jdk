@@ -423,9 +423,44 @@ void ConstantPool::remove_unshareable_info() {
     }
   }
 
+  maybe_archive_invokedynamic_callsites(&keep_cpcache);
+
   if (cache() != NULL) {
     // cache() is NULL if this class is not yet linked.
     cache()->remove_unshareable_info(&keep_cpcache);
+  }
+}
+
+void ConstantPool::maybe_archive_invokedynamic_callsites(GrowableArray<bool>* keep_cpcache) {
+  InstanceKlass* ik = pool_holder();
+  Thread* current = Thread::current();
+
+  if (!ik->name()->equals("ConcatA")) {
+    return;
+  }
+
+  constantPoolHandle cph(current, this);
+
+  for (int i = 0; i < ik->methods()->length(); i++) {
+    Method* m = ik->methods()->at(i);
+    RawBytecodeStream bcs(methodHandle(current, m));
+    while (!bcs.is_last_bytecode()) {
+      Bytecodes::Code opcode = bcs.raw_next();
+      switch (opcode) {
+      case Bytecodes::_invokedynamic: {
+          int indy_index = Bytes::get_native_u4(bcs.bcp() + 1);
+          int cpc_index = invokedynamic_cp_cache_index(indy_index);
+          ConstantPoolCacheEntry* cpce = cache()->entry_at(cpc_index);
+          if (cpce->method_if_resolved(cph) != NULL && 
+              cpce->appendix_if_resolved(cph) == NULL) { // Need this because resolved references are not archived
+            tty->print_cr("Hello!");
+          }
+        }
+        break;
+      default:
+        break;
+      }
+    }
   }
 }
 
