@@ -75,6 +75,8 @@ class GCTimer;
 class EventClassLoad;
 class Symbol;
 
+template <class E> class GrowableArray;
+
 class SystemDictionary : AllStatic {
   friend class BootstrapInfo;
   friend class vmClasses;
@@ -234,6 +236,9 @@ public:
   static Method* find_method_handle_intrinsic(vmIntrinsicID iid,
                                               Symbol* signature,
                                               TRAPS);
+
+  static void get_all_method_handle_intrinsics(GrowableArray<Method*>* methods) NOT_CDS_RETURN;
+  static void restore_archived_method_handle_intrinsics() NOT_CDS_RETURN;
 
   // compute java_mirror (java.lang.Class instance) for a type ("I", "[[B", "LFoo;", etc.)
   // Either the accessing_klass or the CL/PD can be non-null, but not both.

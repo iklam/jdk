@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "classfile/stringTable.hpp"
 #include "classfile/symbolTable.hpp"
+#include "classfile/systemDictionary.hpp"
 #include "code/icBuffer.hpp"
 #include "compiler/compiler_globals.hpp"
 #include "gc/shared/collectedHeap.hpp"
@@ -164,6 +165,7 @@ jint init_globals() {
   }
   stubRoutines_init2(); // note: StubRoutines need 2-phase init
   MethodHandles::generate_adapters();
+  SystemDictionary::restore_archived_method_handle_intrinsics();
 
   // All the flags that get adjusted by VM_Version_init and os::init_2
   // have been set so dump the flags now.
