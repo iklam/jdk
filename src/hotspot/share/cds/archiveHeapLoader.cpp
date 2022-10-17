@@ -95,7 +95,7 @@ void ArchiveHeapLoader::init_narrow_oop_decoding(address dumptime_base, intx run
 
     // Get the narrowOop of (dhe - 0x8), as dhe may be outside of the heap range (right at the boundary)
     uintx d_narrow = (uintx(dumptime_heap_end) - uintx(dumptime_base) - 0x8) >> shift;
-    uintx r_narrow = (uintx)(CompressedOops::encode_not_null(cast_to_oop(move_dhe - 0x8)));
+    uintx r_narrow = (uintx)(CompressedOops::encode_not_null(cast_to_oop(moved_dhe - 0x8)));
     assert(d_narrow <= 0xffffffff, "must be 32-bit");
     assert(r_narrow <= 0xffffffff, "must be 32-bit");
 
