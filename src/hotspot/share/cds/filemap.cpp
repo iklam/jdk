@@ -2092,7 +2092,7 @@ address FileMapInfo::heap_region_runtime_start_address(FileMapRegion* spc) {
 
 void FileMapInfo::set_shared_heap_runtime_delta(ptrdiff_t delta) {
   if (UseCompressedOops) {
-    ArchiveHeapLoader::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
+    ArchiveHeapLoader::init_narrow_oop_decoding(narrow_oop_base(), delta, narrow_oop_shift(), header()->heap_end());
   } else {
     ArchiveHeapLoader::set_runtime_delta(delta);
   }

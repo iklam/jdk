@@ -62,9 +62,66 @@ bool ArchiveHeapLoader::_loading_failed = false;
 // Support for mapped heap (!UseCompressedOops only)
 ptrdiff_t ArchiveHeapLoader::_runtime_delta = 0;
 
-void ArchiveHeapLoader::init_narrow_oop_decoding(address base, int shift) {
-  _narrow_oop_base = base;
+static uint32_t _quick_delta;
+static bool _use_quick_delta;
+static bool _quick_move_up;
+
+void ArchiveHeapLoader::init_narrow_oop_decoding(address dumptime_base, intx runtime_delta,
+                                                 int shift, address dumptime_heap_end) {
+  _narrow_oop_base = dumptime_base + runtime_delta;
   _narrow_oop_shift = shift;
+
+  // Optimization: if dumptime shift is the same as runtime shift, we can perform a
+  // quick conversion from "dumptime narrowOop" -> "runtime narrowOop".
+  //
+  // dumptime_heap_end:  this is the 64-bit address of the end of the heap at dumptime.
+  // runtime_delta:      the end of the dumptime heap us shifted by this amount to move it into
+  //                     the runtime heap.
+  //
+  if (shift == CompressedOops::shift() && dumptime_heap_end != NULL) {
+    _use_quick_delta = true;
+    assert(dumptime_base < dumptime_heap_end, "must be");
+    address moved_dhe = dumptime_heap_end + runtime_delta;
+
+    //         |<------ d_narrow -------->|
+    //         v                          v
+    //         dumptime_base              dumptime_heap_end (dhe)
+    //                                    |
+    //                                    +<----runtime_delta---->+
+    //                                                            |
+    //  CompressedOops::base()                                    v      at runtime, dumptime_heap_end is moved to here  
+    //               v                                            * <--  is moved to here (moved_dhe)
+    //               |<--------------r_narrow-------------------->|
+
+    // Get the narrowOop of (dhe - 0x8), as dhe may be outside of the heap range (right at the boundary)
+    uintx d_narrow = (uintx(dumptime_heap_end) - uintx(dumptime_base) - 0x8) >> shift;
+    uintx r_narrow = (uintx)(CompressedOops::encode_not_null(cast_to_oop(move_dhe - 0x8)));
+    assert(d_narrow <= 0xffffffff, "must be 32-bit");
+    assert(r_narrow <= 0xffffffff, "must be 32-bit");
+
+    // To convert a dumptime narrowOop to a dumptime narrowOop, simply add (or subtract) the
+    // difference between d_narrow and r_narrow. Use unsigned math so it's easier to understand.
+    uintx n;
+    if (d_narrow > r_narrow) {
+      // Move downwards
+      _quick_move_up = false;
+      n = d_narrow - r_narrow;
+    } else {
+      _quick_move_up = true;
+      n = r_narrow - d_narrow;
+    }
+    assert(n <= 0xffffffff, "must be 32-bit");
+    _quick_delta = (uint32_t)n;
+
+    if (_quick_delta == 0) {
+      log_info(cds)("CDS heap data relocation unnecessary (quick_delta == 0)");
+    } else {
+      log_info(cds)("CDS heap data relocation quick_delta = %s%u", _quick_move_up ? "+" : "-", _quick_delta);
+    }
+  } else {
+    log_info(cds)("CDS heap data quick relocation not possible");
+    _use_quick_delta = false;
+  }
 }
 
 void ArchiveHeapLoader::fixup_regions() {
@@ -97,8 +154,39 @@ class PatchCompressedEmbeddedPointers: public BitMapClosure {
     narrowOop* p = _start + offset;
     narrowOop v = *p;
     assert(!CompressedOops::is_null(v), "null oops should have been filtered out at dump time");
-    oop o = ArchiveHeapLoader::decode_from_archive(v);
+    oop o = ArchiveHeapLoader::decode_from_mapped_archive(v);
     RawAccess<IS_NOT_NULL>::oop_store(p, o);
+    return true;
+  }
+};
+
+template<bool MOVE_UP>
+class PatchCompressedEmbeddedPointersQuick: public BitMapClosure {
+  narrowOop* _start;
+  uint32_t _delta;
+
+ public:
+  PatchCompressedEmbeddedPointersQuick(narrowOop* start, uint32_t delta) : _start(start), _delta(delta) {}
+
+  bool do_bit(size_t offset) {
+    narrowOop* p = _start + offset;
+    narrowOop v = *p;
+    assert(!CompressedOops::is_null(v), "null oops should have been filtered out at dump time");
+    narrowOop new_v;
+    if (MOVE_UP) {
+      new_v = static_cast<narrowOop>(static_cast<uint32_t>(v) + _delta);
+      assert(new_v > v, "overflow");
+    } else {
+      new_v = static_cast<narrowOop>(static_cast<uint32_t>(v) - _delta);
+      assert(new_v < v, "underflow");
+    }
+    assert(!CompressedOops::is_null(new_v), "should never relocate to narrowOop(0)");
+#ifdef ASSERT
+    oop o1 = ArchiveHeapLoader::decode_from_mapped_archive(v);
+    oop o2 = CompressedOops::decode_not_null(new_v);
+    assert(o1 == o2, "quick delta must work");
+#endif
+    RawAccess<IS_NOT_NULL>::oop_store(p, new_v);
     return true;
   }
 };
@@ -132,8 +220,22 @@ void ArchiveHeapLoader::patch_embedded_pointers(MemRegion region, address oopmap
 #endif
 
   if (UseCompressedOops) {
-    PatchCompressedEmbeddedPointers patcher((narrowOop*)region.start());
-    bm.iterate(&patcher);
+    if (_use_quick_delta) {
+      if (_quick_delta == 0) {
+        // No need to patch!
+      } else {
+        if (_quick_move_up) {
+          PatchCompressedEmbeddedPointersQuick<true> patcher((narrowOop*)region.start(), _quick_delta);
+          bm.iterate(&patcher);
+        } else {
+          PatchCompressedEmbeddedPointersQuick<false> patcher((narrowOop*)region.start(), _quick_delta);
+          bm.iterate(&patcher);
+        }
+      }
+    } else {
+      PatchCompressedEmbeddedPointers patcher((narrowOop*)region.start());
+      bm.iterate(&patcher);
+    }
   } else {
     PatchUncompressedEmbeddedPointers patcher((oop*)region.start());
     bm.iterate(&patcher);
@@ -346,7 +448,7 @@ bool ArchiveHeapLoader::load_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegi
 }
 
 bool ArchiveHeapLoader::load_heap_regions(FileMapInfo* mapinfo) {
-  init_narrow_oop_decoding(mapinfo->narrow_oop_base(), mapinfo->narrow_oop_shift());
+  init_narrow_oop_decoding(mapinfo->narrow_oop_base(), 0, mapinfo->narrow_oop_shift(), NULL);
 
   LoadedArchiveHeapRegion loaded_regions[MetaspaceShared::max_num_heap_regions];
   memset(loaded_regions, 0, sizeof(loaded_regions));

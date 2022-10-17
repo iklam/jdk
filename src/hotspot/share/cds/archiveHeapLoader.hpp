@@ -102,7 +102,10 @@ public:
   // function instead.
   inline static oop decode_from_archive(narrowOop v) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
 
-  static void init_narrow_oop_decoding(address base, int shift) NOT_CDS_JAVA_HEAP_RETURN;
+  // More efficient version, but works only when ArchiveHeap is mapped.
+  inline static oop decode_from_mapped_archive(narrowOop v) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+
+  static void init_narrow_oop_decoding(address dumptime_base, intx runtime_delta, int shift, address dumptime_heap_end) NOT_CDS_JAVA_HEAP_RETURN;
 
   static void patch_embedded_pointers(MemRegion region, address oopmap,
                                       size_t oopmap_in_bits) NOT_CDS_JAVA_HEAP_RETURN;
@@ -151,6 +154,9 @@ private:
   static bool is_in_loaded_heap(uintptr_t o) {
     return (_loaded_heap_bottom <= o && o < _loaded_heap_top);
   }
+
+  template<bool IS_MAPPED>
+  inline static oop decode_from_archive_impl(narrowOop v) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
 
 public:
 
