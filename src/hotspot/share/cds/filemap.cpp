@@ -2092,6 +2092,36 @@ address FileMapInfo::heap_region_runtime_start_address(FileMapRegion* spc) {
 
 void FileMapInfo::set_shared_heap_runtime_delta(ptrdiff_t delta) {
   if (UseCompressedOops) {
+    // This is the value of CompressedOops::base() at dumptime
+    address dumptime_base = narrow_oop_base();
+
+    // This region is known to always exist in the CDS heap.
+    int region_index = MetaspaceShared::first_closed_heap_region;
+
+    // This region is known to be inside both the dumptime heap and runtime heap:
+    FileMapRegion* region = space_at(region_index);
+
+    // The base address of this region at dumptime
+    address dumptime_region_base = dumptime_base + (region->mapping_offset() << narrow_oop_shift());
+
+    // The base address of this region at runtime
+    address runtime_region_base = dumptime_region_base + delta;
+
+    log_info(cds)("Dumptime heap = [" INTPTR_FORMAT " - " INTPTR_FORMAT "]", p2i(header()->heap_begin()), p2i(header()->heap_end()));
+    log_info(cds)("Runtime  heap = [" INTPTR_FORMAT " - " INTPTR_FORMAT "]", p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
+
+    log_info(cds)("Region %d: dumptime base = %p, runtime base = %p, delta = " INTX_FORMAT, region_index, dumptime_region_base, runtime_region_base, delta);
+
+    narrowOop d_narrow = (narrowOop)((dumptime_region_base - dumptime_base) >> narrow_oop_shift());
+    narrowOop r_narrow = CompressedOops::encode_not_null(cast_to_oop(runtime_region_base));
+    log_info(cds)("d_narrow of dumptime_region_base = %u", (uint)d_narrow);
+    log_info(cds)("r_narrow of  runtime_region_base = %u", (uint)r_narrow);
+
+    if (CompressedOops::shift() == narrow_oop_shift()) {
+      // runtime shift is the same as dumptime shift
+      log_info(cds)("quick_delta = " INTX_FORMAT, intx(r_narrow) - intx(d_narrow));
+    }
+
     ArchiveHeapLoader::init_narrow_oop_decoding(narrow_oop_base(), delta, narrow_oop_shift(), header()->heap_end());
   } else {
     ArchiveHeapLoader::set_runtime_delta(delta);
