@@ -233,6 +233,8 @@ private:
                                         // some expensive operations.
   bool   _use_full_module_graph;        // Can we use the full archived module graph?
   size_t _ptrmap_size_in_bits;          // Size of pointer relocation bitmap
+  unsigned int _common_app_classpath_prefix_size; // size of the common prefix of app class paths
+                                        //    0 if no common prefix exists
   char* from_mapped_offset(size_t offset) const {
     return mapped_base_address() + offset;
   }
@@ -245,7 +247,7 @@ public:
   unsigned int header_size()              const { return _generic_header._header_size;              }
   unsigned int base_archive_name_offset() const { return _generic_header._base_archive_name_offset; }
   unsigned int base_archive_name_size()   const { return _generic_header._base_archive_name_size;   }
-  unsigned int common_app_classpath_prefix_size() const { return _generic_header._common_app_classpath_prefix_size; }
+  unsigned int common_app_classpath_prefix_size() const { return _common_app_classpath_prefix_size; }
 
   void set_magic(unsigned int m)                    { _generic_header._magic = m;       }
   void set_crc(int crc_value)                       { _generic_header._crc = crc_value; }
@@ -253,7 +255,7 @@ public:
   void set_header_size(unsigned int s)              { _generic_header._header_size = s;              }
   void set_base_archive_name_offset(unsigned int s) { _generic_header._base_archive_name_offset = s; }
   void set_base_archive_name_size(unsigned int s)   { _generic_header._base_archive_name_size = s;   }
-  void set_common_app_classpath_prefix_size(unsigned int s) { _generic_header._common_app_classpath_prefix_size = s; }
+  void set_common_app_classpath_prefix_size(unsigned int s) { _common_app_classpath_prefix_size = s; }
 
   size_t core_region_alignment()           const { return _core_region_alignment; }
   int obj_alignment()                      const { return _obj_alignment; }

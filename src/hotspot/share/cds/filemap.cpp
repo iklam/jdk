@@ -1346,11 +1346,13 @@ public:
   }
 
   bool check_common_app_classpath_prefix_len() {
+#if 0
     int common_path_size = _header->_common_app_classpath_prefix_size;
     if (common_path_size < 0) {
       FileMapInfo::fail_continue("common app classpath prefix len < 0");
       return false;
     }
+#endif
     return true;
   }
 };
