@@ -132,6 +132,7 @@ private:
   static bool _loading_failed;
 
   // UseCompressedOops only: Used by decode_from_archive
+  static bool    _narrow_oop_base_initialized;
   static address _narrow_oop_base;
   static int     _narrow_oop_shift;
 

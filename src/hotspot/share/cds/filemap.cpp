@@ -2180,7 +2180,8 @@ bool FileMapInfo::can_use_heap_regions() {
 }
 
 // The address where the bottom of this shared heap region should be mapped
-// at runtime
+// at runtime. The returned value depends on the current relocating setting as recorded
+// in ArchiveHeapLoader.
 address FileMapInfo::heap_region_runtime_start_address(FileMapRegion* spc) {
   assert(UseSharedSpaces, "runtime only");
   spc->assert_is_heap_region();
@@ -2425,7 +2426,6 @@ void FileMapInfo::patch_heap_embedded_pointers() {
     return;
   }
 
-  log_info(cds)("patching heap embedded pointers");
   patch_heap_embedded_pointers(closed_heap_regions,
                                num_closed_heap_regions,
                                MetaspaceShared::first_closed_heap_region);
@@ -2440,7 +2440,18 @@ void FileMapInfo::patch_heap_embedded_pointers(MemRegion* regions, int num_regio
   char* bitmap_base = map_bitmap_region();
   assert(bitmap_base != NULL, "must have already been mapped");
   for (int i=0; i<num_regions; i++) {
-    FileMapRegion* r = region_at(i + first_region_idx);
+    int region_idx = i + first_region_idx;
+    FileMapRegion* r = region_at(region_idx);
+    if (UseCompressedOops) {
+      // These are the encoded values for the bottom of this region at dump-time vs run-time:
+      narrowOop dt_encoded_bottom = CompressedOops::narrow_oop_cast(r->mapping_offset());
+      narrowOop rt_encoded_bottom = CompressedOops::encode_not_null(cast_to_oop(regions[i].start()));
+      log_info(cds)("patching heap embedded pointers for %s: 0x%8x -> 0x%8x",
+                    region_name(region_idx), (uint)dt_encoded_bottom, (uint)rt_encoded_bottom);
+      // TODO JDK-8269736: if we have the same narrow_oop_shift between dumptime and runtime,
+      // Each embedded pointer P can be updated by:
+      //     P += (rt_encoded_bottom - dt_encoded_bottom)
+    }
     ArchiveHeapLoader::patch_embedded_pointers(
       regions[i],
       (address)(region_at(MetaspaceShared::bm)->mapped_base()) + r->oopmap_offset(),
@@ -2606,14 +2617,9 @@ bool FileMapInfo::initialize() {
 }
 
 char* FileMapInfo::region_addr(int idx) {
+  assert(UseSharedSpaces, "must be");
   FileMapRegion* r = region_at(idx);
-  if (HeapShared::is_heap_region(idx)) {
-    assert(DumpSharedSpaces, "The following doesn't work at runtime");
-    return r->used() > 0 ?
-          (char*)start_address_as_decoded_with_current_oop_encoding_mode(r) : NULL;
-  } else {
-    return r->mapped_base();
-  }
+  return r->mapped_base();
 }
 
 // The 2 core spaces are RW->RO
@@ -2731,17 +2737,6 @@ bool FileMapInfo::validate_header() {
   } else {
     return DynamicArchive::validate(this);
   }
-}
-
-// Check if a given address is within one of the shared regions
-bool FileMapInfo::is_in_shared_region(const void* p, int idx) {
-  assert(idx == MetaspaceShared::ro ||
-         idx == MetaspaceShared::rw, "invalid region index");
-  char* base = region_addr(idx);
-  if (p >= base && p < base + region_at(idx)->used()) {
-    return true;
-  }
-  return false;
 }
 
 // Unmap mapped regions of shared space.

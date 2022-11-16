@@ -488,7 +488,6 @@ public:
     CDS_ONLY(return _memory_mapping_failed;)
     NOT_CDS(return false;)
   }
-  bool is_in_shared_region(const void* p, int idx) NOT_CDS_RETURN_(false);
 
   // Stop CDS sharing and unmap CDS regions.
   static void stop_sharing_and_unmap(const char* msg);

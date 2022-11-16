@@ -42,9 +42,9 @@
 bool ArchiveHeapLoader::_closed_regions_mapped = false;
 bool ArchiveHeapLoader::_open_regions_mapped = false;
 bool ArchiveHeapLoader::_is_loaded = false;
+bool    ArchiveHeapLoader::_narrow_oop_base_initialized;
 address ArchiveHeapLoader::_narrow_oop_base;
 int     ArchiveHeapLoader::_narrow_oop_shift;
-
 // Support for loaded heap.
 uintptr_t ArchiveHeapLoader::_loaded_heap_bottom = 0;
 uintptr_t ArchiveHeapLoader::_loaded_heap_top = 0;
@@ -63,6 +63,7 @@ bool ArchiveHeapLoader::_loading_failed = false;
 ptrdiff_t ArchiveHeapLoader::_runtime_delta = 0;
 
 void ArchiveHeapLoader::init_narrow_oop_decoding(address base, int shift) {
+  _narrow_oop_base_initialized = true;
   _narrow_oop_base = base;
   _narrow_oop_shift = shift;
 }
