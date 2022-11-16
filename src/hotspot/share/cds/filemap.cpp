@@ -2067,16 +2067,6 @@ size_t FileMapInfo::read_bytes(void* buffer, size_t count) {
   return count;
 }
 
-address FileMapInfo::decode_start_address(FileMapRegion* spc, bool with_current_oop_encoding_mode) {
-  size_t offset = spc->mapping_offset();
-  narrowOop n = CompressedOops::narrow_oop_cast(offset);
-  if (with_current_oop_encoding_mode) {
-    return cast_from_oop<address>(CompressedOops::decode_raw_not_null(n));
-  } else {
-    return cast_from_oop<address>(ArchiveHeapLoader::decode_from_archive(n));
-  }
-}
-
 static MemRegion *closed_heap_regions = NULL;
 static MemRegion *open_heap_regions = NULL;
 static int num_closed_heap_regions = 0;
@@ -2091,7 +2081,8 @@ bool FileMapInfo::has_heap_regions() {
 // current oop encoding mode. This range may be different than the one seen at
 // dump time due to encoding mode differences. The result is used in determining
 // if/how these regions should be relocated at run time.
-MemRegion FileMapInfo::get_heap_regions_range_with_current_oop_encoding_mode() {
+MemRegion FileMapInfo::get_heap_regions_requested_range_for_compressed_oops() {
+  assert(UseCompressedOops, "must be");
   address start = (address) max_uintx;
   address end   = NULL;
 
@@ -2101,7 +2092,8 @@ MemRegion FileMapInfo::get_heap_regions_range_with_current_oop_encoding_mode() {
     FileMapRegion* r = region_at(i);
     size_t size = r->used();
     if (size > 0) {
-      address s = start_address_as_decoded_with_current_oop_encoding_mode(r);
+      narrowOop n = CompressedOops::narrow_oop_cast(r->mapping_offset());
+      address s = cast_from_oop<address>(CompressedOops::decode_raw_not_null(n));
       address e = s + size;
       if (start > s) {
         start = s;
@@ -2182,14 +2174,16 @@ bool FileMapInfo::can_use_heap_regions() {
 // The address where the bottom of this shared heap region should be mapped
 // at runtime. The returned value depends on the current relocating setting as recorded
 // in ArchiveHeapLoader.
-address FileMapInfo::heap_region_runtime_start_address(FileMapRegion* spc) {
+address FileMapInfo::heap_region_runtime_start_address(FileMapRegion* r) {
   assert(UseSharedSpaces, "runtime only");
-  spc->assert_is_heap_region();
+  r->assert_is_heap_region();
   if (UseCompressedOops) {
-    return start_address_as_decoded_from_archive(spc);
+    size_t offset = r->mapping_offset();
+    narrowOop n = CompressedOops::narrow_oop_cast(offset);
+    return cast_from_oop<address>(ArchiveHeapLoader::decode_from_archive(n));
   } else {
-    assert(is_aligned(spc->mapping_offset(), sizeof(HeapWord)), "must be");
-    return header()->heap_begin() + spc->mapping_offset() + ArchiveHeapLoader::runtime_delta();
+    assert(is_aligned(r->mapping_offset(), sizeof(HeapWord)), "must be");
+    return header()->heap_begin() + r->mapping_offset() + ArchiveHeapLoader::runtime_delta();
   }
 }
 
@@ -2223,7 +2217,7 @@ void FileMapInfo::map_heap_regions_impl() {
     _heap_pointers_need_patching = true;
   } else {
     if (UseCompressedOops) {
-      MemRegion range = get_heap_regions_range_with_current_oop_encoding_mode();
+      MemRegion range = get_heap_regions_requested_range_for_compressed_oops();
       if (!CompressedOops::is_in(range)) {
         log_info(cds)("CDS heap data needs to be relocated because");
         log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
@@ -2266,8 +2260,8 @@ void FileMapInfo::map_heap_regions_impl() {
     // Also: D = bottom of a heap region at dump time
     //       R = bottom of a heap region at run time
     //
-    // FileMapRegion* spc = ...;
-    //   address D = header()->heap_begin() + spc->mapping_offset();
+    // FileMapRegion* r = ...;
+    //   address D = header()->heap_begin() + r->mapping_offset();
     //   address R = D + delta;
     address dumptime_heap_end = header()->heap_end();
     address runtime_heap_end = UseCompressedOops ? CompressedOops::end() :
