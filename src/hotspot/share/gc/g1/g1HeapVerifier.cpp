@@ -319,6 +319,7 @@ public:
 void G1HeapVerifier::verify_ready_for_archiving() {
   VerifyReadyForArchivingRegionClosure cl;
   G1CollectedHeap::heap()->heap_region_iterate(&cl);
+#if 0
   if (cl.has_holes()) {
     log_warning(gc, verify)("All free regions should be at the top end of the heap, but"
                             " we found holes. This is probably caused by (unmovable) humongous"
@@ -330,6 +331,7 @@ void G1HeapVerifier::verify_ready_for_archiving() {
                             " may lead to fragmentation while"
                             " writing archive heap memory regions.");
   }
+#endif
 }
 
 class VerifyArchivePointerRegionClosure: public HeapRegionClosure {

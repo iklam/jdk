@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
+#include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/cdsHeapVerifier.hpp"
 #include "cds/heapShared.hpp"
@@ -143,7 +144,7 @@ OopHandle HeapShared::_roots;
 bool HeapShared::is_archived_object_during_dumptime(oop p) {
   assert(HeapShared::can_write(), "must be");
   assert(DumpSharedSpaces, "this function is only used with -Xshare:dump");
-  return Universe::heap()->is_archived_object(p);
+  return ArchiveHeapWriter::is_in_buffer(p);
 }
 #endif
 
@@ -301,14 +302,14 @@ oop HeapShared::archive_object(oop obj) {
     return ao;
   }
 
-  int len = obj->size();
-  if (G1CollectedHeap::heap()->is_archive_alloc_too_large(len)) {
+  size_t len = obj->size();
+  if (ArchiveHeapWriter::is_object_too_large(len)) {
     log_debug(cds, heap)("Cannot archive, object (" PTR_FORMAT ") is too large: " SIZE_FORMAT,
-                         p2i(obj), (size_t)obj->size());
+                         p2i(obj), obj->size());
     return NULL;
   }
 
-  oop archived_oop = cast_to_oop(G1CollectedHeap::heap()->archive_mem_allocate(len));
+  oop archived_oop = cast_to_oop(ArchiveHeapWriter::allocate_buffer_for(obj));
   if (archived_oop != NULL) {
     count_allocation(len);
     Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(obj), cast_from_oop<HeapWord*>(archived_oop), len);
@@ -480,6 +481,7 @@ bool HeapShared::initialize_enum_klass(InstanceKlass* k, TRAPS) {
 }
 
 void HeapShared::run_full_gc_in_vm_thread() {
+#if 0 // no longer necessary
   if (HeapShared::can_write()) {
     // Avoid fragmentation while archiving heap objects.
     // We do this inside a safepoint, so that no further allocation can happen after GC
@@ -496,12 +498,13 @@ void HeapShared::run_full_gc_in_vm_thread() {
       log_info(cds)("Run GC done");
     }
   }
+#endif
 }
 
 void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
                                  GrowableArray<MemRegion>* open_regions) {
 
-  G1HeapVerifier::verify_ready_for_archiving();
+  //G1HeapVerifier::verify_ready_for_archiving();
 
   {
     NoSafepointVerifier nsv;
@@ -517,13 +520,15 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
     log_info(cds)("Dumping objects to closed archive heap region ...");
     copy_closed_objects(closed_regions);
 
+    ArchiveHeapWriter::start_open_region_objects();
+
     log_info(cds)("Dumping objects to open archive heap region ...");
     copy_open_objects(open_regions);
 
     CDSHeapVerifier::verify();
   }
 
-  G1HeapVerifier::verify_archive_regions();
+  //G1HeapVerifier::verify_archive_regions();
   StringTable::write_shared_table(_dumped_interned_strings);
 }
 
@@ -538,7 +543,7 @@ void HeapShared::copy_interned_strings() {
 void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
   assert(HeapShared::can_write(), "must be");
 
-  G1CollectedHeap::heap()->begin_archive_alloc_range();
+// G1CollectedHeap::heap()->begin_archive_alloc_range();
 
   // Archive interned string objects
   copy_interned_strings();
@@ -547,14 +552,18 @@ void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
                            true /* is_closed_archive */,
                            false /* is_full_module_graph */);
 
+#if 0
   G1CollectedHeap::heap()->end_archive_alloc_range(closed_regions,
                                                    os::vm_allocation_granularity());
+#endif
 }
 
 void HeapShared::copy_open_objects(GrowableArray<MemRegion>* open_regions) {
   assert(HeapShared::can_write(), "must be");
 
+#if 0
   G1CollectedHeap::heap()->begin_archive_alloc_range(true /* open */);
+#endif
 
   java_lang_Class::archive_basic_type_mirrors();
 
@@ -572,8 +581,10 @@ void HeapShared::copy_open_objects(GrowableArray<MemRegion>* open_regions) {
 
   copy_roots();
 
+#if 0
   G1CollectedHeap::heap()->end_archive_alloc_range(open_regions,
                                                    os::vm_allocation_granularity());
+#endif
 }
 
 // Copy _pending_archive_roots into an objArray
@@ -587,7 +598,7 @@ void HeapShared::copy_roots() {
   int length = _pending_roots != NULL ? _pending_roots->length() : 0;
   size_t size = objArrayOopDesc::object_size(length);
   Klass* k = Universe::objectArrayKlassObj(); // already relocated to point to archived klass
-  HeapWord* mem = G1CollectedHeap::heap()->archive_mem_allocate(size);
+  HeapWord* mem = ArchiveHeapWriter::allocate_raw_buffer(size);
 
   memset(mem, 0, size * BytesPerWord);
   {

@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
+#include "cds/archiveHeapWriter.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/cdsProtectionDomain.hpp"
 #include "cds/classListWriter.hpp"
@@ -819,9 +820,10 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
   log_info(cds)("Rewriting and linking classes: done");
 
 #if INCLUDE_CDS_JAVA_HEAP
-    if (use_full_module_graph()) {
-      HeapShared::reset_archived_object_states(CHECK);
-    }
+  ArchiveHeapWriter::init(CHECK);
+  if (use_full_module_graph()) {
+    HeapShared::reset_archived_object_states(CHECK);
+  }
 #endif
 
   VM_PopulateDumpSharedSpace op;
