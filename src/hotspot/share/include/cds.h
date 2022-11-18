@@ -55,7 +55,7 @@ typedef struct CDSFileMapRegion {
                               // or to adapt to the available ranges in the Java heap range).
                               // - For an RO/RW region, the requested address is:
                               //     FileMapHeader::requested_base_address() + _mapping_offset
-                              // - For a heap region, the requested address is calculated in
+                              // - For a heap region, the requested address is:
                               //     +UseCompressedOops: /*runtime*/ CompressedOops::base() + _mapping_offset
                               //     -UseCompressedOops: FileMapHeader::heap_begin() + _mapping_offset
                               //     See FileMapInfo::heap_region_requested_address().

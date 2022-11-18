@@ -42,7 +42,8 @@
 bool ArchiveHeapLoader::_closed_regions_mapped = false;
 bool ArchiveHeapLoader::_open_regions_mapped = false;
 bool ArchiveHeapLoader::_is_loaded = false;
-bool    ArchiveHeapLoader::_narrow_oop_base_initialized;
+bool    ArchiveHeapLoader::_mapped_heap_relocation_initialized = false;
+bool    ArchiveHeapLoader::_narrow_oop_base_initialized = false;
 address ArchiveHeapLoader::_narrow_oop_base;
 int     ArchiveHeapLoader::_narrow_oop_shift;
 // Support for loaded heap.
@@ -60,9 +61,21 @@ intx ArchiveHeapLoader::_runtime_offset_3 = 0;
 bool ArchiveHeapLoader::_loading_failed = false;
 
 // Support for mapped heap (!UseCompressedOops only)
-ptrdiff_t ArchiveHeapLoader::_runtime_delta = 0;
+ptrdiff_t ArchiveHeapLoader::_mapped_heap_delta = 0;
+
+void ArchiveHeapLoader::init_mapped_heap_relocation(ptrdiff_t delta, int dumptime_oop_shift) {
+  assert(!_mapped_heap_relocation_initialized, "only once");
+  if (!UseCompressedOops) {
+    assert(dumptime_oop_shift == 0, "sanity");
+  }
+  assert(can_map(), "sanity");
+  init_narrow_oop_decoding(CompressedOops::base() + delta, dumptime_oop_shift);
+  _mapped_heap_delta = delta;
+  _mapped_heap_relocation_initialized = true;
+}
 
 void ArchiveHeapLoader::init_narrow_oop_decoding(address base, int shift) {
+  assert(!_narrow_oop_base_initialized, "only once");
   _narrow_oop_base_initialized = true;
   _narrow_oop_base = base;
   _narrow_oop_shift = shift;
@@ -113,7 +126,7 @@ class PatchUncompressedEmbeddedPointers: public BitMapClosure {
     oop* p = _start + offset;
     intptr_t dumptime_oop = (intptr_t)((void*)*p);
     assert(dumptime_oop != 0, "null oops should have been filtered out at dump time");
-    intptr_t runtime_oop = dumptime_oop + ArchiveHeapLoader::runtime_delta();
+    intptr_t runtime_oop = dumptime_oop + ArchiveHeapLoader::mapped_heap_delta();
     RawAccess<IS_NOT_NULL>::oop_store(p, cast_to_oop(runtime_oop));
     return true;
   }

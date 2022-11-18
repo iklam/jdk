@@ -2081,8 +2081,7 @@ bool FileMapInfo::has_heap_regions() {
 // current oop encoding mode. This range may be different than the one seen at
 // dump time due to encoding mode differences. The result is used in determining
 // if/how these regions should be relocated at run time.
-MemRegion FileMapInfo::get_heap_regions_requested_range_for_compressed_oops() {
-  assert(UseCompressedOops, "must be");
+MemRegion FileMapInfo::get_heap_regions_requested_range() {
   address start = (address) max_uintx;
   address end   = NULL;
 
@@ -2094,6 +2093,8 @@ MemRegion FileMapInfo::get_heap_regions_requested_range_for_compressed_oops() {
     if (size > 0) {
       address s = heap_region_requested_address(r);
       address e = s + size;
+      log_info(cds)("Heap region %s = " INTPTR_FORMAT " - " INTPTR_FORMAT " = "  SIZE_FORMAT_W(8) " bytes",
+                    region_name(i), p2i(s), p2i(e), size);
       if (start > s) {
         start = s;
       }
@@ -2103,6 +2104,10 @@ MemRegion FileMapInfo::get_heap_regions_requested_range_for_compressed_oops() {
     }
   }
   assert(end != NULL, "must have at least one used heap region");
+
+  start = align_down(start, HeapRegion::GrainBytes);
+  end = align_up(end, HeapRegion::GrainBytes);
+
   return MemRegion((HeapWord*)start, (HeapWord*)end);
 }
 
@@ -2170,6 +2175,7 @@ bool FileMapInfo::can_use_heap_regions() {
   return true;
 }
 
+// The actual address of this region during dump time.
 address FileMapInfo::heap_region_dumptime_address(FileMapRegion* r) {
   assert(UseSharedSpaces, "runtime only");
   r->assert_is_heap_region();
@@ -2181,32 +2187,42 @@ address FileMapInfo::heap_region_dumptime_address(FileMapRegion* r) {
   }
 }
 
+
+// The address where this region can be mapped into the runtime heap without
+// patching any of the pointers that are embedded in this region.
 address FileMapInfo::heap_region_requested_address(FileMapRegion* r) {
   assert(UseSharedSpaces, "runtime only");
   r->assert_is_heap_region();
   assert(is_aligned(r->mapping_offset(), sizeof(HeapWord)), "must be");
+  assert(ArchiveHeapLoader::can_map(), "cannot be used by ArchiveHeapLoader::can_load() mode");
   if (UseCompressedOops) {
-    return CompressedOops::base() + r->mapping_offset();
+    // We can avoid relocation if each region's offset from the runtime CompressedOops::base()
+    // is the same as its offset from the CompressedOops::base() during dumptime.
+    // Note that CompressedOops::base() may be different between dumptime and runtime.
+    //
+    // Example:
+    // Dumptime base = 0x1000 and shift is 0. We have a region at address 0x2000. There's a
+    // narrowOop P stored in this region that points to an object at address 0x2200.
+    // P's encoded value is 0x1200.
+    //
+    // Runtime base = 0x4000 and shift is also 0. If we map this region at 0x5000, then
+    // the value P can remain 0x1200. The decoded address = (0x4000 + (0x1200 << 0)) = 0x5200,
+    // which is the runtime location of the referenced object.
+    return /*runtime*/ CompressedOops::base() + r->mapping_offset();
   } else {
-    return header()->heap_begin() + r->mapping_offset();
+    // We can avoid relocation if each region is mapped into the exact same address
+    // where it was at dump time.
+    return /*dumptime*/header()->heap_begin() + r->mapping_offset();
   }
 }
 
-// The address where the bottom of this shared heap region should be mapped
-// at runtime. The returned value depends on the current relocating setting as recorded
-// in ArchiveHeapLoader.
+// The address where the bottom of this shared heap region is actually mapped
+// at runtime.
 address FileMapInfo::heap_region_mapped_address(FileMapRegion* r) {
   assert(UseSharedSpaces, "runtime only");
   r->assert_is_heap_region();
   assert(ArchiveHeapLoader::can_map(), "cannot be used by ArchiveHeapLoader::can_load() mode");
-  return heap_region_requested_address(r) + ArchiveHeapLoader::runtime_delta();
-}
-
-void FileMapInfo::set_shared_heap_runtime_delta(ptrdiff_t delta) {
-  ArchiveHeapLoader::set_runtime_delta(delta);
-  if (UseCompressedOops) {
-    ArchiveHeapLoader::init_narrow_oop_decoding(narrow_oop_base() + delta, narrow_oop_shift());
-  }
+  return heap_region_requested_address(r) + ArchiveHeapLoader::mapped_heap_delta();
 }
 
 //
@@ -2224,71 +2240,46 @@ void FileMapInfo::set_shared_heap_runtime_delta(ptrdiff_t delta) {
 // regions may be added. GC may mark and update references in the mapped
 // open archive objects.
 void FileMapInfo::map_heap_regions_impl() {
-  if (narrow_oop_mode() != CompressedOops::mode() ||
-      narrow_oop_base() != CompressedOops::base() ||
-      narrow_oop_shift() != CompressedOops::shift()) {
+  // G1 -- always map at the very top of the heap to avoid fragmentation.
+  assert(UseG1GC, "the following code assumes G1");
+  _heap_pointers_need_patching = false;
+
+  MemRegion heap_range = G1CollectedHeap::heap()->reserved();
+  MemRegion archive_range = get_heap_regions_requested_range();
+
+  address heap_end = (address)heap_range.end();
+  address archive_end = (address)archive_range.end();
+
+  assert(is_aligned(heap_end, HeapRegion::GrainBytes), "must be");
+  assert(is_aligned(archive_end, HeapRegion::GrainBytes), "must be");
+
+  if (UseCompressedOops && 
+      (narrow_oop_mode() != CompressedOops::mode() ||
+       narrow_oop_shift() != CompressedOops::shift())) {
     log_info(cds)("CDS heap data needs to be relocated because the archive was created with an incompatible oop encoding mode.");
     _heap_pointers_need_patching = true;
+  } else if (!heap_range.contains(archive_range)) {
+    log_info(cds)("CDS heap data needs to be relocated because");
+    log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(archive_range.start()), p2i(archive_range.end()));
+    log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT, p2i(heap_range.start()), p2i(heap_range.end()));
+    _heap_pointers_need_patching = true;
   } else {
-    if (UseCompressedOops) {
-      MemRegion range = get_heap_regions_requested_range_for_compressed_oops();
-      if (!CompressedOops::is_in(range)) {
-        log_info(cds)("CDS heap data needs to be relocated because");
-        log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
-        log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT, p2i(CompressedOops::begin()), p2i(CompressedOops::end()));
-        _heap_pointers_need_patching = true;
-      } else if (header()->heap_end() != CompressedOops::end()) {
-        log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
-        _heap_pointers_need_patching = true;
-      }
-    } else {
-      MemRegion range((HeapWord*)header()->heap_begin(), (HeapWord*)header()->heap_end());
-      if (!G1CollectedHeap::heap()->reserved().contains(range)) {
-        log_info(cds)("CDS heap data needs to be relocated because");
-        log_info(cds)("the desired range " PTR_FORMAT " - "  PTR_FORMAT, p2i(range.start()), p2i(range.end()));
-        log_info(cds)("is outside of the heap " PTR_FORMAT " - "  PTR_FORMAT,
-            p2i((address)G1CollectedHeap::heap()->reserved().start()), p2i((address)G1CollectedHeap::heap()->reserved().end()));
-        _heap_pointers_need_patching = true;
-      } else if (header()->heap_end() != (address)G1CollectedHeap::heap()->reserved().end()) {
-        log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
-        _heap_pointers_need_patching = true;
-      }
+    assert(heap_end >= archive_end, "must be");
+    if (heap_end != archive_end) {
+      log_info(cds)("CDS heap data needs to be relocated to the end of the runtime heap to reduce fragmentation");
+      _heap_pointers_need_patching = true;
     }
   }
 
   ptrdiff_t delta = 0;
   if (_heap_pointers_need_patching) {
-    //   dumptime heap end  ------------v
-    //   [      |archived heap regions| ]         run time heap end -----v
-    //                                       [   |archived heap regions| ]
-    //          ^
-    //          D                                ^
-    //                                           R
-    //                                  |<-----delta-------------------->|
-    //
-    // At dump time, the archived heap regions were near the top of the heap.
-    // At run time, if the heap ends at a different address, we need to
-    // move them near to top of the run time heap. This can be done by
-    // the simple math of adding the delta as shown above.
-    //
-    // Also: D = bottom of a heap region at dump time
-    //       R = bottom of a heap region at run time
-    //
-    // FileMapRegion* r = ...;
-    //   address D = header()->heap_begin() + r->mapping_offset();
-    //   address R = D + delta;
-    address dumptime_heap_end = header()->heap_end();
-    address runtime_heap_end = UseCompressedOops ? CompressedOops::end() :
-                                                   (address)G1CollectedHeap::heap()->reserved().end();
-    delta = runtime_heap_end - dumptime_heap_end;
+    delta = heap_end - archive_end;
   }
 
   log_info(cds)("CDS heap data relocation delta = " INTX_FORMAT " bytes", delta);
 
-  set_shared_heap_runtime_delta(delta);
-
   FileMapRegion* r = region_at(MetaspaceShared::first_closed_heap_region);
-  address relocated_closed_heap_region_bottom = heap_region_mapped_address(r);
+  address relocated_closed_heap_region_bottom = heap_region_requested_address(r) + delta;
 
   if (!is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes)) {
     // Align the bottom of the closed archive heap regions at G1 region boundary.
@@ -2300,10 +2291,12 @@ void FileMapInfo::map_heap_regions_impl() {
     log_info(cds)("CDS heap data needs to be relocated lower by a further " SIZE_FORMAT
                   " bytes to " INTX_FORMAT " to be aligned with HeapRegion::GrainBytes",
                   align, delta);
-    set_shared_heap_runtime_delta(delta);
-    relocated_closed_heap_region_bottom = heap_region_mapped_address(r);
     _heap_pointers_need_patching = true;
   }
+
+  ArchiveHeapLoader::init_mapped_heap_relocation(delta, narrow_oop_shift());
+  relocated_closed_heap_region_bottom = heap_region_mapped_address(r);
+
   assert(is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes),
          "must be");
 
@@ -2459,6 +2452,12 @@ void FileMapInfo::patch_heap_embedded_pointers(MemRegion* regions, int num_regio
       // TODO JDK-8269736: if we have the same narrow_oop_shift between dumptime and runtime,
       // Each embedded pointer P can be updated by:
       //     P += (rt_encoded_bottom - dt_encoded_bottom)
+      //
+      // TODO:
+      // if (dt_encoded_bottom == rt_encoded_bottom && narrow_oop_shift() == CompressedOops::shift()) {
+      //   //nothing to do
+      //   return;
+      // }
     }
     ArchiveHeapLoader::patch_embedded_pointers(
       regions[i],

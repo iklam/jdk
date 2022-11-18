@@ -77,11 +77,13 @@ inline oop read_string_from_compact_hashtable(address base_address, u4 offset) {
     narrowOop v = CompressedOops::narrow_oop_cast(offset);
     return ArchiveHeapLoader::decode_from_archive(v);
   } else {
+    assert(ArchiveHeapLoader::is_mapped() && !ArchiveHeapLoader::is_loaded(),
+           "Pointer relocation is not supported for loaded-heaps for uncompessed oops");
     intptr_t dumptime_oop = (uintptr_t)offset;
     assert(dumptime_oop != 0, "null strings cannot be interned");
     intptr_t runtime_oop = dumptime_oop +
                            (intptr_t)FileMapInfo::current_info()->header()->heap_begin() +
-                           (intptr_t)ArchiveHeapLoader::runtime_delta();
+                           (intptr_t)ArchiveHeapLoader::mapped_heap_delta();
     return (oop)cast_to_oop(runtime_oop);
   }
 }
