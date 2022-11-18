@@ -39,7 +39,7 @@
 #define CDS_ARCHIVE_MAGIC 0xf00baba2
 #define CDS_DYNAMIC_ARCHIVE_MAGIC 0xf00baba8
 #define CDS_GENERIC_HEADER_SUPPORTED_MIN_VERSION 13
-#define CURRENT_CDS_ARCHIVE_VERSION 16
+#define CURRENT_CDS_ARCHIVE_VERSION 17
 
 typedef struct CDSFileMapRegion {
   int     _crc;               // CRC checksum of this region.
@@ -55,10 +55,11 @@ typedef struct CDSFileMapRegion {
                               // or to adapt to the available ranges in the Java heap range).
                               // - For an RO/RW region, the requested address is:
                               //     FileMapHeader::requested_base_address() + _mapping_offset
-                              // - For a heap region, the requested address is:
-                              //     +UseCompressedOops: CompressedOops::decode_raw_not_null(_mapping_offset)
+                              // - For a heap region, the requested address is calculated in
+                              //     +UseCompressedOops: /*runtime*/ CompressedOops::base() + _mapping_offset
                               //     -UseCompressedOops: FileMapHeader::heap_begin() + _mapping_offset
-                              // - For heap regions, the _mapping_offset is always zero. The runtime address
+                              //     See FileMapInfo::heap_region_requested_address().
+                              // - For bitmap regions, the _mapping_offset is always zero. The runtime address
                               //   is picked by the OS.
   size_t  _used;              // Number of bytes actually used by this region (excluding padding bytes added
                               // for alignment purposed.

@@ -588,7 +588,9 @@ public:
   static size_t write_bitmaps(GrowableArray<ArchiveHeapBitmapInfo> *bitmaps, size_t curr_offset, char* buffer);
 
 public:
-  address heap_region_runtime_start_address(FileMapRegion* r) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  address heap_region_dumptime_address(FileMapRegion* r) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  address heap_region_requested_address(FileMapRegion* r) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  address heap_region_mapped_address(FileMapRegion* r) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
 
 private:
 
