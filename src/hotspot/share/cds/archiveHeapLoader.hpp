@@ -74,6 +74,7 @@ public:
   }
 
   static ptrdiff_t mapped_heap_delta() {
+    CDS_JAVA_HEAP_ONLY(assert(!is_loaded(), "must be"));
     CDS_JAVA_HEAP_ONLY(assert(_mapped_heap_relocation_initialized, "must be"));
     CDS_JAVA_HEAP_ONLY(return _mapped_heap_delta;)
     NOT_CDS_JAVA_HEAP_RETURN_(0L);
@@ -135,7 +136,7 @@ private:
   static address _narrow_oop_base;
   static int     _narrow_oop_shift;
 
-  // is_mapped() only: the mapped address of each region is offset by this amount from 
+  // is_mapped() only: the mapped address of each region is offset by this amount from
   // their requested address.
   static ptrdiff_t _mapped_heap_delta;
   static bool      _mapped_heap_relocation_initialized;

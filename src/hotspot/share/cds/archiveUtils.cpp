@@ -328,8 +328,7 @@ void ReadClosure::do_oop(oop *p) {
     if (dumptime_oop == 0 || !ArchiveHeapLoader::is_fully_available()) {
       *p = NULL;
     } else {
-      assert(ArchiveHeapLoader::is_mapped() && !ArchiveHeapLoader::is_loaded(),
-             "Pointer relocation is not supported for loaded-heaps for uncompessed oops");
+      assert(!ArchiveHeapLoader::is_loaded(), "ArchiveHeapLoader::can_load() is not supported for uncompessed oops");
       intptr_t runtime_oop = dumptime_oop + ArchiveHeapLoader::mapped_heap_delta();
       *p = cast_to_oop(runtime_oop);
     }

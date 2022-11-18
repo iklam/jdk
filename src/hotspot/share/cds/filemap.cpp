@@ -2187,7 +2187,6 @@ address FileMapInfo::heap_region_dumptime_address(FileMapRegion* r) {
   }
 }
 
-
 // The address where this region can be mapped into the runtime heap without
 // patching any of the pointers that are embedded in this region.
 address FileMapInfo::heap_region_requested_address(FileMapRegion* r) {
@@ -2253,7 +2252,7 @@ void FileMapInfo::map_heap_regions_impl() {
   assert(is_aligned(heap_end, HeapRegion::GrainBytes), "must be");
   assert(is_aligned(archive_end, HeapRegion::GrainBytes), "must be");
 
-  if (UseCompressedOops && 
+  if (UseCompressedOops &&
       (narrow_oop_mode() != CompressedOops::mode() ||
        narrow_oop_shift() != CompressedOops::shift())) {
     log_info(cds)("CDS heap data needs to be relocated because the archive was created with an incompatible oop encoding mode.");
