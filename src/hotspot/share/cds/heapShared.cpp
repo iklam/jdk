@@ -520,6 +520,15 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
   }
 
   G1HeapVerifier::verify_archive_regions();
+  StringTable::write_shared_table(_dumped_interned_strings);
+}
+
+void HeapShared::copy_interned_strings() {
+  auto copier = [&] (oop s, bool value_ignored) {
+    assert(s != NULL, "sanity");
+    StringTable::create_archived_string(s);
+  };
+  _dumped_interned_strings->iterate_all(copier);
 }
 
 void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
@@ -528,7 +537,7 @@ void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
   G1CollectedHeap::heap()->begin_archive_alloc_range();
 
   // Archive interned string objects
-  StringTable::write_to_archive(_dumped_interned_strings);
+  copy_interned_strings();
 
   archive_object_subgraphs(closed_archive_subgraph_entry_fields,
                            true /* is_closed_archive */,
