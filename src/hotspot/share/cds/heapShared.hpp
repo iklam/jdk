@@ -359,6 +359,7 @@ private:
 
   static oop find_archived_heap_object(oop obj);
   static oop archive_object(oop obj);
+  static int archive_root_object(oop obj);
 
   static void archive_klass_objects();
 

@@ -291,13 +291,8 @@ void ConstantPool::archive_resolved_references() {
       }
     }
 
-    oop archived = HeapShared::archive_object(rr);
-    // If the resolved references array is not archived (too large),
-    // the 'archived' object is NULL. No need to explicitly check
-    // the return value of archive_object() here. At runtime, the
-    // resolved references will be created using the normal process
-    // when there is no archived value.
-    _cache->set_archived_references(archived);
+    int root_index = HeapShared::archive_root_object(rr);
+    _cache->set_archived_references(root_index);
   }
 }
 
