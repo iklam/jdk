@@ -286,6 +286,10 @@ void HeapShared::clear_root(int index) {
   }
 }
 
+int HeapShared::archive_root_object(oop obj) {
+  return append_root(archive_object(obj));
+}
+
 oop HeapShared::archive_object(oop obj) {
   assert(DumpSharedSpaces, "dump-time only");
 
