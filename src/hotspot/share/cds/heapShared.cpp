@@ -223,7 +223,7 @@ oop HeapShared::find_archived_heap_object(oop obj) {
   ArchivedObjectCache* cache = archived_object_cache();
   CachedOopInfo* p = cache->get(obj);
   if (p != NULL) {
-    return p->_obj;
+    return p->archived_obj();
   } else {
     return NULL;
   }
@@ -1184,15 +1184,10 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
 
 WalkOopAndArchiveClosure* WalkOopAndArchiveClosure::_current = NULL;
 
-HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop orig_obj) {
-  CachedOopInfo info;
+HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop archived_obj) {
   WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
-
-  info._subgraph_info = (walker == NULL) ? NULL : walker->subgraph_info();
-  info._referrer = (walker == NULL) ? NULL : walker->orig_referencing_obj();
-  info._obj = orig_obj;
-
-  return info;
+  oop referrer = (walker == NULL) ? NULL : walker->orig_referencing_obj();
+  return CachedOopInfo(referrer, archived_obj);
 }
 
 void HeapShared::check_closed_region_object(InstanceKlass* k) {

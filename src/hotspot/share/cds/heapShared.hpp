@@ -177,11 +177,14 @@ public:
     return java_lang_String::hash_code(string);
   }
 
-  struct CachedOopInfo {
-    KlassSubGraphInfo* _subgraph_info;
-    oop _referrer;
-    oop _obj;
-    CachedOopInfo() :_subgraph_info(), _referrer(), _obj() {}
+  class CachedOopInfo {
+    oop _orig_referrer;
+    oop _archived_obj;
+  public:
+    CachedOopInfo(oop orig_referrer, oop archived_obj)
+      : _orig_referrer(orig_referrer), _archived_obj(archived_obj) {}
+    oop archived_obj()  { return _archived_obj;  }
+    oop orig_referrer() { return _orig_referrer; }
   };
 
 private:
@@ -231,7 +234,7 @@ private:
   static RunTimeKlassSubGraphInfoTable _run_time_subgraph_info_table;
 
   static void check_closed_region_object(InstanceKlass* k);
-  static CachedOopInfo make_cached_oop_info(oop orig_obj);
+  static CachedOopInfo make_cached_oop_info(oop archived_obj);
   static void archive_object_subgraphs(ArchivableStaticFieldInfo fields[],
                                        bool is_closed_archive,
                                        bool is_full_module_graph);
