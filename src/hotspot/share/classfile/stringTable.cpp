@@ -777,7 +777,7 @@ oop StringTable::create_archived_string(oop s) {
   return new_s;
 }
 
-class CopyToArchive : StackObj {
+class WriteSharedTable : StackObj {
   CompactHashtableWriter* _writer;
 private:
   u4 compute_delta(oop s) {
@@ -790,33 +790,30 @@ private:
     return (u4)offset;
   }
 public:
-  CopyToArchive(CompactHashtableWriter* writer) : _writer(writer) {}
+  WriteSharedTable(CompactHashtableWriter* writer) : _writer(writer) {}
   bool do_entry(oop s, bool value_ignored) {
     assert(s != NULL, "sanity");
-    unsigned int hash = java_lang_String::hash_code(s);
-    oop new_s = StringTable::create_archived_string(s);
-    if (new_s == NULL) {
-      return true;
+    oop new_s = HeapShared::find_archived_heap_object(s);
+    if (new_s != NULL) { // could be NULL if the string is too big
+      unsigned int hash = java_lang_String::hash_code(s);
+      if (UseCompressedOops) {
+        _writer->add(hash, CompressedOops::narrow_oop_value(new_s));
+      } else {
+        _writer->add(hash, compute_delta(new_s));
+      }
     }
-
-    // add to the compact table
-    if (UseCompressedOops) {
-      _writer->add(hash, CompressedOops::narrow_oop_value(new_s));
-    } else {
-      _writer->add(hash, compute_delta(new_s));
-    }
-    return true;
+    return true; // keep iterating
   }
 };
 
-void StringTable::write_to_archive(const DumpedInternedStrings* dumped_interned_strings) {
+void StringTable::write_shared_table(const DumpedInternedStrings* dumped_interned_strings) {
   assert(HeapShared::can_write(), "must be");
 
   _shared_table.reset();
   CompactHashtableWriter writer(_items_count, ArchiveBuilder::string_stats());
 
   // Copy the interned strings into the "string space" within the java heap
-  CopyToArchive copier(&writer);
+  WriteSharedTable copier(&writer);
   dumped_interned_strings->iterate(&copier);
   writer.dump(&_shared_table, "string");
 }
