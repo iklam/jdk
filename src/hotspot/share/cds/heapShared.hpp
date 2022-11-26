@@ -159,6 +159,7 @@ public:
 private:
 #if INCLUDE_CDS_JAVA_HEAP
   static bool _disable_writing;
+  static bool _copying_open_region_objects;
   static DumpedInternedStrings *_dumped_interned_strings;
   static GrowableArrayCHeap<Metadata**, mtClassShared>* _native_pointers;
 
@@ -177,14 +178,41 @@ public:
     return java_lang_String::hash_code(string);
   }
 
+  // in HeapWords
+  static size_t total_obj_size() { return _total_obj_size; }
+
   class CachedOopInfo {
+    // All of the oop pointers below are within the boundaries of the dumptime heap.
+    // - They satisfy all range assertion checks for the oop type.
+    // - These pointers can be compressed with the current CompressedOops settings.
+    // However, _archived_obj and _requested_addr are not *valid* objects in the sense that
+    // - _archived_obj points to the inside of a bytearray (ArchiveHeapWriter::_buffer).
+    // - _requested_addr points to a space at the top of the heap. This space may not be
+    //   committed, or may overlap with valid heap objects. _requested_addr is just a calculated
+    //   address and we don't actually write into there.
+    // This is OK because CachedOopInfo is used only inside a safepoint. We need to make sure that
+    // we never use the _archived_obj and _requested_addr as actual heap objects (e.g., pass them
+    // as parameters to a Java method, etc).
+
     oop _orig_referrer;
-    oop _archived_obj;
+    oop _archived_obj; // rename -> buffered_obj
+
+    // The location of this object inside ArchiveHeapWriter::_buffer
+    int _output_offset;
+    bool _in_open_region;
   public:
-    CachedOopInfo(oop orig_referrer, oop archived_obj)
-      : _orig_referrer(orig_referrer), _archived_obj(archived_obj) {}
-    oop archived_obj()  { return _archived_obj;  }
-    oop orig_referrer() { return _orig_referrer; }
+    CachedOopInfo(oop orig_referrer, oop archived_obj, bool in_open_region)
+      : _orig_referrer(orig_referrer), _archived_obj(archived_obj),
+        _output_offset(-1), _in_open_region(in_open_region) {}
+    oop archived_obj()           const { return _archived_obj;    }
+    oop buffered_obj()           const { return _archived_obj;    }
+    oop orig_referrer()          const { return _orig_referrer;   }
+    bool in_open_region()        const { return _in_open_region;  }
+    void set_output_offset(int offset) { _output_offset = offset; }
+    int output_offset()          const { return _output_offset;   }
+
+    // We prefer to map the object at this address during runtime.
+    oop requested_addr() const;
   };
 
 private:

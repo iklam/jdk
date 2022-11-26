@@ -82,6 +82,7 @@ struct ArchivableStaticFieldInfo {
 };
 
 bool HeapShared::_disable_writing = false;
+bool HeapShared::_copying_open_region_objects = false;
 DumpedInternedStrings *HeapShared::_dumped_interned_strings = NULL;
 GrowableArrayCHeap<Metadata**, mtClassShared>* HeapShared::_native_pointers = NULL;
 
@@ -520,7 +521,7 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
     log_info(cds)("Dumping objects to closed archive heap region ...");
     copy_closed_objects(closed_regions);
 
-    ArchiveHeapWriter::start_open_region_objects();
+    _copying_open_region_objects = true;
 
     log_info(cds)("Dumping objects to open archive heap region ...");
     copy_open_objects(open_regions);
@@ -529,6 +530,7 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
   }
 
   //G1HeapVerifier::verify_archive_regions();
+  ArchiveHeapWriter::finalize(closed_regions, open_regions);
   StringTable::write_shared_table(_dumped_interned_strings);
 }
 
@@ -1187,7 +1189,7 @@ WalkOopAndArchiveClosure* WalkOopAndArchiveClosure::_current = NULL;
 HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop archived_obj) {
   WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
   oop referrer = (walker == NULL) ? NULL : walker->orig_referencing_obj();
-  return CachedOopInfo(referrer, archived_obj);
+  return CachedOopInfo(referrer, archived_obj, _copying_open_region_objects);
 }
 
 void HeapShared::check_closed_region_object(InstanceKlass* k) {
