@@ -254,6 +254,8 @@ int ArchiveHeapWriter::copy_one_buffered_obj_to_output(oop buffered_obj) {
   int cur_min_region_bottom = align_down(_output_top, MIN_GC_REGION_ALIGNMENT);
   int next_min_region_bottom = align_down(new_top, MIN_GC_REGION_ALIGNMENT);
   if (cur_min_region_bottom != next_min_region_bottom) {
+    // FIXME -- make sure that no objects span across MIN_GC_REGION_ALIGNMENT. This way
+    // we can map the region in any region-based collectors.
     assert(next_min_region_bottom > cur_min_region_bottom, "must be");
     assert(next_min_region_bottom - cur_min_region_bottom == MIN_GC_REGION_ALIGNMENT, "no buffered object can be larger than %d bytes",
            MIN_GC_REGION_ALIGNMENT);

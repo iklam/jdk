@@ -161,7 +161,6 @@ private:
   static bool _disable_writing;
   static bool _copying_open_region_objects;
   static DumpedInternedStrings *_dumped_interned_strings;
-  static GrowableArrayCHeap<Metadata**, mtClassShared>* _native_pointers;
 
   // statistics
   constexpr static int ALLOC_STAT_SLOTS = 16;
@@ -394,8 +393,8 @@ private:
                               GrowableArray<MemRegion>* open_regions,
                               GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
                               GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps);
-  static void copy_closed_objects(GrowableArray<MemRegion>* closed_regions);
-  static void copy_open_objects(GrowableArray<MemRegion>* open_regions);
+  static void copy_closed_objects();
+  static void copy_open_objects();
 
   static oop archive_reachable_objects_from(int level,
                                             KlassSubGraphInfo* subgraph_info,
@@ -403,7 +402,6 @@ private:
                                             bool is_closed_archive);
 
   static ResourceBitMap calculate_oopmap(MemRegion region); // marks all the oop pointers
-  static ResourceBitMap calculate_ptrmap(MemRegion region); // marks all the native pointers
   static void add_to_dumped_interned_strings(oop string);
 
   // We use the HeapShared::roots() array to make sure that objects stored in the
@@ -435,8 +433,6 @@ private:
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:
-  static void run_full_gc_in_vm_thread() NOT_CDS_JAVA_HEAP_RETURN;
-
   static bool is_heap_region(int idx) {
     CDS_JAVA_HEAP_ONLY(return (idx >= MetaspaceShared::first_closed_heap_region &&
                                idx <= MetaspaceShared::last_open_heap_region);)
