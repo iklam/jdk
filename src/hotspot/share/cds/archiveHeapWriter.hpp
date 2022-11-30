@@ -101,6 +101,11 @@ class ArchiveHeapWriter : AllStatic {
   static void copy_buffered_objs_to_output();
   static void copy_buffered_objs_to_output_by_region(bool copy_open_region);
   static int copy_one_buffered_obj_to_output(oop buffered_obj);
+  static void fill_gc_region_gap(int required_byte_size);
+  static int filler_array_byte_size(int length);
+  static int filler_array_length(int fill_bytes);
+  static void init_filler_array_at_output_top(int array_length, int fill_bytes);
+
   static void set_requested_address_for_regions(GrowableArray<MemRegion>* closed_regions,
                                                 GrowableArray<MemRegion>* open_regions);
   static void relocate_embedded_pointers_in_output(GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,

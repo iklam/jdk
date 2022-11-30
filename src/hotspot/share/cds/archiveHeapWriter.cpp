@@ -32,7 +32,9 @@
 #include "memory/universe.hpp"
 #include "oops/compressedOops.hpp"
 #include "oops/oop.inline.hpp"
+#include "oops/objArrayOop.hpp"
 #include "oops/oopHandle.inline.hpp"
+#include "oops/typeArrayKlass.hpp"
 #include "oops/typeArrayOop.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -251,23 +253,82 @@ void ArchiveHeapWriter::copy_buffered_objs_to_output_by_region(bool copy_open_re
   HeapShared::archived_object_cache()->iterate_all(copier);
 }
 
+
+int ArchiveHeapWriter::filler_array_byte_size(int length) {
+  int byte_size = int(objArrayOopDesc::object_size(length) * HeapWordSize);
+  return align_up(byte_size, ObjectAlignmentInBytes);
+}
+
+int ArchiveHeapWriter::filler_array_length(int fill_bytes) {
+  assert(is_aligned(fill_bytes, ObjectAlignmentInBytes), "must be");
+  TypeArrayKlass* bytearray_klass = TypeArrayKlass::cast(Universe::byteArrayKlassObj());
+  int elemSize = (UseCompressedOops ? sizeof(narrowOop) : sizeof(oop));
+
+  for (int length = fill_bytes / elemSize; length >= 0; length --) {
+    int array_byte_size = filler_array_byte_size(length);
+    if (array_byte_size == fill_bytes) {
+      return length;
+    }
+  }
+
+  ShouldNotReachHere();
+  return -1;
+}
+
+void ArchiveHeapWriter::init_filler_array_at_output_top(int array_length, int fill_bytes) {
+  assert(UseCompressedClassPointers, "Archived heap only supported for compressed klasses");
+  Klass* k = Universe::objectArrayKlassObj(); // already relocated to point to archived klass
+  HeapWord* mem = (HeapWord*)_output->adr_at(_output_top);
+  memset(mem, 0, fill_bytes);
+  oopDesc::set_mark(mem, markWord::prototype());
+  narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(k); // TODO: Comment:
+  cast_to_oop(mem)->set_narrow_klass(nk);
+  arrayOopDesc::set_length(mem, array_length);
+}
+
+void ArchiveHeapWriter::fill_gc_region_gap(int required_byte_size) {
+  int min_filler_byte_size = filler_array_byte_size(0);
+  int new_top = _output_top + required_byte_size + min_filler_byte_size;
+
+  const int cur_min_region_bottom = align_down(_output_top, MIN_GC_REGION_ALIGNMENT);
+  const int next_min_region_bottom = align_down(new_top, MIN_GC_REGION_ALIGNMENT);
+
+  if (cur_min_region_bottom != next_min_region_bottom) {
+    // Make sure that no objects span across MIN_GC_REGION_ALIGNMENT. This way
+    // we can map the region in any region-based collector.
+    assert(next_min_region_bottom > cur_min_region_bottom, "must be");
+    assert(next_min_region_bottom - cur_min_region_bottom == MIN_GC_REGION_ALIGNMENT, "no buffered object can be larger than %d bytes",
+           MIN_GC_REGION_ALIGNMENT);
+
+    const int filler_end = next_min_region_bottom;
+    const int fill_bytes = filler_end - _output_top;
+    assert(fill_bytes > 0, "must be");
+    while (_output->length() < filler_end) {
+      _output->append(0); // TODO: make into a function
+    }
+
+    int array_length = filler_array_length(fill_bytes);
+    log_info(cds, heap)("Inserting filler obj array of %d elements (%d bytes total) @ output offset %d",
+                        array_length, fill_bytes, _output_top);
+    init_filler_array_at_output_top(array_length, fill_bytes);
+
+    _output_top = filler_end;
+  }
+}
+
 int ArchiveHeapWriter::copy_one_buffered_obj_to_output(oop buffered_obj) {
   assert(is_in_buffer(buffered_obj), "sanity");
   int byte_size = byte_size_of_buffered_obj(buffered_obj);
   assert(byte_size > 0, "no zero-size objects");
+
+  fill_gc_region_gap(byte_size);
+
   int new_top = _output_top + byte_size;
   assert(new_top > _output_top, "no wrap around");
 
   int cur_min_region_bottom = align_down(_output_top, MIN_GC_REGION_ALIGNMENT);
   int next_min_region_bottom = align_down(new_top, MIN_GC_REGION_ALIGNMENT);
-  if (cur_min_region_bottom != next_min_region_bottom) {
-    // FIXME -- make sure that no objects span across MIN_GC_REGION_ALIGNMENT. This way
-    // we can map the region in any region-based collectors.
-    assert(next_min_region_bottom > cur_min_region_bottom, "must be");
-    assert(next_min_region_bottom - cur_min_region_bottom == MIN_GC_REGION_ALIGNMENT, "no buffered object can be larger than %d bytes",
-           MIN_GC_REGION_ALIGNMENT);
-    Unimplemented();
-  }
+  assert(cur_min_region_bottom == next_min_region_bottom, "no object should cross minimal GC region boundaries");
 
   while (_output->length() < new_top) {
     _output->append(0); // FIXME -- grow in blocks!
@@ -349,6 +410,7 @@ public:
   EmbeddedOopRelocator(oop buffered_obj, oop request_obj, ResourceBitMap* oopmap, address requested_region_bottom) :
     _buffered_obj(buffered_obj), _request_obj(request_obj),
     _oopmap(oopmap), _requested_region_bottom(requested_region_bottom) {
+    assert(UseCompressedClassPointers, "Archived heap only supported for compressed klasses");
     narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(buffered_obj->klass());
     buffered_obj_to_output_obj(buffered_obj)->set_narrow_klass(nk);
   }
