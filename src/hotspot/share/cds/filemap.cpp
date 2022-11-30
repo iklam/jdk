@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.inline.hpp"
+#include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.inline.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/dynamicArchive.hpp"
@@ -1634,9 +1635,9 @@ void FileMapInfo::write_region(int region, char* base, size_t size,
     requested_base = NULL;
   } else if (HeapShared::is_heap_region(region)) {
     assert(!DynamicDumpSharedSpaces, "must be");
-    requested_base = base;
+    requested_base = (char*)ArchiveHeapWriter::heap_region_requested_bottom(region);
     if (UseCompressedOops) {
-      mapping_offset = (size_t)CompressedOops::encode_not_null(cast_to_oop(base));
+      mapping_offset = (size_t)CompressedOops::encode_not_null(cast_to_oop(requested_base));
     } else {
 #if INCLUDE_G1GC
       mapping_offset = requested_base - (char*)G1CollectedHeap::heap()->reserved().start();
@@ -1767,8 +1768,10 @@ size_t FileMapInfo::write_heap_regions(GrowableArray<MemRegion>* regions,
     if (size > 0) {
       int oopmap_idx = i * 2;
       int ptrmap_idx = i * 2 + 1;
+#if 0
       region_at(region_idx)->init_bitmaps(bitmaps->at(oopmap_idx),
                                           bitmaps->at(ptrmap_idx));
+#endif
     }
   }
   return total_size;

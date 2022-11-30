@@ -880,7 +880,7 @@ void HeapShared::serialize_root(SerializeClosure* soc) {
     }
   } else {
     // writing
-    roots_oop = roots();
+    roots_oop = ArchiveHeapWriter::heap_roots_requested_address();
     soc->do_oop(&roots_oop); // write to archive
   }
 }
@@ -1847,9 +1847,6 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
     oop o = cast_to_oop(p);
     o->oop_iterate(&finder);
     p += o->size();
-    if (DumpSharedSpaces) {
-      builder->relocate_klass_ptr_of_oop(o);
-    }
     ++ num_objs;
   }
 

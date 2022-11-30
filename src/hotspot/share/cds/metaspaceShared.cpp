@@ -913,6 +913,7 @@ void VM_PopulateDumpSharedSpace::dump_heap_bitmaps() {
 
 void VM_PopulateDumpSharedSpace::dump_heap_bitmaps(GrowableArray<MemRegion>* regions,
                                                    GrowableArray<ArchiveHeapBitmapInfo>* bitmaps) {
+#if 0 // FIXME
   for (int i = 0; i < regions->length(); i++) {
     MemRegion region = regions->at(i);
     ResourceBitMap oopmap = HeapShared::calculate_oopmap(region);
@@ -920,6 +921,7 @@ void VM_PopulateDumpSharedSpace::dump_heap_bitmaps(GrowableArray<MemRegion>* reg
     dump_one_heap_bitmap(region, bitmaps, oopmap, true);
     dump_one_heap_bitmap(region, bitmaps, ptrmap, false);
   }
+#endif
 }
 
 void VM_PopulateDumpSharedSpace::dump_one_heap_bitmap(MemRegion region,

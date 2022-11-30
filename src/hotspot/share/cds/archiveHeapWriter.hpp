@@ -67,6 +67,9 @@ class ArchiveHeapWriter : AllStatic {
   static int _closed_bottom;  // inclusive
   static int _closed_top;     // exclusive
 
+  // The bottom of the copy of Heap::roots() inside this->_output.
+  static int _heap_roots_bottom;
+
   // TODO comment ...
   static address _requested_open_region_bottom;
   static address _requested_open_region_top;
@@ -91,8 +94,8 @@ class ArchiveHeapWriter : AllStatic {
   static void relocate_embedded_pointers_in_output();
 
   static bool is_in_requested_regions(oop o);
-  static oop oop_from_output_offset(int offset);
-  static oop buffered_obj_to_output_obj(oop buffered_obj);
+  static oop requested_obj_from_output_offset(int offset);
+  static oop buffered_obj_to_requested_obj(oop buffered_obj);
 
   static void store_in_output(oop* p, oop output_referent);
   static void store_in_output(narrowOop* p, oop output_referent);
@@ -106,6 +109,9 @@ public:
   static HeapWord* allocate_raw_buffer(size_t size);
   static bool is_in_buffer(oop o);
   static void finalize(GrowableArray<MemRegion>* closed_regions, GrowableArray<MemRegion>* open_regions);
+  static address heap_region_requested_bottom(int heap_region_idx);
+  static oop heap_roots_requested_address();
+  static oop requested_address_for_oop(oop orig_obj);
 };
 
 #endif // SHARE_CDS_ARCHIVEHEAPWRITER_HPP

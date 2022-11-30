@@ -49,11 +49,13 @@ int ArchiveHeapWriter::_buffer_top;
 
 // output
 GrowableArrayCHeap<u1, mtClassShared>* ArchiveHeapWriter::_output;
+// The folling ints are indices into ArchiveHeapWriter::_output
 int ArchiveHeapWriter::_output_top;
 int ArchiveHeapWriter::_open_bottom;
 int ArchiveHeapWriter::_open_top;
 int ArchiveHeapWriter::_closed_bottom;
 int ArchiveHeapWriter::_closed_top;
+int ArchiveHeapWriter::_heap_roots_bottom;
 
 address ArchiveHeapWriter::_requested_open_region_bottom;
 address ArchiveHeapWriter::_requested_open_region_top;
@@ -162,10 +164,10 @@ bool ArchiveHeapWriter::is_in_requested_regions(oop o) {
          (_requested_closed_region_bottom <= a && a < _requested_closed_region_top);
 }
 
-oop ArchiveHeapWriter::oop_from_output_offset(int offset) {
-  oop o = cast_to_oop(_requested_open_region_bottom + offset);
-  assert(is_in_requested_regions(o), "must be");
-  return o;
+oop ArchiveHeapWriter::requested_obj_from_output_offset(int offset) {
+  oop req_obj = cast_to_oop(_requested_open_region_bottom + offset);
+  assert(is_in_requested_regions(req_obj), "must be");
+  return req_obj;
 }
 
 // For the time being, always support two regions (to be strictly compatible with existing G1
@@ -174,6 +176,23 @@ void ArchiveHeapWriter::finalize(GrowableArray<MemRegion>* closed_regions, Growa
   copy_buffered_objs_to_output();
   set_requested_address_for_regions(closed_regions, open_regions);
   relocate_embedded_pointers_in_output();
+}
+
+oop ArchiveHeapWriter::heap_roots_requested_address() {
+  return cast_to_oop(_requested_open_region_bottom + _heap_roots_bottom);
+}
+
+address ArchiveHeapWriter::heap_region_requested_bottom(int heap_region_idx) {
+  assert(_output != NULL, "must be initialized");
+  switch (heap_region_idx) {
+  case MetaspaceShared::first_closed_heap_region:
+    return _requested_closed_region_bottom;
+  case MetaspaceShared::first_open_heap_region:
+    return _requested_open_region_bottom;
+  default:
+    ShouldNotReachHere();
+    return NULL;
+  }
 }
 
 void ArchiveHeapWriter::copy_buffered_objs_to_output() {
@@ -191,7 +210,7 @@ void ArchiveHeapWriter::copy_buffered_objs_to_output() {
     bool copy_open_region = (i == 0) ? true : false;
     copy_buffered_objs_to_output_by_region(copy_open_region);
     if (i == 0) {
-      copy_one_buffered_obj_to_output(HeapShared::roots()); // this is not in HeapShared::archived_object_cache()
+      _heap_roots_bottom = copy_one_buffered_obj_to_output(HeapShared::roots()); // this is not in HeapShared::archived_object_cache()
       _open_top = _output_top;
       _output_top = _closed_bottom = align_up(_output_top, HeapRegion::GrainBytes);
     }
@@ -233,7 +252,6 @@ int ArchiveHeapWriter::copy_one_buffered_obj_to_output(oop buffered_obj) {
     Unimplemented();
   }
 
-  tty->print_cr("%p = @%d", buffered_obj, _output_top);
   while (_output->length() < new_top) {
     _output->append(0); // FIXME -- grow in blocks!
   }
@@ -279,27 +297,32 @@ void ArchiveHeapWriter::set_requested_address_for_regions(GrowableArray<MemRegio
 
   assert(_requested_open_region_top <= _requested_closed_region_bottom, "no overlap");
 
-  tty->print_cr("Requested open region %p",   _requested_open_region_bottom);
-  tty->print_cr("Requested closed region %p", _requested_closed_region_bottom);
+  // Here are the location of the output buffers
+  address output_base = _output->adr_at(0);
+  closed_regions->append(MemRegion((HeapWord*)(output_base + _closed_bottom), (HeapWord*)(output_base + _closed_top)));
+  open_regions->append(  MemRegion((HeapWord*)(output_base + _open_bottom),   (HeapWord*)(output_base + _open_top)));
 }
 
-oop ArchiveHeapWriter::buffered_obj_to_output_obj(oop buffered_obj) {
+oop ArchiveHeapWriter::buffered_obj_to_requested_obj(oop buffered_obj) {
   assert(is_in_buffer(buffered_obj), "Hah!");
   int* p = _buffered_obj_to_output_offset_table->get(buffered_obj);
   assert(p != NULL, "must have copied " INTPTR_FORMAT " to output", p2i(buffered_obj));
   int output_offset = *p;
-  oop output_obj = oop_from_output_offset(output_offset);
+  oop output_obj = requested_obj_from_output_offset(output_offset);
 
   return output_obj;
 }
 
 class ArchiveHeapWriter::EmbeddedOopRelocator: public BasicOopIterateClosure {
   oop _buffered_obj;
-  oop _output_obj;
+  oop _request_obj;
 
 public:
-  EmbeddedOopRelocator(oop buffered_obj, oop output_obj) :
-    _buffered_obj(buffered_obj), _output_obj(output_obj) {}
+  EmbeddedOopRelocator(oop buffered_obj, oop request_obj) :
+    _buffered_obj(buffered_obj), _request_obj(request_obj) {
+    narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(buffered_obj->klass());
+    requested_addr_to_output_addr(request_obj)->set_narrow_klass(nk);
+  }
 
   void do_oop(narrowOop *p) { EmbeddedOopRelocator::do_oop_work(p); }
   void do_oop(      oop *p) { EmbeddedOopRelocator::do_oop_work(p); }
@@ -308,14 +331,10 @@ private:
   template <class T> void do_oop_work(T *p) {
     oop buffered_referent = RawAccess<>::oop_load(p);
     if (!CompressedOops::is_null(buffered_referent)) {
-      oop output_referent = buffered_obj_to_output_obj(buffered_referent);
-      tty->print_cr("Relocate %p => %p", buffered_referent, output_referent);
-
+      oop request_referent = buffered_obj_to_requested_obj(buffered_referent);
       size_t field_offset = pointer_delta(p, _buffered_obj, sizeof(char));
-
-      T* new_p = (T*)(cast_from_oop<address>(_output_obj) + field_offset);
-
-      ArchiveHeapWriter::store_in_output(new_p, output_referent);
+      T* new_p = (T*)(cast_from_oop<address>(_request_obj) + field_offset);
+      ArchiveHeapWriter::store_in_output(new_p, request_referent);
     }
   }
 };
@@ -331,13 +350,13 @@ template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) 
   return (T*)(output_addr);
 }
 
-void ArchiveHeapWriter::store_in_output(oop* p, oop output_referent) {
+void ArchiveHeapWriter::store_in_output(oop* p, oop request_referent) {
   oop* addr = requested_addr_to_output_addr(p);
-  *addr = output_referent;
+  *addr = request_referent;
 }
 
-void ArchiveHeapWriter::store_in_output(narrowOop* p, oop output_referent) {
-  narrowOop val = CompressedOops::encode_not_null(output_referent);
+void ArchiveHeapWriter::store_in_output(narrowOop* p, oop request_referent) {
+  narrowOop val = CompressedOops::encode_not_null(request_referent);
   narrowOop* addr = requested_addr_to_output_addr(p);
   *addr = val;
 }
@@ -345,11 +364,28 @@ void ArchiveHeapWriter::store_in_output(narrowOop* p, oop output_referent) {
 void ArchiveHeapWriter::relocate_embedded_pointers_in_output() {
   auto iterator = [&] (oop orig_obj, HeapShared::CachedOopInfo& info) {
     oop buffered_obj = info.buffered_obj();
-    oop output_obj = oop_from_output_offset(info.output_offset());
-    EmbeddedOopRelocator relocator(buffered_obj, output_obj);
-    info.buffered_obj()->oop_iterate(&relocator);    
+    oop requested_obj = requested_obj_from_output_offset(info.output_offset());
+    EmbeddedOopRelocator relocator(buffered_obj, requested_obj);
+    buffered_obj->oop_iterate(&relocator);    
   };
   HeapShared::archived_object_cache()->iterate_all(iterator);
+
+  oop buffered_roots = HeapShared::roots();
+  oop requested_roots = requested_obj_from_output_offset(_heap_roots_bottom);
+  EmbeddedOopRelocator relocate_roots(buffered_roots, requested_roots);
+  buffered_roots->oop_iterate(&relocate_roots);
 }
+
+oop ArchiveHeapWriter::requested_address_for_oop(oop orig_obj) {
+  assert(DumpSharedSpaces, "dump-time only");
+  HeapShared::CachedOopInfo* p = HeapShared::archived_object_cache()->get(orig_obj);
+  if (p != NULL) {
+    return requested_obj_from_output_offset(p->output_offset());
+  } else {
+    return NULL;
+  }
+}
+
+
 
 #endif // INCLUDE_CDS_JAVA_HEAP
