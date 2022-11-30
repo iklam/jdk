@@ -210,9 +210,6 @@ public:
     bool in_open_region()        const { return _in_open_region;  }
     void set_output_offset(int offset) { _output_offset = offset; }
     int output_offset()          const { return _output_offset;   }
-
-    // We prefer to map the object at this address during runtime.
-    oop requested_addr() const;
   };
 
 private:
@@ -353,8 +350,7 @@ private:
   static void init_loaded_heap_relocation(LoadedArchiveHeapRegion* reloc_info,
                                           int num_loaded_regions);
   static void fill_failed_loaded_region();
-  static void mark_native_pointers(oop orig_obj, oop archived_obj);
-  static void mark_one_native_pointer(oop archived_obj, int offset);
+  static void mark_native_pointers(oop orig_obj);
  public:
   static void reset_archived_object_states(TRAPS);
   static void create_archived_object_cache(bool create_orig_table) {
@@ -395,7 +391,9 @@ private:
   static void archive_klass_objects();
 
   static void archive_objects(GrowableArray<MemRegion>* closed_regions,
-                              GrowableArray<MemRegion>* open_regions);
+                              GrowableArray<MemRegion>* open_regions,
+                              GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                              GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps);
   static void copy_closed_objects(GrowableArray<MemRegion>* closed_regions);
   static void copy_open_objects(GrowableArray<MemRegion>* open_regions);
 

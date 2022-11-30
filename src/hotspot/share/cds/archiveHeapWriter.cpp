@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveHeapWriter.hpp"
+#include "cds/filemap.hpp"
 #include "cds/heapShared.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/iterator.inline.hpp"
@@ -34,6 +35,7 @@
 #include "oops/oopHandle.inline.hpp"
 #include "oops/typeArrayOop.hpp"
 #include "runtime/mutexLocker.hpp"
+#include "utilities/bitMap.inline.hpp"
 #include "utilities/growableArray.hpp"
 
 #if INCLUDE_G1GC
@@ -62,22 +64,24 @@ address ArchiveHeapWriter::_requested_open_region_top;
 address ArchiveHeapWriter::_requested_closed_region_bottom;
 address ArchiveHeapWriter::_requested_closed_region_top;
 
+GrowableArrayCHeap<ArchiveHeapWriter::NativePointerInfo, mtClassShared>* ArchiveHeapWriter::_native_pointers;
+
 ArchiveHeapWriter::BufferedObjToOutputOffsetTable*
   ArchiveHeapWriter::_buffered_obj_to_output_offset_table = NULL;
 
 void ArchiveHeapWriter::init(TRAPS) {
   Universe::heap()->collect(GCCause::_java_lang_system_gc);
-  size_t heap_used;
+  size_t heap_used_bytes;
   {
     MonitorLocker ml(Heap_lock);
-    heap_used = Universe::heap()->used();
+    heap_used_bytes = Universe::heap()->used();
   }
 
-  size_t buffer_size = heap_used * 2;
-  typeArrayOop buffer_oop = oopFactory::new_byteArray(buffer_size, CHECK);
+  size_t buffer_size_bytes = heap_used_bytes * 2;
+  typeArrayOop buffer_oop = oopFactory::new_byteArray(buffer_size_bytes, CHECK);
 
-  tty->print_cr("Heap used = " SIZE_FORMAT, heap_used);
-  tty->print_cr("Max buffer size = " SIZE_FORMAT, buffer_size);
+  tty->print_cr("Heap used = " SIZE_FORMAT, heap_used_bytes);
+  tty->print_cr("Max buffer size = " SIZE_FORMAT, buffer_size_bytes);
   tty->print_cr("Max buffer oop = " INTPTR_FORMAT, p2i(buffer_oop));
 
   _buffer = OopHandle(Universe::vm_global(), buffer_oop);
@@ -89,6 +93,8 @@ void ArchiveHeapWriter::init(TRAPS) {
   _requested_open_region_top = NULL;
   _requested_closed_region_bottom = NULL;
   _requested_closed_region_top = NULL;
+
+  _native_pointers = new GrowableArrayCHeap<NativePointerInfo, mtClassShared>(2048);
 }
 
 bool ArchiveHeapWriter::is_object_too_large(size_t size) {
@@ -172,10 +178,12 @@ oop ArchiveHeapWriter::requested_obj_from_output_offset(int offset) {
 
 // For the time being, always support two regions (to be strictly compatible with existing G1
 // mapping code. We should eventually use a single region.
-void ArchiveHeapWriter::finalize(GrowableArray<MemRegion>* closed_regions, GrowableArray<MemRegion>* open_regions) {
+void ArchiveHeapWriter::finalize(GrowableArray<MemRegion>* closed_regions, GrowableArray<MemRegion>* open_regions,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
   copy_buffered_objs_to_output();
   set_requested_address_for_regions(closed_regions, open_regions);
-  relocate_embedded_pointers_in_output();
+  relocate_embedded_pointers_in_output(closed_bitmaps, open_bitmaps);
 }
 
 oop ArchiveHeapWriter::heap_roots_requested_address() {
@@ -316,10 +324,12 @@ oop ArchiveHeapWriter::buffered_obj_to_requested_obj(oop buffered_obj) {
 class ArchiveHeapWriter::EmbeddedOopRelocator: public BasicOopIterateClosure {
   oop _buffered_obj;
   oop _request_obj;
-
+  ResourceBitMap* _oopmap;
+  address _requested_region_bottom;
 public:
-  EmbeddedOopRelocator(oop buffered_obj, oop request_obj) :
-    _buffered_obj(buffered_obj), _request_obj(request_obj) {
+  EmbeddedOopRelocator(oop buffered_obj, oop request_obj, ResourceBitMap* oopmap, address requested_region_bottom) :
+    _buffered_obj(buffered_obj), _request_obj(request_obj),
+    _oopmap(oopmap), _requested_region_bottom(requested_region_bottom) {
     narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(buffered_obj->klass());
     requested_addr_to_output_addr(request_obj)->set_narrow_klass(nk);
   }
@@ -333,12 +343,18 @@ private:
     if (!CompressedOops::is_null(buffered_referent)) {
       oop request_referent = buffered_obj_to_requested_obj(buffered_referent);
       size_t field_offset = pointer_delta(p, _buffered_obj, sizeof(char));
-      T* new_p = (T*)(cast_from_oop<address>(_request_obj) + field_offset);
-      ArchiveHeapWriter::store_in_output(new_p, request_referent);
+      T* request_p = (T*)(cast_from_oop<address>(_request_obj) + field_offset);
+      ArchiveHeapWriter::store_in_output(request_p, request_referent);
+
+      // Mark the pointer in the oopmap
+      T* region_bottom = (T*)_requested_region_bottom;
+      assert(request_p >= region_bottom, "must be");
+      BitMap::idx_t idx = request_p - region_bottom;
+      assert(idx < _oopmap->size(), "overflow");
+      _oopmap->set_bit(idx);
     }
   }
 };
-
 
 template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) {
   assert(is_in_requested_regions(cast_to_oop(p)), "must be");
@@ -350,30 +366,138 @@ template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) 
   return (T*)(output_addr);
 }
 
-void ArchiveHeapWriter::store_in_output(oop* p, oop request_referent) {
-  oop* addr = requested_addr_to_output_addr(p);
-  *addr = request_referent;
+void ArchiveHeapWriter::store_in_output(oop* request_p, oop request_referent) {
+  oop* output_addr = requested_addr_to_output_addr(request_p);
+  *output_addr = request_referent;
 }
 
-void ArchiveHeapWriter::store_in_output(narrowOop* p, oop request_referent) {
+void ArchiveHeapWriter::store_in_output(narrowOop* request_p, oop request_referent) {
   narrowOop val = CompressedOops::encode_not_null(request_referent);
-  narrowOop* addr = requested_addr_to_output_addr(p);
-  *addr = val;
+  narrowOop* output_addr = requested_addr_to_output_addr(request_p);
+  *output_addr = val;
 }
 
-void ArchiveHeapWriter::relocate_embedded_pointers_in_output() {
+void ArchiveHeapWriter::relocate_embedded_pointers_in_output(GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                                                             GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
+  size_t oopmap_unit = (UseCompressedOops ? sizeof(narrowOop) : sizeof(oop));
+  int closed_region_byte_size = _closed_top - _closed_bottom;
+  int open_region_byte_size   = _open_top   - _open_bottom;
+  ResourceBitMap closed_oopmap(closed_region_byte_size / oopmap_unit);
+  ResourceBitMap open_oopmap  (open_region_byte_size   / oopmap_unit);
+
   auto iterator = [&] (oop orig_obj, HeapShared::CachedOopInfo& info) {
+    ResourceBitMap* oopmap;
+    address requested_region_bottom;
+    if (info.in_open_region()) {
+      oopmap = &open_oopmap;
+      requested_region_bottom = _requested_open_region_bottom;
+    } else {
+      oopmap = &closed_oopmap;
+      requested_region_bottom = _requested_closed_region_bottom;
+    }
+
     oop buffered_obj = info.buffered_obj();
     oop requested_obj = requested_obj_from_output_offset(info.output_offset());
-    EmbeddedOopRelocator relocator(buffered_obj, requested_obj);
-    buffered_obj->oop_iterate(&relocator);    
+    EmbeddedOopRelocator relocator(buffered_obj, requested_obj, oopmap, requested_region_bottom);
+
+    buffered_obj->oop_iterate(&relocator);
   };
   HeapShared::archived_object_cache()->iterate_all(iterator);
 
   oop buffered_roots = HeapShared::roots();
   oop requested_roots = requested_obj_from_output_offset(_heap_roots_bottom);
-  EmbeddedOopRelocator relocate_roots(buffered_roots, requested_roots);
+  EmbeddedOopRelocator relocate_roots(buffered_roots, requested_roots,
+                                      &open_oopmap, _requested_open_region_bottom);
   buffered_roots->oop_iterate(&relocate_roots);
+
+  closed_bitmaps->append(get_bitmap_info(&closed_oopmap, /*is_open=*/false, /*is_oopmap=*/true));
+  open_bitmaps  ->append(get_bitmap_info(&open_oopmap,   /*is_open=*/false, /*is_oopmap=*/true));
+
+  closed_bitmaps->append(compute_ptrmap(/*is_open=*/false));
+  open_bitmaps  ->append(compute_ptrmap(/*is_open=*/true));
+}
+
+ArchiveHeapBitmapInfo ArchiveHeapWriter::get_bitmap_info(ResourceBitMap* bitmap, bool is_open,  bool is_oopmap) {
+  size_t size_in_bits = bitmap->size();
+  size_t size_in_bytes;
+  uintptr_t* buffer;
+
+  if (size_in_bits > 0) {
+    size_in_bytes = bitmap->size_in_bytes();
+    buffer = (uintptr_t*)NEW_C_HEAP_ARRAY(char, size_in_bytes, mtInternal);
+    bitmap->write_to(buffer, size_in_bytes);
+  } else {
+    size_in_bytes = 0;
+    buffer = NULL;
+  }
+
+  log_info(cds, heap)("%s @ " INTPTR_FORMAT " (" SIZE_FORMAT_W(6) " bytes) for %s heap region",
+                      is_oopmap ? "Oopmap" : "Ptrmap",
+                      p2i(buffer), size_in_bytes,
+                      is_open? "open" : "closed");
+
+  ArchiveHeapBitmapInfo info;
+  info._map = (address)buffer;
+  info._size_in_bits = size_in_bits;
+  info._size_in_bytes = size_in_bytes;
+
+  return info;
+}
+
+void ArchiveHeapWriter::mark_native_pointer(oop orig_obj, int field_offset) {
+  Metadata* ptr = orig_obj->metadata_field_acquire(field_offset);
+  if (ptr != NULL) {
+    NativePointerInfo info;
+    info._orig_obj = orig_obj;
+    info._field_offset = field_offset;
+    _native_pointers->append(info);
+  }
+}
+
+ArchiveHeapBitmapInfo ArchiveHeapWriter::compute_ptrmap(bool is_open) {
+  int num_non_null_ptrs = 0;
+  Metadata** bottom = (Metadata**) (is_open ? _requested_open_region_bottom: _requested_closed_region_bottom);
+  Metadata** top = (Metadata**) (is_open ? _requested_open_region_top: _requested_closed_region_top); // exclusive
+  ResourceBitMap ptrmap(top - bottom);
+
+  for (int i = 0; i < _native_pointers->length(); i++) {
+    NativePointerInfo info = _native_pointers->at(i);
+    oop orig_obj = info._orig_obj;
+    int field_offset = info._field_offset;
+    HeapShared::CachedOopInfo* p = HeapShared::archived_object_cache()->get(orig_obj);
+    if (p->in_open_region() == is_open) {
+      // requested_field_addr = the address of this field in the requested space
+      oop requested_obj = requested_obj_from_output_offset(p->output_offset());
+      Metadata** requested_field_addr = (Metadata**)(address(requested_obj) + field_offset);
+      assert(bottom <= requested_field_addr && requested_field_addr < top, "range check");
+
+      // Mark this field in the bitmap
+      BitMap::idx_t idx = requested_field_addr - bottom;
+      ptrmap.set_bit(idx);
+      num_non_null_ptrs ++;
+
+      // Set the native pointer to the requested address of the metadata (at runtime, the metadata will have
+      // this address if the RO/RW regions are mapped at the default location).
+
+      Metadata** output_field_addr = requested_addr_to_output_addr(requested_field_addr);
+      Metadata* native_ptr = *output_field_addr;
+      assert(native_ptr != NULL, "sanity");
+
+      address buffered_native_ptr = ArchiveBuilder::current()->get_buffered_addr((address)native_ptr);
+      address requested_native_ptr = ArchiveBuilder::current()->to_requested(buffered_native_ptr);
+      *output_field_addr = (Metadata*)requested_native_ptr;
+    }
+  }
+
+  log_info(cds, heap)("calculate_ptrmap: marked %d non-null native pointers for %s heap region",
+                      num_non_null_ptrs, is_open ? "open" : "closed");
+
+  if (num_non_null_ptrs == 0) {
+    ResourceBitMap empty;
+    return get_bitmap_info(&empty, is_open, /*is_oopmap=*/ false);
+  } else {
+    return get_bitmap_info(&ptrmap, is_open, /*is_oopmap=*/ false);
+  }
 }
 
 oop ArchiveHeapWriter::requested_address_for_oop(oop orig_obj) {
@@ -385,7 +509,5 @@ oop ArchiveHeapWriter::requested_address_for_oop(oop orig_obj) {
     return NULL;
   }
 }
-
-
 
 #endif // INCLUDE_CDS_JAVA_HEAP

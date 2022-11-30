@@ -29,16 +29,22 @@
 #include "memory/allocation.hpp"
 #include "memory/allStatic.hpp"
 #include "oops/oopHandle.hpp"
+#include "utilities/bitMap.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
+struct ArchiveHeapBitmapInfo;
 class MemRegion;
 template<class E> class GrowableArray;
 template <typename E, MEMFLAGS F> class GrowableArrayCHeap;
 
 class ArchiveHeapWriter : AllStatic {
   class EmbeddedOopRelocator;
+  struct NativePointerInfo {
+    oop _orig_obj;
+    int _field_offset;
+  };
 
   // this->_buffer cannot contain more than this number of bytes.
   static constexpr int MAX_OUTPUT_BYTES = (int)max_jint;
@@ -76,6 +82,11 @@ class ArchiveHeapWriter : AllStatic {
   static address _requested_closed_region_bottom;
   static address _requested_closed_region_top;
 
+  static ArchiveHeapBitmapInfo _closed_oopmap_info;
+  static ArchiveHeapBitmapInfo _open_oopmap_info;
+
+  static GrowableArrayCHeap<NativePointerInfo, mtClassShared>* _native_pointers;
+
   typedef ResourceHashtable<oop, int,
       36137, // prime number
       AnyObj::C_HEAP,
@@ -91,8 +102,10 @@ class ArchiveHeapWriter : AllStatic {
   static int copy_one_buffered_obj_to_output(oop buffered_obj);
   static void set_requested_address_for_regions(GrowableArray<MemRegion>* closed_regions,
                                                 GrowableArray<MemRegion>* open_regions);
-  static void relocate_embedded_pointers_in_output();
-
+  static void relocate_embedded_pointers_in_output(GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                                                   GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps);
+  static ArchiveHeapBitmapInfo compute_ptrmap(bool is_open);
+  static ArchiveHeapBitmapInfo get_bitmap_info(ResourceBitMap* bitmap, bool is_open,  bool is_oopmap);
   static bool is_in_requested_regions(oop o);
   static oop requested_obj_from_output_offset(int offset);
   static oop buffered_obj_to_requested_obj(oop buffered_obj);
@@ -108,10 +121,14 @@ public:
   static HeapWord* allocate_buffer_for(oop orig_obj);
   static HeapWord* allocate_raw_buffer(size_t size);
   static bool is_in_buffer(oop o);
-  static void finalize(GrowableArray<MemRegion>* closed_regions, GrowableArray<MemRegion>* open_regions);
+  static void finalize(GrowableArray<MemRegion>* closed_regions, GrowableArray<MemRegion>* open_regions,
+                       GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                       GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps);
   static address heap_region_requested_bottom(int heap_region_idx);
   static oop heap_roots_requested_address();
   static oop requested_address_for_oop(oop orig_obj);
+
+  static void mark_native_pointer(oop orig_obj, int offset);
 };
 
 #endif // SHARE_CDS_ARCHIVEHEAPWRITER_HPP

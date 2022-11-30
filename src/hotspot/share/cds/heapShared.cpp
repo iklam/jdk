@@ -84,7 +84,6 @@ struct ArchivableStaticFieldInfo {
 bool HeapShared::_disable_writing = false;
 bool HeapShared::_copying_open_region_objects = false;
 DumpedInternedStrings *HeapShared::_dumped_interned_strings = NULL;
-GrowableArrayCHeap<Metadata**, mtClassShared>* HeapShared::_native_pointers = NULL;
 
 size_t HeapShared::_alloc_count[HeapShared::ALLOC_STAT_SLOTS];
 size_t HeapShared::_alloc_size[HeapShared::ALLOC_STAT_SLOTS];
@@ -333,7 +332,7 @@ oop HeapShared::archive_object(oop obj) {
     if (_original_object_table != NULL) {
       _original_object_table->put(archived_oop, obj);
     }
-    mark_native_pointers(obj, archived_oop);
+    mark_native_pointers(obj);
     if (log_is_enabled(Debug, cds, heap)) {
       ResourceMark rm;
       log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT " : %s",
@@ -367,29 +366,10 @@ void HeapShared::archive_klass_objects() {
   }
 }
 
-void HeapShared::mark_native_pointers(oop orig_obj, oop archived_obj) {
+void HeapShared::mark_native_pointers(oop orig_obj) {
   if (java_lang_Class::is_instance(orig_obj)) {
-    mark_one_native_pointer(archived_obj, java_lang_Class::klass_offset());
-    mark_one_native_pointer(archived_obj, java_lang_Class::array_klass_offset());
-  }
-}
-
-void HeapShared::mark_one_native_pointer(oop archived_obj, int offset) {
-  Metadata* ptr = archived_obj->metadata_field_acquire(offset);
-  if (ptr != NULL) {
-    // Set the native pointer to the requested address (at runtime, if the metadata
-    // is mapped at the default location, it will be at this address).
-    address buffer_addr = ArchiveBuilder::current()->get_buffered_addr((address)ptr);
-    address requested_addr = ArchiveBuilder::current()->to_requested(buffer_addr);
-    archived_obj->metadata_field_put(offset, (Metadata*)requested_addr);
-
-    // Remember this pointer. At runtime, if the metadata is mapped at a non-default
-    // location, the pointer needs to be patched (see ArchiveHeapLoader::patch_native_pointers()).
-    _native_pointers->append(archived_obj->field_addr<Metadata*>(offset));
-
-    log_debug(cds, heap, mirror)(
-        "Marked metadata field at %d: " PTR_FORMAT " ==> " PTR_FORMAT,
-         offset, p2i(ptr), p2i(requested_addr));
+    ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::klass_offset());
+    ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::array_klass_offset());
   }
 }
 
@@ -503,7 +483,9 @@ void HeapShared::run_full_gc_in_vm_thread() {
 }
 
 void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
-                                 GrowableArray<MemRegion>* open_regions) {
+                                 GrowableArray<MemRegion>* open_regions,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
 
   //G1HeapVerifier::verify_ready_for_archiving();
 
@@ -530,7 +512,7 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
   }
 
   //G1HeapVerifier::verify_archive_regions();
-  ArchiveHeapWriter::finalize(closed_regions, open_regions);
+  ArchiveHeapWriter::finalize(closed_regions, open_regions, closed_bitmaps, open_bitmaps);
   StringTable::write_shared_table(_dumped_interned_strings);
 }
 
@@ -1692,7 +1674,6 @@ void HeapShared::init_for_dumping(TRAPS) {
   if (HeapShared::can_write()) {
     setup_test_class(ArchiveHeapTestClass);
     _dumped_interned_strings = new (mtClass)DumpedInternedStrings();
-    _native_pointers = new GrowableArrayCHeap<Metadata**, mtClassShared>(2048);
     init_subgraph_entry_fields(CHECK);
   }
 }
@@ -1840,7 +1821,6 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
   HeapWord* p   = region.start();
   HeapWord* end = region.end();
   FindEmbeddedNonNullPointers finder((void*)p, &oopmap);
-  ArchiveBuilder* builder = DumpSharedSpaces ? ArchiveBuilder::current() : NULL;
 
   int num_objs = 0;
   while (p < end) {
@@ -1855,7 +1835,7 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
   return oopmap;
 }
 
-
+#if 0
 ResourceBitMap HeapShared::calculate_ptrmap(MemRegion region) {
   size_t num_bits = region.byte_size() / sizeof(Metadata*);
   ResourceBitMap oopmap(num_bits);
@@ -1883,6 +1863,7 @@ ResourceBitMap HeapShared::calculate_ptrmap(MemRegion region) {
     return ResourceBitMap(0);
   }
 }
+#endif
 
 void HeapShared::count_allocation(size_t size) {
   _total_obj_count ++;
