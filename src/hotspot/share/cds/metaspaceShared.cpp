@@ -436,7 +436,7 @@ void MetaspaceShared::rewrite_nofast_bytecodes_and_calculate_fingerprints(Thread
   }
 }
 
-class VM_PopulateDumpSharedSpace : public VM_GC_Operation {
+class VM_PopulateDumpSharedSpace : public VM_Operation {
 private:
   GrowableArray<MemRegion> *_closed_heap_regions;
   GrowableArray<MemRegion> *_open_heap_regions;
@@ -453,8 +453,7 @@ private:
 
 public:
 
-  VM_PopulateDumpSharedSpace() :
-    VM_GC_Operation(0 /* total collections, ignored */, GCCause::_archive_time_gc),
+  VM_PopulateDumpSharedSpace() : VM_Operation(),
     _closed_heap_regions(NULL),
     _open_heap_regions(NULL),
     _closed_heap_bitmaps(NULL),

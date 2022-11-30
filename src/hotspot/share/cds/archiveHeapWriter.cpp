@@ -77,15 +77,15 @@ void ArchiveHeapWriter::init(TRAPS) {
     heap_used_bytes = Universe::heap()->used();
   }
 
-  size_t buffer_size_bytes = heap_used_bytes * 2;
+  size_t buffer_size_bytes = align_up(heap_used_bytes * 2 + 1, ObjectAlignmentInBytes);
   typeArrayOop buffer_oop = oopFactory::new_byteArray(buffer_size_bytes, CHECK);
 
-  tty->print_cr("Heap used = " SIZE_FORMAT, heap_used_bytes);
-  tty->print_cr("Max buffer size = " SIZE_FORMAT, buffer_size_bytes);
-  tty->print_cr("Max buffer oop = " INTPTR_FORMAT, p2i(buffer_oop));
+  log_info(cds, heap)("Heap used = " SIZE_FORMAT, heap_used_bytes);
+  log_info(cds, heap)("Max buffer size = " SIZE_FORMAT, buffer_size_bytes);
+  log_info(cds, heap)("Max buffer oop = " INTPTR_FORMAT, p2i(buffer_oop));
 
   _buffer = OopHandle(Universe::vm_global(), buffer_oop);
-  _buffer_top = 0;
+  for (_buffer_top = 0; !is_aligned(buffer_oop->byte_at_addr(_buffer_top), ObjectAlignmentInBytes); _buffer_top++) {}
 
   _buffered_obj_to_output_offset_table = new BufferedObjToOutputOffsetTable();
 
@@ -118,7 +118,8 @@ int ArchiveHeapWriter::cast_to_int_byte_size(size_t byte_size) {
 
 int ArchiveHeapWriter::byte_size_of_buffered_obj(oop buffered_obj) {
   assert(!is_object_too_large(buffered_obj->size()), "sanity");
-  return cast_to_int_byte_size(buffered_obj->size() * HeapWordSize);
+  int sz = cast_to_int_byte_size(buffered_obj->size() * HeapWordSize);
+  return align_up(sz, ObjectAlignmentInBytes);
 }
 
 HeapWord* ArchiveHeapWriter::allocate_buffer_for(oop orig_obj) {
@@ -131,7 +132,7 @@ HeapWord* ArchiveHeapWriter::allocate_raw_buffer(size_t size) {
   assert(size * HeapWordSize > size, "no overflow");
 
   static_assert(MIN_GC_REGION_ALIGNMENT < max_jint, "sanity");
-  size_t byte_size = size * HeapWordSize;
+  size_t byte_size = align_up(size * HeapWordSize, ObjectAlignmentInBytes);
   assert(byte_size < MIN_GC_REGION_ALIGNMENT, "should have been checked");
   assert(byte_size < max_jint, "sanity");
 
@@ -148,6 +149,7 @@ HeapWord* ArchiveHeapWriter::allocate_raw_buffer(size_t size) {
   jbyte* allocated = base + _buffer_top;
   _buffer_top = new_top;
 
+  assert(is_aligned(allocated, ObjectAlignmentInBytes), "sanity");
   return (HeapWord*)allocated;
 }
 
@@ -203,13 +205,15 @@ address ArchiveHeapWriter::heap_region_requested_bottom(int heap_region_idx) {
   }
 }
 
-void ArchiveHeapWriter::copy_buffered_objs_to_output() {
+void ArchiveHeapWriter::allocate_output_array() {
   int initial_buffer_size = _buffer_top;
   DEBUG_ONLY(initial_buffer_size = MAX2(10000, initial_buffer_size / 10)); // test for expansion logic
-
   _output = new GrowableArrayCHeap<u1, mtClassShared>(initial_buffer_size);
+  _open_bottom = _output_top = 0;
+}
 
-  _output_top = _open_bottom = 0;
+void ArchiveHeapWriter::copy_buffered_objs_to_output() {
+  allocate_output_array();
   for (int i = 0; i < 2; i ++) {
     // We copy the objects for the open region first, so that the end of the closed region
     // aligns with the end of the heap.
@@ -219,14 +223,17 @@ void ArchiveHeapWriter::copy_buffered_objs_to_output() {
     copy_buffered_objs_to_output_by_region(copy_open_region);
     if (i == 0) {
       _heap_roots_bottom = copy_one_buffered_obj_to_output(HeapShared::roots()); // this is not in HeapShared::archived_object_cache()
+      bool is_new = _buffered_obj_to_output_offset_table->put(HeapShared::roots(), _heap_roots_bottom);
+      assert(is_new, "sanity"); // FIXME -- move to a function
+
       _open_top = _output_top;
       _output_top = _closed_bottom = align_up(_output_top, HeapRegion::GrainBytes);
     }
   }
   _closed_top = _output_top;
 
-  tty->print_cr("Size of open region   = %d bytes", _open_top   - _open_bottom);
-  tty->print_cr("Size of closed region = %d bytes", _closed_top - _closed_bottom);
+  log_info(cds, heap)("Size of open region   = %d bytes", _open_top   - _open_bottom);
+  log_info(cds, heap)("Size of closed region = %d bytes", _closed_top - _closed_bottom);
 }
 
 void ArchiveHeapWriter::copy_buffered_objs_to_output_by_region(bool copy_open_region) {
@@ -268,8 +275,8 @@ int ArchiveHeapWriter::copy_one_buffered_obj_to_output(oop buffered_obj) {
 
   u1* from = cast_from_oop<u1*>(buffered_obj);
   u1* to = _output->adr_at(_output_top);
-  assert(is_aligned(_output_top, HeapWordSize), "sanity");
-  assert(is_aligned(byte_size, HeapWordSize), "sanity");
+  assert(is_aligned(_output_top, ObjectAlignmentInBytes), "sanity");
+  assert(is_aligned(byte_size, ObjectAlignmentInBytes), "sanity");
   memcpy(to, from, byte_size);
 
   int output_offset = _output_top;
@@ -285,7 +292,7 @@ void ArchiveHeapWriter::set_requested_address_for_regions(GrowableArray<MemRegio
 
   assert(UseG1GC, "must be");
   address heap_end = (address)G1CollectedHeap::heap()->reserved().end();
-  tty->print_cr("Heap end = %p", heap_end);
+  log_info(cds, heap)("Heap end = %p", heap_end);
 
   int closed_region_byte_size = _closed_top - _closed_bottom;
   int open_region_byte_size = _open_top - _open_bottom;
@@ -318,7 +325,17 @@ oop ArchiveHeapWriter::buffered_obj_to_requested_obj(oop buffered_obj) {
   int* p = _buffered_obj_to_output_offset_table->get(buffered_obj);
   assert(p != NULL, "must have copied " INTPTR_FORMAT " to output", p2i(buffered_obj));
   int output_offset = *p;
-  oop output_obj = requested_obj_from_output_offset(output_offset);
+  oop requested_obj = requested_obj_from_output_offset(output_offset);
+
+  return requested_obj;
+}
+
+oop ArchiveHeapWriter::buffered_obj_to_output_obj(oop buffered_obj) {
+  assert(is_in_buffer(buffered_obj), "Hah!");
+  int* p = _buffered_obj_to_output_offset_table->get(buffered_obj);
+  assert(p != NULL, "must have copied " INTPTR_FORMAT " to output", p2i(buffered_obj));
+  int output_offset = *p;
+  oop output_obj = cast_to_oop(_output->adr_at(output_offset));
 
   return output_obj;
 }
@@ -333,7 +350,7 @@ public:
     _buffered_obj(buffered_obj), _request_obj(request_obj),
     _oopmap(oopmap), _requested_region_bottom(requested_region_bottom) {
     narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(buffered_obj->klass());
-    requested_addr_to_output_addr(request_obj)->set_narrow_klass(nk);
+    buffered_obj_to_output_obj(buffered_obj)->set_narrow_klass(nk);
   }
 
   void do_oop(narrowOop *p) { EmbeddedOopRelocator::do_oop_work(p); }
@@ -370,10 +387,13 @@ template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) 
 
 void ArchiveHeapWriter::store_in_output(oop* request_p, oop request_referent) {
   oop* output_addr = requested_addr_to_output_addr(request_p);
-  *output_addr = request_referent;
+  // Make heap content deterministic. See comments inside HeapShared::to_requested_address.
+  *output_addr = HeapShared::to_requested_address(request_referent);
 }
 
 void ArchiveHeapWriter::store_in_output(narrowOop* request_p, oop request_referent) {
+  // Note: HeapShared::to_requested_address() is not necessary because
+  // the heap always starts at a deterministic address with UseCompressedOops==true.
   narrowOop val = CompressedOops::encode_not_null(request_referent);
   narrowOop* output_addr = requested_addr_to_output_addr(request_p);
   *output_addr = val;
@@ -470,7 +490,7 @@ ArchiveHeapBitmapInfo ArchiveHeapWriter::compute_ptrmap(bool is_open) {
     if (p->in_open_region() == is_open) {
       // requested_field_addr = the address of this field in the requested space
       oop requested_obj = requested_obj_from_output_offset(p->output_offset());
-      Metadata** requested_field_addr = (Metadata**)(address(requested_obj) + field_offset);
+      Metadata** requested_field_addr = (Metadata**)(cast_from_oop<address>(requested_obj) + field_offset);
       assert(bottom <= requested_field_addr && requested_field_addr < top, "range check");
 
       // Mark this field in the bitmap

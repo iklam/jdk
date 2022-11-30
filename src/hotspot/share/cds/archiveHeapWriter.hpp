@@ -97,6 +97,7 @@ class ArchiveHeapWriter : AllStatic {
   static int byte_size_of_buffered_obj(oop buffered_obj);
   static int cast_to_int_byte_size(size_t byte_size);
 
+  static void allocate_output_array();
   static void copy_buffered_objs_to_output();
   static void copy_buffered_objs_to_output_by_region(bool copy_open_region);
   static int copy_one_buffered_obj_to_output(oop buffered_obj);
@@ -109,6 +110,7 @@ class ArchiveHeapWriter : AllStatic {
   static bool is_in_requested_regions(oop o);
   static oop requested_obj_from_output_offset(int offset);
   static oop buffered_obj_to_requested_obj(oop buffered_obj);
+  static oop buffered_obj_to_output_obj(oop buffered_obj);
 
   static void store_in_output(oop* p, oop output_referent);
   static void store_in_output(narrowOop* p, oop output_referent);
