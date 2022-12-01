@@ -268,10 +268,10 @@ public:
 int CDSHeapVerifier::trace_to_root(oop orig_obj, oop orig_field, HeapShared::CachedOopInfo* p) {
   int level = 0;
   LogStream ls(Log(cds, heap)::warning());
-  if (p->_referrer != NULL) {
-    HeapShared::CachedOopInfo* ref = HeapShared::archived_object_cache()->get(p->_referrer);
+  if (p->orig_referrer() != NULL) {
+    HeapShared::CachedOopInfo* ref = HeapShared::archived_object_cache()->get(p->orig_referrer());
     assert(ref != NULL, "sanity");
-    level = trace_to_root(p->_referrer, orig_obj, ref) + 1;
+    level = trace_to_root(p->orig_referrer(), orig_obj, ref) + 1;
   } else if (java_lang_String::is_instance(orig_obj)) {
     ls.print_cr("[%2d] (shared string table)", level++);
   }
