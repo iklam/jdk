@@ -34,6 +34,8 @@
 #include "utilities/macros.hpp"
 #include "utilities/resourceHash.hpp"
 
+#if INCLUDE_CDS_JAVA_HEAP
+
 struct ArchiveHeapBitmapInfo;
 class MemRegion;
 template<class E> class GrowableArray;
@@ -137,5 +139,5 @@ public:
 
   static void mark_native_pointer(oop orig_obj, int offset);
 };
-
+#endif // INCLUDE_CDS_JAVA_HEAP
 #endif // SHARE_CDS_ARCHIVEHEAPWRITER_HPP

@@ -401,6 +401,39 @@ oop ArchiveHeapWriter::buffered_obj_to_output_obj(oop buffered_obj) {
   return output_obj;
 }
 
+template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) {
+  assert(is_in_requested_regions(cast_to_oop(p)), "must be");
+
+  address addr = address(p);
+  assert(addr >= _requested_open_region_bottom, "must be");
+  size_t offset = addr - _requested_open_region_bottom;
+  address output_addr = address(_output->adr_at(offset));
+  return (T*)(output_addr);
+}
+oop ArchiveHeapWriter::requested_address_for_oop(oop orig_obj) {
+  assert(DumpSharedSpaces, "dump-time only");
+  HeapShared::CachedOopInfo* p = HeapShared::archived_object_cache()->get(orig_obj);
+  if (p != NULL) {
+    return requested_obj_from_output_offset(p->output_offset());
+  } else {
+    return NULL;
+  }
+}
+
+void ArchiveHeapWriter::store_in_output(oop* request_p, oop request_referent) {
+  oop* output_addr = requested_addr_to_output_addr(request_p);
+  // Make heap content deterministic. See comments inside HeapShared::to_requested_address.
+  *output_addr = HeapShared::to_requested_address(request_referent);
+}
+
+void ArchiveHeapWriter::store_in_output(narrowOop* request_p, oop request_referent) {
+  // Note: HeapShared::to_requested_address() is not necessary because
+  // the heap always starts at a deterministic address with UseCompressedOops==true.
+  narrowOop val = CompressedOops::encode_not_null(request_referent);
+  narrowOop* output_addr = requested_addr_to_output_addr(request_p);
+  *output_addr = val;
+}
+
 class ArchiveHeapWriter::EmbeddedOopRelocator: public BasicOopIterateClosure {
   oop _buffered_obj;
   oop _request_obj;
@@ -436,30 +469,6 @@ private:
     }
   }
 };
-
-template <typename T> T* ArchiveHeapWriter::requested_addr_to_output_addr(T* p) {
-  assert(is_in_requested_regions(cast_to_oop(p)), "must be");
-
-  address addr = address(p);
-  assert(addr >= _requested_open_region_bottom, "must be");
-  size_t offset = addr - _requested_open_region_bottom;
-  address output_addr = address(_output->adr_at(offset));
-  return (T*)(output_addr);
-}
-
-void ArchiveHeapWriter::store_in_output(oop* request_p, oop request_referent) {
-  oop* output_addr = requested_addr_to_output_addr(request_p);
-  // Make heap content deterministic. See comments inside HeapShared::to_requested_address.
-  *output_addr = HeapShared::to_requested_address(request_referent);
-}
-
-void ArchiveHeapWriter::store_in_output(narrowOop* request_p, oop request_referent) {
-  // Note: HeapShared::to_requested_address() is not necessary because
-  // the heap always starts at a deterministic address with UseCompressedOops==true.
-  narrowOop val = CompressedOops::encode_not_null(request_referent);
-  narrowOop* output_addr = requested_addr_to_output_addr(request_p);
-  *output_addr = val;
-}
 
 void ArchiveHeapWriter::relocate_embedded_pointers_in_output(GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
                                                              GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
@@ -581,16 +590,6 @@ ArchiveHeapBitmapInfo ArchiveHeapWriter::compute_ptrmap(bool is_open) {
     return get_bitmap_info(&empty, is_open, /*is_oopmap=*/ false);
   } else {
     return get_bitmap_info(&ptrmap, is_open, /*is_oopmap=*/ false);
-  }
-}
-
-oop ArchiveHeapWriter::requested_address_for_oop(oop orig_obj) {
-  assert(DumpSharedSpaces, "dump-time only");
-  HeapShared::CachedOopInfo* p = HeapShared::archived_object_cache()->get(orig_obj);
-  if (p != NULL) {
-    return requested_obj_from_output_offset(p->output_offset());
-  } else {
-    return NULL;
   }
 }
 
