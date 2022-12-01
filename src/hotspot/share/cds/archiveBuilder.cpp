@@ -830,14 +830,11 @@ uintx ArchiveBuilder::any_to_offset(address p) const {
   return buffer_to_offset(p);
 }
 
-// Update a Java object to point its Klass* to the address whene
-// the class would be mapped at runtime.
-void ArchiveBuilder::relocate_klass_ptr_of_oop(oop o) {
+narrowKlass ArchiveBuilder::get_requested_narrow_klass(Klass* k) {
   assert(DumpSharedSpaces, "sanity");
-  Klass* k = get_buffered_klass(o->klass());
+  k = get_buffered_klass(k);
   Klass* requested_k = to_requested(k);
-  narrowKlass nk = CompressedKlassPointers::encode_not_null(requested_k, _requested_static_archive_bottom);
-  o->set_narrow_klass(nk);
+  return CompressedKlassPointers::encode_not_null(requested_k, _requested_static_archive_bottom);
 }
 
 // RelocateBufferToRequested --- Relocate all the pointers in rw/ro,

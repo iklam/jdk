@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
+#include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/cdsHeapVerifier.hpp"
 #include "cds/heapShared.hpp"
@@ -81,8 +82,8 @@ struct ArchivableStaticFieldInfo {
 };
 
 bool HeapShared::_disable_writing = false;
+bool HeapShared::_copying_open_region_objects = false;
 DumpedInternedStrings *HeapShared::_dumped_interned_strings = NULL;
-GrowableArrayCHeap<Metadata**, mtClassShared>* HeapShared::_native_pointers = NULL;
 
 size_t HeapShared::_alloc_count[HeapShared::ALLOC_STAT_SLOTS];
 size_t HeapShared::_alloc_size[HeapShared::ALLOC_STAT_SLOTS];
@@ -143,7 +144,7 @@ OopHandle HeapShared::_roots;
 bool HeapShared::is_archived_object_during_dumptime(oop p) {
   assert(HeapShared::can_write(), "must be");
   assert(DumpSharedSpaces, "this function is only used with -Xshare:dump");
-  return Universe::heap()->is_archived_object(p);
+  return ArchiveHeapWriter::is_in_buffer(p);
 }
 #endif
 
@@ -222,7 +223,7 @@ oop HeapShared::find_archived_heap_object(oop obj) {
   ArchivedObjectCache* cache = archived_object_cache();
   CachedOopInfo* p = cache->get(obj);
   if (p != NULL) {
-    return p->_obj;
+    return p->buffered_obj();
   } else {
     return NULL;
   }
@@ -301,14 +302,14 @@ oop HeapShared::archive_object(oop obj) {
     return ao;
   }
 
-  int len = obj->size();
-  if (G1CollectedHeap::heap()->is_archive_alloc_too_large(len)) {
+  size_t len = obj->size();
+  if (ArchiveHeapWriter::is_object_too_large(len)) {
     log_debug(cds, heap)("Cannot archive, object (" PTR_FORMAT ") is too large: " SIZE_FORMAT,
-                         p2i(obj), (size_t)obj->size());
+                         p2i(obj), obj->size());
     return NULL;
   }
 
-  oop archived_oop = cast_to_oop(G1CollectedHeap::heap()->archive_mem_allocate(len));
+  oop archived_oop = cast_to_oop(ArchiveHeapWriter::allocate_buffer_for(obj));
   if (archived_oop != NULL) {
     count_allocation(len);
     Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(obj), cast_from_oop<HeapWord*>(archived_oop), len);
@@ -331,7 +332,7 @@ oop HeapShared::archive_object(oop obj) {
     if (_original_object_table != NULL) {
       _original_object_table->put(archived_oop, obj);
     }
-    mark_native_pointers(obj, archived_oop);
+    mark_native_pointers(obj);
     if (log_is_enabled(Debug, cds, heap)) {
       ResourceMark rm;
       log_debug(cds, heap)("Archived heap object " PTR_FORMAT " ==> " PTR_FORMAT " : %s",
@@ -365,29 +366,10 @@ void HeapShared::archive_klass_objects() {
   }
 }
 
-void HeapShared::mark_native_pointers(oop orig_obj, oop archived_obj) {
+void HeapShared::mark_native_pointers(oop orig_obj) {
   if (java_lang_Class::is_instance(orig_obj)) {
-    mark_one_native_pointer(archived_obj, java_lang_Class::klass_offset());
-    mark_one_native_pointer(archived_obj, java_lang_Class::array_klass_offset());
-  }
-}
-
-void HeapShared::mark_one_native_pointer(oop archived_obj, int offset) {
-  Metadata* ptr = archived_obj->metadata_field_acquire(offset);
-  if (ptr != NULL) {
-    // Set the native pointer to the requested address (at runtime, if the metadata
-    // is mapped at the default location, it will be at this address).
-    address buffer_addr = ArchiveBuilder::current()->get_buffered_addr((address)ptr);
-    address requested_addr = ArchiveBuilder::current()->to_requested(buffer_addr);
-    archived_obj->metadata_field_put(offset, (Metadata*)requested_addr);
-
-    // Remember this pointer. At runtime, if the metadata is mapped at a non-default
-    // location, the pointer needs to be patched (see ArchiveHeapLoader::patch_native_pointers()).
-    _native_pointers->append(archived_obj->field_addr<Metadata*>(offset));
-
-    log_debug(cds, heap, mirror)(
-        "Marked metadata field at %d: " PTR_FORMAT " ==> " PTR_FORMAT,
-         offset, p2i(ptr), p2i(requested_addr));
+    ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::klass_offset());
+    ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::array_klass_offset());
   }
 }
 
@@ -479,30 +461,10 @@ bool HeapShared::initialize_enum_klass(InstanceKlass* k, TRAPS) {
   return true;
 }
 
-void HeapShared::run_full_gc_in_vm_thread() {
-  if (HeapShared::can_write()) {
-    // Avoid fragmentation while archiving heap objects.
-    // We do this inside a safepoint, so that no further allocation can happen after GC
-    // has finished.
-    if (GCLocker::is_active()) {
-      // Just checking for safety ...
-      // This should not happen during -Xshare:dump. If you see this, probably the Java core lib
-      // has been modified such that JNI code is executed in some clean up threads after
-      // we have finished class loading.
-      log_warning(cds)("GC locker is held, unable to start extra compacting GC. This may produce suboptimal results.");
-    } else {
-      log_info(cds)("Run GC ...");
-      Universe::heap()->collect_as_vm_thread(GCCause::_archive_time_gc);
-      log_info(cds)("Run GC done");
-    }
-  }
-}
-
 void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
-                                 GrowableArray<MemRegion>* open_regions) {
-
-  G1HeapVerifier::verify_ready_for_archiving();
-
+                                 GrowableArray<MemRegion>* open_regions,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                                 GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
   {
     NoSafepointVerifier nsv;
 
@@ -515,15 +477,17 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
                    UseCompressedOops ? p2i(CompressedOops::end()) :
                                        p2i((address)G1CollectedHeap::heap()->reserved().end()));
     log_info(cds)("Dumping objects to closed archive heap region ...");
-    copy_closed_objects(closed_regions);
+    copy_closed_objects();
+
+    _copying_open_region_objects = true;
 
     log_info(cds)("Dumping objects to open archive heap region ...");
-    copy_open_objects(open_regions);
+    copy_open_objects();
 
     CDSHeapVerifier::verify();
   }
 
-  G1HeapVerifier::verify_archive_regions();
+  ArchiveHeapWriter::finalize(closed_regions, open_regions, closed_bitmaps, open_bitmaps);
   StringTable::write_shared_table(_dumped_interned_strings);
 }
 
@@ -535,10 +499,8 @@ void HeapShared::copy_interned_strings() {
   _dumped_interned_strings->iterate_all(copier);
 }
 
-void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
+void HeapShared::copy_closed_objects() {
   assert(HeapShared::can_write(), "must be");
-
-  G1CollectedHeap::heap()->begin_archive_alloc_range();
 
   // Archive interned string objects
   copy_interned_strings();
@@ -546,15 +508,10 @@ void HeapShared::copy_closed_objects(GrowableArray<MemRegion>* closed_regions) {
   archive_object_subgraphs(closed_archive_subgraph_entry_fields,
                            true /* is_closed_archive */,
                            false /* is_full_module_graph */);
-
-  G1CollectedHeap::heap()->end_archive_alloc_range(closed_regions,
-                                                   os::vm_allocation_granularity());
 }
 
-void HeapShared::copy_open_objects(GrowableArray<MemRegion>* open_regions) {
+void HeapShared::copy_open_objects() {
   assert(HeapShared::can_write(), "must be");
-
-  G1CollectedHeap::heap()->begin_archive_alloc_range(true /* open */);
 
   java_lang_Class::archive_basic_type_mirrors();
 
@@ -571,9 +528,6 @@ void HeapShared::copy_open_objects(GrowableArray<MemRegion>* open_regions) {
   }
 
   copy_roots();
-
-  G1CollectedHeap::heap()->end_archive_alloc_range(open_regions,
-                                                   os::vm_allocation_granularity());
 }
 
 // Copy _pending_archive_roots into an objArray
@@ -587,7 +541,7 @@ void HeapShared::copy_roots() {
   int length = _pending_roots != NULL ? _pending_roots->length() : 0;
   size_t size = objArrayOopDesc::object_size(length);
   Klass* k = Universe::objectArrayKlassObj(); // already relocated to point to archived klass
-  HeapWord* mem = G1CollectedHeap::heap()->archive_mem_allocate(size);
+  HeapWord* mem = ArchiveHeapWriter::allocate_raw_buffer(size);
 
   memset(mem, 0, size * BytesPerWord);
   {
@@ -867,7 +821,7 @@ void HeapShared::serialize_root(SerializeClosure* soc) {
     }
   } else {
     // writing
-    roots_oop = roots();
+    roots_oop = ArchiveHeapWriter::heap_roots_requested_address();
     soc->do_oop(&roots_oop); // write to archive
   }
 }
@@ -1173,15 +1127,10 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
 
 WalkOopAndArchiveClosure* WalkOopAndArchiveClosure::_current = NULL;
 
-HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop orig_obj) {
-  CachedOopInfo info;
+HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop archived_obj) {
   WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
-
-  info._subgraph_info = (walker == NULL) ? NULL : walker->subgraph_info();
-  info._referrer = (walker == NULL) ? NULL : walker->orig_referencing_obj();
-  info._obj = orig_obj;
-
-  return info;
+  oop referrer = (walker == NULL) ? NULL : walker->orig_referencing_obj();
+  return CachedOopInfo(referrer, archived_obj, _copying_open_region_objects);
 }
 
 void HeapShared::check_closed_region_object(InstanceKlass* k) {
@@ -1440,6 +1389,8 @@ void HeapShared::verify_subgraph_from(oop orig_obj) {
   //      init_seen_objects_table();
   // but that's already done in G1HeapVerifier::verify_archive_regions so we
   // won't do it here.
+
+  // TODO: run G1HeapVerifier::verify_archive_regions() at runtime!
 }
 
 void HeapShared::verify_reachable_objects_from(oop obj, bool is_archived) {
@@ -1684,7 +1635,6 @@ void HeapShared::init_for_dumping(TRAPS) {
   if (HeapShared::can_write()) {
     setup_test_class(ArchiveHeapTestClass);
     _dumped_interned_strings = new (mtClass)DumpedInternedStrings();
-    _native_pointers = new GrowableArrayCHeap<Metadata**, mtClassShared>(2048);
     init_subgraph_entry_fields(CHECK);
   }
 }
@@ -1754,6 +1704,7 @@ void HeapShared::add_to_dumped_interned_strings(oop string) {
   _dumped_interned_strings->put_if_absent(string, true, &created);
 }
 
+#ifndef PRODUCT
 // At dump-time, find the location of all the non-null oop pointers in an archived heap
 // region. This way we can quickly relocate all the pointers without using
 // BasicOopIterateClosure at runtime.
@@ -1785,10 +1736,6 @@ class FindEmbeddedNonNullPointers: public BasicOopIterateClosure {
     if ((*p) != NULL) {
       size_t idx = p - (oop*)_start;
       _oopmap->set_bit(idx);
-      if (DumpSharedSpaces) {
-        // Make heap content deterministic.
-        *p = HeapShared::to_requested_address(*p);
-      }
     } else {
       _num_null_oops ++;
     }
@@ -1796,7 +1743,7 @@ class FindEmbeddedNonNullPointers: public BasicOopIterateClosure {
   int num_total_oops() const { return _num_total_oops; }
   int num_null_oops()  const { return _num_null_oops; }
 };
-
+#endif
 
 address HeapShared::to_requested_address(address dumptime_addr) {
   assert(DumpSharedSpaces, "static dump time only");
@@ -1825,6 +1772,7 @@ address HeapShared::to_requested_address(address dumptime_addr) {
   return requested_addr;
 }
 
+#ifndef PRODUCT
 ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
   size_t num_bits = region.byte_size() / (UseCompressedOops ? sizeof(narrowOop) : sizeof(oop));
   ResourceBitMap oopmap(num_bits);
@@ -1832,16 +1780,12 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
   HeapWord* p   = region.start();
   HeapWord* end = region.end();
   FindEmbeddedNonNullPointers finder((void*)p, &oopmap);
-  ArchiveBuilder* builder = DumpSharedSpaces ? ArchiveBuilder::current() : NULL;
 
   int num_objs = 0;
   while (p < end) {
     oop o = cast_to_oop(p);
     o->oop_iterate(&finder);
     p += o->size();
-    if (DumpSharedSpaces) {
-      builder->relocate_klass_ptr_of_oop(o);
-    }
     ++ num_objs;
   }
 
@@ -1849,35 +1793,7 @@ ResourceBitMap HeapShared::calculate_oopmap(MemRegion region) {
                       num_objs, finder.num_total_oops(), finder.num_null_oops());
   return oopmap;
 }
-
-
-ResourceBitMap HeapShared::calculate_ptrmap(MemRegion region) {
-  size_t num_bits = region.byte_size() / sizeof(Metadata*);
-  ResourceBitMap oopmap(num_bits);
-
-  Metadata** start = (Metadata**)region.start();
-  Metadata** end   = (Metadata**)region.end();
-
-  int num_non_null_ptrs = 0;
-  int len = _native_pointers->length();
-  for (int i = 0; i < len; i++) {
-    Metadata** p = _native_pointers->at(i);
-    if (start <= p && p < end) {
-      assert(*p != NULL, "must be non-null");
-      num_non_null_ptrs ++;
-      size_t idx = p - start;
-      oopmap.set_bit(idx);
-    }
-  }
-
-  log_info(cds, heap)("calculate_ptrmap: marked %d non-null native pointers out of "
-                      SIZE_FORMAT " possible locations", num_non_null_ptrs, num_bits);
-  if (num_non_null_ptrs > 0) {
-    return oopmap;
-  } else {
-    return ResourceBitMap(0);
-  }
-}
+#endif // !PRODUCT
 
 void HeapShared::count_allocation(size_t size) {
   _total_obj_count ++;

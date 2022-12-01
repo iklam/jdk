@@ -159,8 +159,8 @@ public:
 private:
 #if INCLUDE_CDS_JAVA_HEAP
   static bool _disable_writing;
+  static bool _copying_open_region_objects;
   static DumpedInternedStrings *_dumped_interned_strings;
-  static GrowableArrayCHeap<Metadata**, mtClassShared>* _native_pointers;
 
   // statistics
   constexpr static int ALLOC_STAT_SLOTS = 16;
@@ -177,11 +177,26 @@ public:
     return java_lang_String::hash_code(string);
   }
 
-  struct CachedOopInfo {
-    KlassSubGraphInfo* _subgraph_info;
-    oop _referrer;
-    oop _obj;
-    CachedOopInfo() :_subgraph_info(), _referrer(), _obj() {}
+  // in HeapWords
+  static size_t total_obj_size() { return _total_obj_size; }
+
+  class CachedOopInfo {
+    // See "TEMP notes: What are these?" in archiveHeapWriter.hpp
+    oop _orig_referrer;
+    oop _buffered_obj;
+
+    // The location of this object inside ArchiveHeapWriter::_buffer
+    int _output_offset;
+    bool _in_open_region;
+  public:
+    CachedOopInfo(oop orig_referrer, oop buffered_obj, bool in_open_region)
+      : _orig_referrer(orig_referrer), _buffered_obj(buffered_obj),
+        _output_offset(-1), _in_open_region(in_open_region) {}
+    oop buffered_obj()           const { return _buffered_obj;    }
+    oop orig_referrer()          const { return _orig_referrer;   }
+    bool in_open_region()        const { return _in_open_region;  }
+    void set_output_offset(int offset) { _output_offset = offset; }
+    int output_offset()          const { return _output_offset;   }
   };
 
 private:
@@ -231,7 +246,7 @@ private:
   static RunTimeKlassSubGraphInfoTable _run_time_subgraph_info_table;
 
   static void check_closed_region_object(InstanceKlass* k);
-  static CachedOopInfo make_cached_oop_info(oop orig_obj);
+  static CachedOopInfo make_cached_oop_info(oop archived_obj);
   static void archive_object_subgraphs(ArchivableStaticFieldInfo fields[],
                                        bool is_closed_archive,
                                        bool is_full_module_graph);
@@ -322,8 +337,7 @@ private:
   static void init_loaded_heap_relocation(LoadedArchiveHeapRegion* reloc_info,
                                           int num_loaded_regions);
   static void fill_failed_loaded_region();
-  static void mark_native_pointers(oop orig_obj, oop archived_obj);
-  static void mark_one_native_pointer(oop archived_obj, int offset);
+  static void mark_native_pointers(oop orig_obj);
  public:
   static void reset_archived_object_states(TRAPS);
   static void create_archived_object_cache(bool create_orig_table) {
@@ -364,9 +378,11 @@ private:
   static void archive_klass_objects();
 
   static void archive_objects(GrowableArray<MemRegion>* closed_regions,
-                              GrowableArray<MemRegion>* open_regions);
-  static void copy_closed_objects(GrowableArray<MemRegion>* closed_regions);
-  static void copy_open_objects(GrowableArray<MemRegion>* open_regions);
+                              GrowableArray<MemRegion>* open_regions,
+                              GrowableArray<ArchiveHeapBitmapInfo>* closed_bitmaps,
+                              GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps);
+  static void copy_closed_objects();
+  static void copy_open_objects();
 
   static oop archive_reachable_objects_from(int level,
                                             KlassSubGraphInfo* subgraph_info,
@@ -374,7 +390,6 @@ private:
                                             bool is_closed_archive);
 
   static ResourceBitMap calculate_oopmap(MemRegion region); // marks all the oop pointers
-  static ResourceBitMap calculate_ptrmap(MemRegion region); // marks all the native pointers
   static void add_to_dumped_interned_strings(oop string);
 
   // We use the HeapShared::roots() array to make sure that objects stored in the
@@ -406,8 +421,6 @@ private:
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:
-  static void run_full_gc_in_vm_thread() NOT_CDS_JAVA_HEAP_RETURN;
-
   static bool is_heap_region(int idx) {
     CDS_JAVA_HEAP_ONLY(return (idx >= MetaspaceShared::first_closed_heap_region &&
                                idx <= MetaspaceShared::last_open_heap_region);)
