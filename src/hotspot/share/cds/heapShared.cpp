@@ -62,6 +62,7 @@
 #include "utilities/copy.hpp"
 #if INCLUDE_G1GC
 #include "gc/g1/g1CollectedHeap.hpp"
+#include "gc/g1/heapRegion.hpp"
 #endif
 
 #if INCLUDE_CDS_JAVA_HEAP
@@ -289,6 +290,13 @@ void HeapShared::clear_root(int index) {
   }
 }
 
+bool HeapShared::is_too_large_to_archive(oop o) {
+  assert(UseG1GC, "implementation limitation");
+  size_t sz = align_up(o->size() * HeapWordSize, ObjectAlignmentInBytes);
+  size_t max = /*G1*/HeapRegion::min_region_size_in_words() * HeapWordSize;
+  return (sz > max);
+}
+
 oop HeapShared::archive_object(oop obj) {
   assert(DumpSharedSpaces, "dump-time only");
 
@@ -378,6 +386,7 @@ public:
 };
 
 static KlassToOopHandleTable* _scratch_java_mirror_table = NULL;
+static KlassToOopHandleTable* _scratch_resolved_references_table = NULL;
 
 void HeapShared::init_scratch_objects(TRAPS) {
   for (int i = T_BOOLEAN; i < T_VOID+1; i++) {
@@ -388,6 +397,7 @@ void HeapShared::init_scratch_objects(TRAPS) {
     }
   }
   _scratch_java_mirror_table = new (mtClass)KlassToOopHandleTable();
+  _scratch_resolved_references_table = new (mtClass)KlassToOopHandleTable();
 }
 
 oop HeapShared::scratch_java_mirror(BasicType t) {
@@ -404,8 +414,17 @@ void HeapShared::set_scratch_java_mirror(Klass* k, oop mirror) {
   _scratch_java_mirror_table->set_oop(k, mirror);
 }
 
+objArrayOop HeapShared::scratch_resolved_references(InstanceKlass* k) {
+  return (objArrayOop)_scratch_resolved_references_table->get_oop(k);
+}
+
+void HeapShared::set_scratch_resolved_references(InstanceKlass* k, objArrayOop array) {
+  _scratch_resolved_references_table->set_oop(k, array);
+}
+
 void HeapShared::remove_scratch_objects(Klass* k) {
   _scratch_java_mirror_table->remove_oop(k);
+  _scratch_resolved_references_table->remove_oop(k);
 }
 
 void HeapShared::archive_klass_objects() {
@@ -445,7 +464,15 @@ void HeapShared::archive_klass_objects() {
       // archive the resolved_referenes array
       if (buffered_k->is_instance_klass()) {
         InstanceKlass* ik = InstanceKlass::cast(buffered_k);
-        ik->constants()->archive_resolved_references();
+        objArrayOop scratch_rr = scratch_resolved_references(InstanceKlass::cast(orig_k));
+        if (scratch_rr != NULL && ik->constants()->archive_resolved_references(scratch_rr)) {
+          oop archived_obj = HeapShared::archive_reachable_objects_from(1, _default_subgraph_info,
+                                                                        scratch_rr,
+                                                                        /*is_closed_archive=*/false);
+          assert(archived_obj != NULL,  "already checked not too large to archive");
+          int root_index = append_root(archived_obj);
+          ik->constants()->cache()->set_archived_references(root_index);
+        }
       }
     }
   }
@@ -1301,7 +1328,6 @@ void HeapShared::check_module_oop(oop orig_module_obj) {
     assert(loader_data->is_builtin_class_loader_data(), "must be");
   }
 }
-
 
 // (1) If orig_obj has not been archived yet, archive it.
 // (2) If orig_obj has not been seen yet (since start_recording_subgraph() was called),

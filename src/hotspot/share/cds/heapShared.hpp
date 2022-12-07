@@ -370,6 +370,7 @@ private:
     }
   }
 
+  static bool is_too_large_to_archive(oop o);
   static oop find_archived_heap_object(oop obj);
   static oop archive_object(oop obj);
 
@@ -391,6 +392,10 @@ private:
 
   // Scratch objects for archiving Klass::java_mirror()
   static void set_scratch_java_mirror(Klass* k, oop mirror);
+
+  static objArrayOop scratch_resolved_references(InstanceKlass* k);
+  static void set_scratch_resolved_references(InstanceKlass* k, objArrayOop array);
+
   static void remove_scratch_objects(Klass* k);
 
   // We use the HeapShared::roots() array to make sure that objects stored in the
