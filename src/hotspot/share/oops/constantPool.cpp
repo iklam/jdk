@@ -256,9 +256,9 @@ void ConstantPool::klass_at_put(int class_index, Klass* k) {
 
 #if INCLUDE_CDS_JAVA_HEAP
 // Archive the resolved references
-void ConstantPool::archive_resolved_references() {
+oop ConstantPool::archive_resolved_references() {
   if (_cache == NULL) {
-    return; // nothing to do
+    return nullptr; // nothing to do
   }
 
   InstanceKlass *ik = pool_holder();
@@ -266,38 +266,36 @@ void ConstantPool::archive_resolved_references() {
         ik->is_shared_app_class())) {
     // Archiving resolved references for classes from non-builtin loaders
     // is not yet supported.
-    return;
+    return nullptr;
   }
 
   objArrayOop rr = resolved_references();
   Array<u2>* ref_map = reference_map();
-  if (rr != NULL) {
+  if (rr == nullptr || HeapShared::is_too_large_to_archive(rr)) {
+    // We might have a very large array if the class contains max number of
+    // JVM_CONSTANT_String objects, so just to be safe ...
+    return nullptr;
+  } else {
     int ref_map_len = ref_map == NULL ? 0 : ref_map->length();
     int rr_len = rr->length();
     for (int i = 0; i < rr_len; i++) {
       oop obj = rr->obj_at(i);
-      rr->obj_at_put(i, NULL);
+      rr->obj_at_put(i, nullptr);
       if (obj != NULL && i < ref_map_len) {
         int index = object_to_cp_index(i);
         if (tag_at(index).is_string()) {
-          oop archived_string = HeapShared::find_archived_heap_object(obj);
-          // Update the reference to point to the archived copy
-          // of this string.
-          // If the string is too large to archive, NULL is
-          // stored into rr. At run time, string_at_impl() will create and intern
-          // the string.
-          rr->obj_at_put(i, archived_string);
+          assert(java_lang_String::is_instance(obj), "must be");
+          typeArrayOop value = java_lang_String::value_no_keepalive(obj);
+
+          // Literal strings in the constant pool cannot exceed 65535 chars, so
+          // the array (max about 128KB) is much lower than the smallest
+          // archivable object (1MB on G1)
+          assert(!HeapShared::is_too_large_to_archive(value), "must be");
+          rr->obj_at_put(i, obj);
         }
       }
     }
-
-    oop archived = HeapShared::archive_object(rr);
-    // If the resolved references array is not archived (too large),
-    // the 'archived' object is NULL. No need to explicitly check
-    // the return value of archive_object() here. At runtime, the
-    // resolved references will be created using the normal process
-    // when there is no archived value.
-    _cache->set_archived_references(archived);
+    return rr;
   }
 }
 
