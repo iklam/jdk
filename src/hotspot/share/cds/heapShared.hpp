@@ -156,6 +156,11 @@ public:
   }
 
   static bool is_subgraph_root_class(InstanceKlass* ik);
+
+  // Scratch objects for archiving Klass::java_mirror()
+  static oop scratch_java_mirror(BasicType t) NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+  static oop scratch_java_mirror(Klass* k)    NOT_CDS_JAVA_HEAP_RETURN_(NULL);
+
 private:
 #if INCLUDE_CDS_JAVA_HEAP
   static bool _disable_writing;
@@ -384,11 +389,8 @@ private:
   static void add_to_dumped_interned_strings(oop string);
 
   // Scratch objects for archiving Klass::java_mirror()
-  static oop scratch_java_mirror(BasicType t);
-  static oop scratch_java_mirror(Klass* k);
-  static oop scratch_java_mirror_locked(Klass* k);
   static void set_scratch_java_mirror(Klass* k, oop mirror);
-  static void unset_scratch_java_mirror(Klass* k);
+  static void remove_scratch_objects(Klass* k);
 
   // We use the HeapShared::roots() array to make sure that objects stored in the
   // archived heap regions are not prematurely collected. These roots include:
@@ -419,7 +421,7 @@ private:
 #endif // INCLUDE_CDS_JAVA_HEAP
 
  public:
-  static void init_scratch_java_mirrors(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static void init_scratch_objects(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static void run_full_gc_in_vm_thread() NOT_CDS_JAVA_HEAP_RETURN;
 
   static bool is_heap_region(int idx) {

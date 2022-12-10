@@ -1342,7 +1342,8 @@ BasicType java_lang_Class::primitive_type(oop java_class) {
   } else {
     assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
   }
-  assert(Universe::java_mirror(type) == java_class, "must be consistent");
+  assert(Universe::java_mirror(type) == java_class ||
+         HeapShared::scratch_java_mirror(type) == java_class, "must be consistent");
   return type;
 }
 
