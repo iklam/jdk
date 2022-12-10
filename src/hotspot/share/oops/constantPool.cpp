@@ -202,13 +202,6 @@ void ConstantPool::initialize_resolved_references(ClassLoaderData* loader_data,
     objArrayOop stom = oopFactory::new_objArray(vmClasses::Object_klass(), map_length, CHECK);
     Handle refs_handle (THREAD, stom);  // must handleize.
     set_resolved_references(loader_data->add_handle(refs_handle));
-
-#if INCLUDE_CDS_JAVA_HEAP
-    if (DumpSharedSpaces) {
-      objArrayOop array = oopFactory::new_objArray(vmClasses::Object_klass(), map_length, CHECK);
-      HeapShared::set_scratch_resolved_references(pool_holder(), array);
-    }
-#endif
   }
 }
 
@@ -263,9 +256,9 @@ void ConstantPool::klass_at_put(int class_index, Klass* k) {
 
 #if INCLUDE_CDS_JAVA_HEAP
 // Archive the resolved references
-bool ConstantPool::archive_resolved_references(objArrayOop scratch_rr) {
+oop ConstantPool::archive_resolved_references() {
   if (_cache == NULL) {
-    return false; // nothing to do
+    return nullptr; // nothing to do
   }
 
   InstanceKlass *ik = pool_holder();
@@ -273,20 +266,21 @@ bool ConstantPool::archive_resolved_references(objArrayOop scratch_rr) {
         ik->is_shared_app_class())) {
     // Archiving resolved references for classes from non-builtin loaders
     // is not yet supported.
-    return false;
+    return nullptr;
   }
 
   objArrayOop rr = resolved_references();
   Array<u2>* ref_map = reference_map();
-  if (rr == NULL || HeapShared::is_too_large_to_archive(scratch_rr)) {
+  if (rr == nullptr || HeapShared::is_too_large_to_archive(rr)) {
     // We might have a very large array if the class contains max number of
     // JVM_CONSTANT_String objects, so just to be safe ...
-    return false;
+    return nullptr;
   } else {
     int ref_map_len = ref_map == NULL ? 0 : ref_map->length();
     int rr_len = rr->length();
     for (int i = 0; i < rr_len; i++) {
       oop obj = rr->obj_at(i);
+      rr->obj_at_put(i, nullptr);
       if (obj != NULL && i < ref_map_len) {
         int index = object_to_cp_index(i);
         if (tag_at(index).is_string()) {
@@ -295,13 +289,13 @@ bool ConstantPool::archive_resolved_references(objArrayOop scratch_rr) {
 
           // Literal strings in the constant pool cannot exceed 65535 chars, so
           // the array (max about 128KB) is much lower than the smallest
-          // archivable object (1MB on G1 and 256KB on Shenandoah)
+          // archivable object (1MB on G1)
           assert(!HeapShared::is_too_large_to_archive(value), "must be");
-          scratch_rr->obj_at_put(i, obj);
+          rr->obj_at_put(i, obj);
         }
       }
     }
-    return true;
+    return rr;
   }
 }
 

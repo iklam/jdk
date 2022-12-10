@@ -386,7 +386,6 @@ public:
 };
 
 static KlassToOopHandleTable* _scratch_java_mirror_table = NULL;
-static KlassToOopHandleTable* _scratch_resolved_references_table = NULL;
 
 void HeapShared::init_scratch_objects(TRAPS) {
   for (int i = T_BOOLEAN; i < T_VOID+1; i++) {
@@ -397,7 +396,6 @@ void HeapShared::init_scratch_objects(TRAPS) {
     }
   }
   _scratch_java_mirror_table = new (mtClass)KlassToOopHandleTable();
-  _scratch_resolved_references_table = new (mtClass)KlassToOopHandleTable();
 }
 
 oop HeapShared::scratch_java_mirror(BasicType t) {
@@ -414,17 +412,8 @@ void HeapShared::set_scratch_java_mirror(Klass* k, oop mirror) {
   _scratch_java_mirror_table->set_oop(k, mirror);
 }
 
-objArrayOop HeapShared::scratch_resolved_references(InstanceKlass* k) {
-  return (objArrayOop)_scratch_resolved_references_table->get_oop(k);
-}
-
-void HeapShared::set_scratch_resolved_references(InstanceKlass* k, objArrayOop array) {
-  _scratch_resolved_references_table->set_oop(k, array);
-}
-
 void HeapShared::remove_scratch_objects(Klass* k) {
   _scratch_java_mirror_table->remove_oop(k);
-  _scratch_resolved_references_table->remove_oop(k);
 }
 
 void HeapShared::archive_klass_objects() {
@@ -464,10 +453,9 @@ void HeapShared::archive_klass_objects() {
       // archive the resolved_referenes array
       if (buffered_k->is_instance_klass()) {
         InstanceKlass* ik = InstanceKlass::cast(buffered_k);
-        objArrayOop scratch_rr = scratch_resolved_references(InstanceKlass::cast(orig_k));
-        if (scratch_rr != NULL && ik->constants()->archive_resolved_references(scratch_rr)) {
-          oop archived_obj = HeapShared::archive_reachable_objects_from(1, _default_subgraph_info,
-                                                                        scratch_rr,
+        oop rr = ik->constants()->archive_resolved_references();
+        if (rr != nullptr) {
+          oop archived_obj = HeapShared::archive_reachable_objects_from(1, _default_subgraph_info, rr,
                                                                         /*is_closed_archive=*/false);
           assert(archived_obj != NULL,  "already checked not too large to archive");
           int root_index = append_root(archived_obj);
