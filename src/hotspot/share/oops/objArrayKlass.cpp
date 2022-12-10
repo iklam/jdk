@@ -436,7 +436,7 @@ PackageEntry* ObjArrayKlass::package() const {
 #if INCLUDE_CDS_JAVA_HEAP
 void ObjArrayKlass::deallocate_contents(ClassLoaderData* loader_data) {
   if (DumpSharedSpaces) {
-    HeapShared::unset_scratch_java_mirror(this);
+    HeapShared::remove_scratch_objects(this);
   }
 }
 #endif

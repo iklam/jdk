@@ -479,7 +479,7 @@ void Universe::initialize_basic_type_mirrors(TRAPS) {
       }
     }
     if (DumpSharedSpaces) {
-      HeapShared::init_scratch_java_mirrors(CHECK);
+      HeapShared::init_scratch_objects(CHECK);
     }
 }
 
