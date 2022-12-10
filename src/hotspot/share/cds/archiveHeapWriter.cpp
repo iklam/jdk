@@ -67,6 +67,7 @@ address ArchiveHeapWriter::_requested_closed_region_bottom;
 address ArchiveHeapWriter::_requested_closed_region_top;
 
 GrowableArrayCHeap<ArchiveHeapWriter::NativePointerInfo, mtClassShared>* ArchiveHeapWriter::_native_pointers;
+GrowableArrayCHeap<oop, mtClassShared>* ArchiveHeapWriter::_source_objs;
 
 ArchiveHeapWriter::BufferedObjToOutputOffsetTable*
   ArchiveHeapWriter::_buffered_obj_to_output_offset_table = NULL;
@@ -101,6 +102,11 @@ void ArchiveHeapWriter::init(TRAPS) {
   _requested_closed_region_top = NULL;
 
   _native_pointers = new GrowableArrayCHeap<NativePointerInfo, mtClassShared>(2048);
+  _source_objs = new GrowableArrayCHeap<oop, mtClassShared>(10000);
+}
+
+void ArchiveHeapWriter::add_source_obj(oop src_obj) {
+  _source_objs->append(src_obj);
 }
 
 bool ArchiveHeapWriter::is_object_too_large(size_t size) {
@@ -247,20 +253,22 @@ void ArchiveHeapWriter::copy_buffered_objs_to_output() {
 }
 
 void ArchiveHeapWriter::copy_buffered_objs_to_output_by_region(bool copy_open_region) {
-  auto copier = [&] (oop orig_obj, HeapShared::CachedOopInfo& info) {
-    if (info.in_open_region() == copy_open_region) {
+  for (int i = 0; i < _source_objs->length(); i++) {
+    oop orig_obj = _source_objs->at(i);
+    HeapShared::CachedOopInfo* info = HeapShared::archived_object_cache()->get(orig_obj);
+    assert(info != NULL, "must be");
+    if (info->in_open_region() == copy_open_region) {
       // For region-based collectors such as G1, we need to make sure that we don't have
       // an object that can possible span across two regions.
-      int output_offset = copy_one_buffered_obj_to_output(info.buffered_obj());
-      info.set_output_offset(output_offset);
+      int output_offset = copy_one_buffered_obj_to_output(info->buffered_obj());
+      info->set_output_offset(output_offset);
 
       _output_offset_to_orig_obj_table->put(output_offset, orig_obj);
 
-      bool is_new = _buffered_obj_to_output_offset_table->put(info.buffered_obj(), output_offset);
+      bool is_new = _buffered_obj_to_output_offset_table->put(info->buffered_obj(), output_offset);
       assert(is_new, "sanity");
     }
-  };
-  HeapShared::archived_object_cache()->iterate_all(copier);
+  }
 }
 
 

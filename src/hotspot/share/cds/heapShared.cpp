@@ -318,6 +318,7 @@ oop HeapShared::archive_object(oop obj) {
   oop archived_oop = cast_to_oop(ArchiveHeapWriter::allocate_buffer_for(obj));
   if (archived_oop != NULL) {
     count_allocation(len);
+    ArchiveHeapWriter::add_source_obj(obj);
     Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(obj), cast_from_oop<HeapWord*>(archived_oop), len);
     // Reinitialize markword to remove age/marking/locking/etc.
     //

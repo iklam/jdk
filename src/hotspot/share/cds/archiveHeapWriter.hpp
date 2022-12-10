@@ -121,6 +121,7 @@ class ArchiveHeapWriter : AllStatic {
   static ArchiveHeapBitmapInfo _open_oopmap_info;
 
   static GrowableArrayCHeap<NativePointerInfo, mtClassShared>* _native_pointers;
+  static GrowableArrayCHeap<oop, mtClassShared>* _source_objs;
 
   typedef ResourceHashtable<oop, int,
       36137, // prime number
@@ -166,6 +167,7 @@ class ArchiveHeapWriter : AllStatic {
 public:
   static void init(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static bool is_object_too_large(size_t size);
+  static void add_source_obj(oop src_obj);
   static HeapWord* allocate_buffer_for(oop orig_obj);
   static HeapWord* allocate_raw_buffer(size_t size);
   static bool is_in_buffer(oop o);
