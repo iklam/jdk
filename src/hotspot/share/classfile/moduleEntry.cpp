@@ -471,9 +471,8 @@ void ModuleEntry::init_archived_oops() {
   assert(DumpSharedSpaces, "static dump only");
   oop module_obj = module();
   if (module_obj != NULL) {
-    oop m = HeapShared::find_archived_heap_object(module_obj);
-    assert(m != NULL, "sanity");
-    _archived_module_index = HeapShared::append_root(m);
+    _archived_module_index = HeapShared::find_root_index_for_archived_object(module_obj);
+    assert(_archived_module_index >= 0, "sanity");
   }
   assert(shared_protection_domain() == NULL, "never set during -Xshare:dump");
   // Clear handles and restore at run time. Handles cannot be archived.

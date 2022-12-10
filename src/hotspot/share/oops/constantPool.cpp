@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/classPrelinker.hpp"
@@ -271,7 +272,7 @@ oop ConstantPool::archive_resolved_references() {
 
   objArrayOop rr = resolved_references();
   Array<u2>* ref_map = reference_map();
-  if (rr == nullptr || HeapShared::is_too_large_to_archive(rr)) {
+  if (rr == nullptr || ArchiveHeapWriter::is_too_large_to_archive(rr)) {
     // We might have a very large array if the class contains max number of
     // JVM_CONSTANT_String objects, so just to be safe ...
     return nullptr;
@@ -290,7 +291,7 @@ oop ConstantPool::archive_resolved_references() {
           // Literal strings in the constant pool cannot exceed 65535 chars, so
           // the array (max about 128KB) is much lower than the smallest
           // archivable object (1MB on G1)
-          assert(!HeapShared::is_too_large_to_archive(value), "must be");
+          assert(!ArchiveHeapWriter::is_too_large_to_archive(value), "must be");
           rr->obj_at_put(i, obj);
         }
       }
