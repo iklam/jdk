@@ -35,6 +35,7 @@ import jdk.test.lib.artifacts.ArtifactResolver;
 import jdk.test.lib.artifacts.ArtifactResolverException;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.HashMap;
 
 @Artifact(organization = "gov.nist.math", name = "scimark", revision = "2.0", extension = "zip")
 public class Scimark {
@@ -47,10 +48,31 @@ public class Scimark {
                             + Scimark.class.getName(), e);
         }
 
+
+        HashMap<String, Object> myMap = new HashMap<>();
+        myMap.put("server", "jpg");
+        myMap.put("product", "jdk");
+        myMap.put("version", "19");
+        myMap.put("build_number", "36");
+        myMap.put("file", "bundles/linux-x64/jdk-19_linux-x64_bin.tar.gz");
+        try {
+            Path p = ArtifactResolver.resolve("jdk", myMap, true);
+            System.out.println("here = " + p);
+            if (true) {return;}
+        } catch (ArtifactResolverException e) {
+            e.printStackTrace();
+            throw new Error("TESTBUG: Can not resolve artifacts for "
+                            + Scimark.class.getName(), e);
+        }
+
+
+        System.out.println("here = " + artifacts.get("gov.nist.math.scimark-2.0").toString());
+        /*
         OutputAnalyzer output = new OutputAnalyzer(ProcessTools.createJavaProcessBuilder(
             "-cp", artifacts.get("gov.nist.math.scimark-2.0").toString(),
             "jnt.scimark2.commandline", "-large")
             .start());
         output.shouldHaveExitValue(0);
+        */
     }
 }

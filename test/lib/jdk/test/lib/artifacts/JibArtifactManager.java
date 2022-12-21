@@ -54,6 +54,10 @@ public class JibArtifactManager implements ArtifactManager {
         if (!Files.isDirectory(libDir)) {
             throw new ClassNotFoundException(JIB_SERVICE_FACTORY);
         }
+        Thread.dumpStack();
+        System.out.println("libDir = " + libDir);
+
+
         try {
             URL[] jarUrls;
             try (Stream<Path> files = Files.list(libDir)) {
@@ -66,6 +70,11 @@ public class JibArtifactManager implements ArtifactManager {
                             }
                         }).toArray(URL[]::new);
             }
+            for (URL url : jarUrls) {
+                System.out.println("url = " + url);
+            }
+
+
             // Create a class loader using all those jars and set the parent to the
             // current class loader's parent.
             ClassLoader classLoader = new URLClassLoader(jarUrls, JibArtifactManager.class.getClassLoader().getParent());
@@ -76,8 +85,12 @@ public class JibArtifactManager implements ArtifactManager {
             currentThread.setContextClassLoader(classLoader);
 
             Class jibServiceFactory = classLoader.loadClass(JIB_SERVICE_FACTORY);
+
+            System.out.println("jibServiceFactory = " + jibServiceFactory);
+
             try {
                 Object jibArtifactInstaller = jibServiceFactory.getMethod("createJibArtifactInstaller").invoke(null);
+                System.out.println("jibArtifactInstaller = " + jibArtifactInstaller);
                 return new JibArtifactManager(jibArtifactInstaller, classLoader);
             } finally {
                 currentThread.setContextClassLoader(oldContextLoader);
@@ -89,6 +102,26 @@ public class JibArtifactManager implements ArtifactManager {
     }
 
     private Path download(String jibVersion, Map<String, Object> artifactDescription) throws Exception {
+        Thread.dumpStack();
+        for (String s : artifactDescription.keySet()) {
+            System.out.println("artifactDescription[" + s + "]=" + artifactDescription.get(s) + ", type = " + artifactDescription.get(s).getClass());
+        }
+
+        if (false) {
+            HashMap<String, Object> myMap = new HashMap<>();
+            myMap.put("server", "jpg");
+            myMap.put("product", "jdk");
+            myMap.put("version", "19");
+            myMap.put("build_number", "36");
+            myMap.put("file", "bundles/linux-x64/jdk-19_linux-x64_bin.tar.gz");
+            myMap.put("organization", "");
+            myMap.put("name", "jdk");
+            myMap.put("revision", "19");
+            myMap.put("extension", ".tar.gz");
+
+            System.out.println("hello = " + invokeInstallerMethod("download", jibVersion, myMap));
+        }
+
         return invokeInstallerMethod("download", jibVersion, artifactDescription);
     }
 
