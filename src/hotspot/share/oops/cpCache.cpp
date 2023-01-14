@@ -365,10 +365,11 @@ void ConstantPoolCacheEntry::set_method_handle_common(const constantPoolHandle& 
     return;
   }
 
+  ConstantPoolCache* cpCache = cpool->cache();
+
   if (indy_resolution_failed()) {
     // Before we got here, another thread got a LinkageError exception during
     // resolution.  Ignore our success and throw their exception.
-    ConstantPoolCache* cpCache = cpool->cache();
     int index = -1;
     for (int i = 0; i < cpCache->length(); i++) {
       if (cpCache->entry_at(i) == this) {
@@ -641,14 +642,16 @@ void ConstantPoolCacheEntry::print(outputStream* st, int index, const ConstantPo
                  is_forced_virtual(), is_final(), is_vfinal(),
                  indy_resolution_failed(), parameter_size());
     st->print_cr(" - tos: %s\n - local signature: %01x\n"
-                 " - has appendix: %01x\n - forced virtual: %01x\n"
-                 " - final: %01x\n - virtual final: %01x\n - resolution failed: %01x\n"
-                 " - num parameters: %02x",
-                 type2name(as_BasicType(flag_state())), has_local_signature(), has_appendix(),
-                 is_forced_virtual(), is_final(), is_vfinal(),
-                 indy_resolution_failed(), parameter_size());
-    if (bytecode_1() == Bytecodes::_invokehandle ||
-        bytecode_1() == Bytecodes::_invokedynamic) {
+          " - has appendix: %01x\n - forced virtual: %01x\n"
+          " - final: %01x\n - virtual Final: %01x\n - resolution Failed: %01x\n"
+          " - num Parameters: %02x",
+               type2name(as_BasicType(flag_state())), has_local_signature(), has_appendix(),
+               is_forced_virtual(), is_final(), is_vfinal(),
+               indy_resolution_failed(), parameter_size());
+    if ((bytecode_1() == Bytecodes::_invokehandle ||
+       bytecode_1() == Bytecodes::_invokedynamic)) {
+      constantPoolHandle cph(Thread::current(), cache->constant_pool());
+      Method* m = method_if_resolved(cph);
       oop appendix = appendix_if_resolved(cph);
       if (appendix != nullptr) {
         st->print("  appendix: ");
@@ -676,13 +679,46 @@ void ConstantPoolCacheEntry::verify(outputStream* st) const {
 ConstantPoolCache* ConstantPoolCache::allocate(ClassLoaderData* loader_data,
                                      const intStack& index_map,
                                      const intStack& invokedynamic_index_map,
-                                     const intStack& invokedynamic_map, TRAPS) {
+                                     const intStack& invokedynamic_map,
+                                     const GrowableArray<InvokeDynamicInfo> invokedynamic_info,
+                                     TRAPS) {
 
   const int length = index_map.length() + invokedynamic_index_map.length();
   int size = ConstantPoolCache::size(length);
+  // Initialize resolvedinvokedynamicinfo array with available data
+  Array<ResolvedIndyInfo>* array;
+  if (invokedynamic_info.length()) {
+    array = MetadataFactory::new_array<ResolvedIndyInfo>(loader_data, invokedynamic_info.length(), CHECK_NULL);
+    for (int i = 0; i < invokedynamic_info.length(); i++) {
+        array->at_put(i, ResolvedIndyInfo(invokedynamic_info.at(i)._resolved_info_index,
+                      invokedynamic_info.at(i)._cp_index));
+    }
+  } else {
+    array = nullptr;
+  }
 
   return new (loader_data, size, MetaspaceObj::ConstantPoolCacheType, THREAD)
-    ConstantPoolCache(length, index_map, invokedynamic_index_map, invokedynamic_map);
+    ConstantPoolCache(length, index_map, invokedynamic_index_map, invokedynamic_map, array);
+}
+
+// Constructor
+inline ConstantPoolCache::ConstantPoolCache(int length,
+                                            const intStack& inverse_index_map,
+                                            const intStack& invokedynamic_inverse_index_map,
+                                            const intStack& invokedynamic_references_map,
+                                            Array<ResolvedIndyInfo>* invokedynamic_info) :
+                                                  _length(length),
+                                                  _constant_pool(NULL),
+                                                  _gc_epoch(0),
+                                                  _resolved_indy_info(invokedynamic_info) {
+
+  CDS_JAVA_HEAP_ONLY(_archived_references_index = -1;)
+  initialize(inverse_index_map, invokedynamic_inverse_index_map,
+             invokedynamic_references_map);
+
+  for (int i = 0; i < length; i++) {
+    assert(entry_at(i)->is_f1_null(), "Failed to clear?");
+  }
 }
 
 void ConstantPoolCache::initialize(const intArray& inverse_index_map,
@@ -753,6 +789,8 @@ void ConstantPoolCache::deallocate_contents(ClassLoaderData* data) {
   if (_initial_entries != NULL) {
     Arguments::assert_is_dumping_archive();
     MetadataFactory::free_array<ConstantPoolCacheEntry>(data, _initial_entries);
+    if (_resolved_indy_info)
+      MetadataFactory::free_array<ResolvedIndyInfo>(data, _resolved_indy_info);
     _initial_entries = NULL;
   }
 #endif
@@ -784,6 +822,17 @@ void ConstantPoolCache::set_archived_references(oop o) {
 // If any entry of this ConstantPoolCache points to any of
 // old_methods, replace it with the corresponding new_method.
 void ConstantPoolCache::adjust_method_entries(bool * trace_name_printed) {
+  if (UseNewIndyCode && _resolved_indy_info != nullptr) {
+    for (int j = 0; j < _resolved_indy_info->length(); j++) {
+      Method* old_method = resolved_indy_info(j)->method();
+      if (old_method == nullptr || !old_method->is_old()) {
+        continue;
+      }
+      Method* new_method = old_method->get_new_method();
+      resolved_indy_info(j)->adjust_method_entry(new_method);
+      log_adjust("indy", old_method, new_method, trace_name_printed);
+    }
+  }
   for (int i = 0; i < length(); i++) {
     ConstantPoolCacheEntry* entry = entry_at(i);
     Method* old_method = entry->get_interesting_method_entry();
@@ -803,6 +852,19 @@ void ConstantPoolCache::adjust_method_entries(bool * trace_name_printed) {
 // the constant pool cache should never contain old or obsolete methods
 bool ConstantPoolCache::check_no_old_or_obsolete_entries() {
   ResourceMark rm;
+  if (UseNewIndyCode && _resolved_indy_info) {
+    for (int i = 0; i < _resolved_indy_info->length(); i++) {
+      Method* m = resolved_indy_info(i)->method();
+      if (m != nullptr && !resolved_indy_info(i)->check_no_old_or_obsolete_entry()) {
+        log_trace(redefine, class, update, constantpool)
+          ("cpcache check found old method entry: class: %s, old: %d, obsolete: %d, method: %s",
+           constant_pool()->pool_holder()->external_name(), m->is_old(), m->is_obsolete(), m->external_name());
+        return false;
+      }
+    }
+    //return true;
+  }
+
   for (int i = 1; i < length(); i++) {
     Method* m = entry_at(i)->get_interesting_method_entry();
     if (m != NULL && !entry_at(i)->check_no_old_or_obsolete_entries()) {
@@ -828,6 +890,123 @@ void ConstantPoolCache::metaspace_pointers_do(MetaspaceClosure* it) {
   log_trace(cds)("Iter(ConstantPoolCache): %p", this);
   it->push(&_constant_pool);
   it->push(&_reference_map);
+  if (_resolved_indy_info != nullptr) {
+    it->push(&_resolved_indy_info, MetaspaceClosure::_writable);
+  }
+}
+
+bool ConstantPoolCache::save_and_throw_indy_exc(
+  const constantPoolHandle& cpool, int cpool_index, int index, constantTag tag, TRAPS) {
+
+  assert(HAS_PENDING_EXCEPTION, "No exception got thrown!");
+  assert(PENDING_EXCEPTION->is_a(vmClasses::LinkageError_klass()),
+         "No LinkageError exception");
+
+  MutexLocker ml(THREAD, cpool->pool_holder()->init_monitor());
+
+  // if f1 is not null or the indy_resolution_failed flag is set then another
+  // thread either succeeded in resolving the method or got a LinkageError
+  // exception, before this thread was able to record its failure.  So, clear
+  // this thread's exception and return false so caller can use the earlier
+  // thread's result.
+  if (resolved_indy_info(index)->is_resolved() || resolved_indy_info(index)->resolution_failed()) {
+    CLEAR_PENDING_EXCEPTION;
+    return false;
+  }
+
+  Symbol* error = PENDING_EXCEPTION->klass()->name();
+  Symbol* message = java_lang_Throwable::detail_message(PENDING_EXCEPTION);
+
+  SystemDictionary::add_resolution_error(cpool, index, error, message);
+  resolved_indy_info(index)->set_resolution_failed();
+  return true;
+}
+
+oop ConstantPoolCache::set_dynamic_call(const CallInfo &call_info, int index) {
+  ResourceMark rm;
+  MutexLocker ml(constant_pool()->pool_holder()->init_monitor());
+
+  if (UseNewIndyCode) {
+    if (resolved_indy_info(index)->method() != nullptr)
+      return constant_pool()->resolved_reference_from_indy(index);
+  }
+
+  // Come back to this
+  /*if (indy_resolution_failed()) {
+    // Before we got here, another thread got a LinkageError exception during
+    // resolution.  Ignore our success and throw their exception.
+    //ConstantPoolCache* cpCache = cpool->cache();
+    int index = -1;
+    for (int i = 0; i < cpCache->length(); i++) {
+      if (cpCache->entry_at(i) == this) {
+        index = i;
+        break;
+      }
+    }
+    guarantee(index >= 0, "Didn't find cpCache entry!");
+    int encoded_index = ResolutionErrorTable::encode_cpcache_index(
+                          ConstantPool::encode_invokedynamic_index(index));
+    JavaThread* THREAD = JavaThread::current(); // For exception macros.
+    ConstantPool::throw_resolution_error(cpool, encoded_index, THREAD);
+    return;
+  }*/
+
+  Method* adapter            = call_info.resolved_method();
+  const Handle appendix      = call_info.resolved_appendix();
+  const bool has_appendix    = appendix.not_null();
+
+  // Write the flags.
+  // MHs and indy are always sig-poly and have a local signature.
+  // I don't think I need this...
+  /*set_method_flags(as_TosState(adapter->result_type()),
+                   ((has_appendix    ? 1 : 0) << has_appendix_shift        ) |
+                   (                   1      << has_local_signature_shift ) |
+                   (                   1      << is_final_shift            ),
+                   adapter->size_of_parameters());*/
+
+  LogStream* log_stream = NULL;
+  LogStreamHandle(Debug, methodhandles, indy) lsh_indy;
+  if (lsh_indy.is_enabled()) {
+    ResourceMark rm;
+    log_stream = &lsh_indy;
+    log_stream->print_cr("set_method_handle bc=%d appendix=" PTR_FORMAT "%s method=" PTR_FORMAT " (local signature) ",
+                         0xba,
+                         p2i(appendix()),
+                         (has_appendix ? "" : " (unused)"),
+                         p2i(adapter));
+    adapter->print_on(log_stream);
+    if (has_appendix)  appendix()->print_on(log_stream);
+  }
+
+  if (has_appendix) {
+    //const int appendix_index = resolved_invokedynamic_info_array()->at(index).resolved_references_index();
+    const int appendix_index = resolved_indy_info(index)->resolved_references_index();
+    objArrayOop resolved_references = constant_pool()->resolved_references();
+    assert(appendix_index >= 0 && appendix_index < resolved_references->length(), "oob");
+    assert(resolved_references->obj_at(appendix_index) == NULL, "init just once");
+    resolved_references->obj_at_put(appendix_index, appendix());
+  }
+
+  // You may be able to compare Array<ResolvedInvokeDynamicInfo>.at(_invokedynamic_index) with the info
+  // that's set in the constant pool cache here.
+  // Long term, the invokedynamic bytecode will point directly to _invokedynamic_index, for now find it
+  // out of the ConstantPoolCacheEntry.
+
+  if (UseNewIndyCode && resolved_indy_info()) {
+    assert(resolved_indy_info() != nullptr, "Invokedynamic array is empty, cannot fill with resolved information");
+    resolved_indy_info(index)->fill_in(adapter, adapter->size_of_parameters(), as_TosState(adapter->result_type()), has_appendix);
+    // resolved_indy_info(index)->print_on(tty);
+  }
+
+  // The interpreter assembly code does not check byte_2,
+  // but it is used by is_resolved, method_if_resolved, etc.
+  /*set_bytecode_1(invoke_code);*/
+  //NOT_PRODUCT(verify(tty));
+
+  if (log_stream != NULL) {
+    resolved_indy_info(index)->print_on(log_stream);
+  }
+  return appendix();
 }
 
 // Printing

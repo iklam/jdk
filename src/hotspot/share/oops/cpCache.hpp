@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "oops/array.hpp"
 #include "oops/oopHandle.hpp"
+#include "oops/ResolvedIndyInfo.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/align.hpp"
 #include "utilities/constantTag.hpp"
@@ -136,7 +137,7 @@ class ConstantPoolCacheEntry {
   friend class InterpreterRuntime;
 
  private:
-  volatile intx     _indices;  // constant pool index & rewrite bytecodes
+  volatile int     _indices;  // constant pool index & rewrite bytecodes
   Metadata* volatile   _f1;       // entry specific metadata field
   volatile intx        _f2;       // entry specific int/metadata field
   volatile intx     _flags;    // flags
@@ -292,8 +293,8 @@ class ConstantPoolCacheEntry {
 
   // invokedynamic and invokehandle call sites have an "appendix" item in the
   // resolved references array.
-  Method*      method_if_resolved(const constantPoolHandle& cpool) const;
-  oop        appendix_if_resolved(const constantPoolHandle& cpool) const;
+  Method* method_if_resolved(const constantPoolHandle& cpool) const;
+  oop     appendix_if_resolved(const constantPoolHandle& cpool) const;
 
   void set_parameter_size(int value);
 
@@ -397,6 +398,19 @@ class ConstantPoolCacheEntry {
 class ConstantPoolCache: public MetaspaceObj {
   friend class VMStructs;
   friend class MetadataFactory;
+ public:
+ struct InvokeDynamicInfo {
+    u2 _resolved_info_index;
+    u2 _cp_index;
+
+    InvokeDynamicInfo(int resolved_info_index, int cp_index) :
+          _resolved_info_index(resolved_info_index),
+          _cp_index(cp_index) {}
+    InvokeDynamicInfo() :
+          _resolved_info_index(0),
+          _cp_index(0) {}
+  };
+
  private:
   // If you add a new field that points to any metaspace object, you
   // must add this field to ConstantPoolCache::metaspace_pointers_do().
@@ -418,6 +432,8 @@ class ConstantPoolCache: public MetaspaceObj {
   // RedefineClasses support
   uint64_t             _gc_epoch;
 
+  Array<ResolvedIndyInfo>* _resolved_indy_info;
+
   CDS_ONLY(Array<ConstantPoolCacheEntry>* _initial_entries;)
 
   // Sizing
@@ -427,7 +443,8 @@ class ConstantPoolCache: public MetaspaceObj {
   ConstantPoolCache(int length,
                     const intStack& inverse_index_map,
                     const intStack& invokedynamic_inverse_index_map,
-                    const intStack& invokedynamic_references_map);
+                    const intStack& invokedynamic_references_map,
+                    Array<ResolvedIndyInfo>* indy_info);
 
   // Initialization
   void initialize(const intArray& inverse_index_map,
@@ -437,7 +454,9 @@ class ConstantPoolCache: public MetaspaceObj {
   static ConstantPoolCache* allocate(ClassLoaderData* loader_data,
                                      const intStack& cp_cache_map,
                                      const intStack& invokedynamic_cp_cache_map,
-                                     const intStack& invokedynamic_references_map, TRAPS);
+                                     const intStack& invokedynamic_references_map,
+                                     const GrowableArray<InvokeDynamicInfo> indy_info,
+                                     TRAPS);
 
   int length() const                      { return _length; }
   void metaspace_pointers_do(MetaspaceClosure* it);
@@ -452,8 +471,18 @@ class ConstantPoolCache: public MetaspaceObj {
   Array<u2>* reference_map() const        { return _reference_map; }
   void set_reference_map(Array<u2>* o)    { _reference_map = o; }
 
+  Array<ResolvedIndyInfo>* resolved_indy_info()   { return _resolved_indy_info; }
+  ResolvedIndyInfo* resolved_indy_info(int index) { return _resolved_indy_info->adr_at(index); }
+  int resolved_indy_info_length() const           { return _resolved_indy_info->length();      }
+  void print_resolved_indy_info(outputStream* st) const {
+    for (int i = 0; i < _resolved_indy_info->length(); i++) {
+        _resolved_indy_info->at(i).print_on(st);
+    }
+  }
+
   // Assembly code support
   static int resolved_references_offset_in_bytes() { return offset_of(ConstantPoolCache, _resolved_references); }
+  static ByteSize invokedynamic_entries_offset()   { return byte_offset_of(ConstantPoolCache, _resolved_indy_info); }
 
 #if INCLUDE_CDS
   void remove_unshareable_info();
@@ -513,6 +542,11 @@ class ConstantPoolCache: public MetaspaceObj {
   bool is_klass() const { return false; }
   void record_gc_epoch();
   uint64_t gc_epoch() { return _gc_epoch; }
+
+  bool save_and_throw_indy_exc(const constantPoolHandle& cpool,
+                                                  int cpool_index, int index,
+                                                  constantTag tag, TRAPS);
+  oop set_dynamic_call(const CallInfo &call_info, int index);
 
   // Printing
   void print_on(outputStream* st) const;

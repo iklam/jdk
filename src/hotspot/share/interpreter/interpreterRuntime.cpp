@@ -934,6 +934,9 @@ void InterpreterRuntime::resolve_invokedynamic(JavaThread* current) {
   CallInfo info;
   constantPoolHandle pool(current, last_frame.method()->constants());
   int index = last_frame.get_index_u4(bytecode);
+  if (UseNewIndyCode) {
+    //index = pool->decode_invokedynamic_index(index);
+  }
   {
     JvmtiHideSingleStepping jhss(current);
     JavaThread* THREAD = current; // For exception macros.
@@ -941,8 +944,13 @@ void InterpreterRuntime::resolve_invokedynamic(JavaThread* current) {
                                  index, bytecode, CHECK);
   } // end JvmtiHideSingleStepping
 
-  ConstantPoolCacheEntry* cp_cache_entry = pool->invokedynamic_cp_cache_entry_at(index);
-  cp_cache_entry->set_dynamic_call(pool, info);
+  if (UseNewIndyCode) {
+    // Call my own set_dynamic_call from CpCache
+    pool->cache()->set_dynamic_call(info, pool->decode_invokedynamic_index(index));
+  } else {
+    ConstantPoolCacheEntry* cp_cache_entry = pool->invokedynamic_cp_cache_entry_at(index);
+    cp_cache_entry->set_dynamic_call(pool, info);
+  }
 }
 
 // This function is the interface to the assembly code. It returns the resolved

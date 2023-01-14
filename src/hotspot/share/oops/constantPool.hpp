@@ -271,7 +271,11 @@ class ConstantPool : public Metadata {
   // main constant pool entry for its bootstrap specifier.
   // From there, uncached_name/signature_ref_at will get the name/type.
   int invokedynamic_bootstrap_ref_index_at(int indy_index) const {
-    return invokedynamic_cp_cache_entry_at(indy_index)->constant_pool_index();
+    if (UseNewIndyCode) {
+      return cache()->resolved_indy_info(decode_invokedynamic_index(indy_index))->cpool_index();
+    } else {
+      return invokedynamic_cp_cache_entry_at(indy_index)->constant_pool_index();
+    }
   }
 
   // Assembly code support
@@ -772,9 +776,9 @@ class ConstantPool : public Metadata {
 
   // Used by compiler to prevent classloading.
   static Method*          method_at_if_loaded      (const constantPoolHandle& this_cp, int which);
-  static bool       has_appendix_at_if_loaded      (const constantPoolHandle& this_cp, int which);
-  static oop            appendix_at_if_loaded      (const constantPoolHandle& this_cp, int which);
-  static bool has_local_signature_at_if_loaded     (const constantPoolHandle& this_cp, int which);
+  static bool       has_appendix_at_if_loaded      (const constantPoolHandle& this_cp, int which, bool is_invokedynamic);
+  static oop            appendix_at_if_loaded      (const constantPoolHandle& this_cp, int which, bool is_invokedynamic);
+  static bool has_local_signature_at_if_loaded     (const constantPoolHandle& this_cp, int which, bool is_invokedynamic);
   static Klass*            klass_at_if_loaded      (const constantPoolHandle& this_cp, int which);
 
   // Routines currently used for annotations (only called by jvm.cpp) but which might be used in the
@@ -924,6 +928,14 @@ class ConstantPool : public Metadata {
   void print_entry_on(int index, outputStream* st);
 
   const char* internal_name() const { return "{constant pool}"; }
+
+    // ResolvedIndyInfo getters
+  ResolvedIndyInfo* resolved_indy_info(int index) {
+    return cache()->resolved_indy_info(index);
+  }
+  oop resolved_reference_from_indy(int index) {
+    return resolved_references()->obj_at(cache()->resolved_indy_info(index)->resolved_references_index());
+  }
 };
 
 #endif // SHARE_OOPS_CONSTANTPOOL_HPP

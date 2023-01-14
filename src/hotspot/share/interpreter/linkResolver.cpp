@@ -1399,6 +1399,7 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
       assert(resolved_method->can_be_statically_bound(), "cannot override this method");
       selected_method = resolved_method;
     } else {
+      // goes down this path <DELETE THIS COMMENT LATER>
       selected_method = methodHandle(THREAD, recv_klass->method_at_vtable(vtable_index));
     }
   }
@@ -1764,8 +1765,14 @@ void LinkResolver::resolve_handle_call(CallInfo& result,
 }
 
 void LinkResolver::resolve_invokedynamic(CallInfo& result, const constantPoolHandle& pool, int indy_index, TRAPS) {
-  ConstantPoolCacheEntry* cpce = pool->invokedynamic_cp_cache_entry_at(indy_index);
-  int pool_index = cpce->constant_pool_index();
+  int pool_index;
+  if (UseNewIndyCode) {
+    indy_index = pool->decode_invokedynamic_index(indy_index);
+    pool_index = pool->resolved_indy_info(indy_index)->cpool_index();
+  } else {
+    ConstantPoolCacheEntry* cpce = pool->invokedynamic_cp_cache_entry_at(indy_index);
+    pool_index = cpce->constant_pool_index();
+  }
 
   // Resolve the bootstrap specifier (BSM + optional arguments).
   BootstrapInfo bootstrap_specifier(pool, pool_index, indy_index);
@@ -1806,6 +1813,7 @@ void LinkResolver::resolve_invokedynamic(CallInfo& result, const constantPoolHan
 void LinkResolver::resolve_dynamic_call(CallInfo& result,
                                         BootstrapInfo& bootstrap_specifier,
                                         TRAPS) {
+
   // JSR 292:  this must resolve to an implicitly generated method
   // such as MH.linkToCallSite(*...) or some other call-site shape.
   // The appendix argument is likely to be a freshly-created CallSite.
@@ -1823,22 +1831,30 @@ void LinkResolver::resolve_dynamic_call(CallInfo& result,
       // nor do we memorize a LE for posterity.
       return;
     }
+    if (UseNewIndyCode) {
+      // I forget why this is here
+      // ShouldNotReachHere();
+    }
     // JVMS 5.4.3 says: If an attempt by the Java Virtual Machine to resolve
     // a symbolic reference fails because an error is thrown that is an
     // instance of LinkageError (or a subclass), then subsequent attempts to
     // resolve the reference always fail with the same error that was thrown
     // as a result of the initial resolution attempt.
-     bool recorded_res_status = bootstrap_specifier.save_and_throw_indy_exc(CHECK);
-     if (!recorded_res_status) {
-       // Another thread got here just before we did.  So, either use the method
-       // that it resolved or throw the LinkageError exception that it threw.
-       bool is_done = bootstrap_specifier.resolve_previously_linked_invokedynamic(result, CHECK);
-       if (is_done) return;
-     }
-     assert(bootstrap_specifier.invokedynamic_cp_cache_entry()->indy_resolution_failed(),
+    bool recorded_res_status = bootstrap_specifier.save_and_throw_indy_exc(CHECK);
+    if (!recorded_res_status) {
+      // Another thread got here just before we did.  So, either use the method
+      // that it resolved or throw the LinkageError exception that it threw.
+      bool is_done = bootstrap_specifier.resolve_previously_linked_invokedynamic(result, CHECK);
+      if (is_done) return;
+    }
+    if (UseNewIndyCode) {
+      assert(bootstrap_specifier.pool()->resolved_indy_info(bootstrap_specifier.indy_index())->resolution_failed(),
+            "Resolution should have failed");
+    } else {
+      assert(bootstrap_specifier.invokedynamic_cp_cache_entry()->indy_resolution_failed(),
             "Resolution failure flag wasn't set");
+    }
   }
-
   bootstrap_specifier.resolve_newly_linked_invokedynamic(result, CHECK);
   // Exceptions::wrap_dynamic_exception not used because
   // set_handle doesn't throw linkage errors

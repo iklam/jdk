@@ -26,6 +26,7 @@
 #define SHARE_INTERPRETER_REWRITER_HPP
 
 #include "memory/allocation.hpp"
+#include "oops/constantPool.hpp"
 #include "utilities/growableArray.hpp"
 
 // The Rewriter adds caches to the constant pool and rewrites bytecode indices
@@ -44,6 +45,7 @@ class Rewriter: public StackObj {
   GrowableArray<int>  _invokedynamic_references_map; // for invokedynamic resolved refs
   GrowableArray<int>  _method_handle_invokers;
   int                 _resolved_reference_limit;
+  int                 _invokedynamic_index;
 
   // For mapping invokedynamic bytecodes, which are discovered during method
   // scanning.  The invokedynamic entries are added at the end of the cpCache.
@@ -55,6 +57,8 @@ class Rewriter: public StackObj {
   // For patching.
   GrowableArray<address>* _patch_invokedynamic_bcps;
   GrowableArray<int>*     _patch_invokedynamic_refs;
+
+  GrowableArray<ConstantPoolCache::InvokeDynamicInfo> _stuff_to_collect_during_rewriting;
 
   void init_maps(int length) {
     _cp_map.trunc_to(0);
