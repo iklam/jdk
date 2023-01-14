@@ -55,6 +55,13 @@ public:
         _has_appendix(false),
         _resolution_failed(false) {}
 
+  void remove_unshareable_info() {
+    _number_of_parameters = 0;
+    _return_type = 0;
+    _has_appendix = false;
+    _method = NULL;
+  }
+
     // Getters
     Method* method() const               { return _method;                    }
     u2 resolved_references_index() const { return _resolved_references_index; }

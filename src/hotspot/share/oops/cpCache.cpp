@@ -776,6 +776,12 @@ void ConstantPoolCache::remove_unshareable_info() {
     *entry_at(i) = _initial_entries->at(i);
   }
   _initial_entries = NULL;
+
+  if (_resolved_indy_info != NULL) {
+    for (int i = 0; i < _resolved_indy_info->length(); i++) {
+      _resolved_indy_info->adr_at(i)->remove_unshareable_info();
+    }
+  }
 }
 #endif // INCLUDE_CDS
 
