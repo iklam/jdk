@@ -896,9 +896,7 @@ void ConstantPoolCache::metaspace_pointers_do(MetaspaceClosure* it) {
   log_trace(cds)("Iter(ConstantPoolCache): %p", this);
   it->push(&_constant_pool);
   it->push(&_reference_map);
-  if (_resolved_indy_info != nullptr) {
-    it->push(&_resolved_indy_info, MetaspaceClosure::_writable);
-  }
+  it->push(&_resolved_indy_info, MetaspaceClosure::_writable);
 }
 
 bool ConstantPoolCache::save_and_throw_indy_exc(

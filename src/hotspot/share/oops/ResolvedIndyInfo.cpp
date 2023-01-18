@@ -47,7 +47,3 @@ void ResolvedIndyInfo::print_on(outputStream* st) const {
     st->print_cr(" - Return type: %s", type2name(as_BasicType((TosState)return_type())));
     st->print_cr(" - Has Appendix: %d", has_appendix());
 }
-
-void ResolvedIndyInfo::metaspace_pointers_do(MetaspaceClosure* it) {
-    it->push(&_method);
-}

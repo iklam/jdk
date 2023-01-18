@@ -25,10 +25,10 @@
 #ifndef SHARE_OOPS_RESOLVEDINVOKEDYNAMICINFO_HPP
 #define SHARE_OOPS_RESOLVEDINVOKEDYNAMICINFO_HPP
 
-#include "memory/metaspaceClosure.hpp"
+#include "utilities/globalDefinitions.hpp"
 
 class Method;
-class ResolvedIndyInfo : public MetaspaceObj {
+class ResolvedIndyInfo {
      Method* _method;
      u2 _resolved_references_index;
      u2 _cpool_index;
@@ -98,8 +98,6 @@ public:
 
     void adjust_method_entry(Method* new_method) { _method = new_method; }
     bool check_no_old_or_obsolete_entry();
-
-    void metaspace_pointers_do(MetaspaceClosure* it);
 
     // Offsets
     static ByteSize method_offset()                    { return byte_offset_of(ResolvedIndyInfo, _method);                    }
