@@ -114,7 +114,7 @@ bool ArchiveHeapWriter::is_too_large_to_archive(oop o) {
   return is_too_large_to_archive(o->size());
 }
 
-bool ArchiveHeapWriter::is_too_large_to_archive(size_t size) {
+bool ArchiveHeapWriter::is_too_large_to_archive(size_t size) { // word size
   assert(size > 0, "no zero-size object");
   assert(size * HeapWordSize > size, "no overflow");
   static_assert(MIN_GC_REGION_ALIGNMENT > 0, "must be positive");
