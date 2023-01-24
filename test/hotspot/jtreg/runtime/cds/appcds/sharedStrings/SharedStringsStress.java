@@ -52,7 +52,7 @@ public class SharedStringsStress {
             out.println("VERSION: 1.0");
             out.println("@SECTION: String");
             out.println("31: shared_test_string_unique_14325");
-            for (int i=0; i<200000; i++) {
+            for (int i=0; i<260000; i++) {
                 String s = "generated_string " + i;
                 out.println(s.length() + ": " + s);
             }
