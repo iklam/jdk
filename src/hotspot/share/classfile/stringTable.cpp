@@ -253,12 +253,14 @@ void StringTable::create_table() {
   _oop_storage = OopStorageSet::create_weak("StringTable Weak", mtSymbol);
   _oop_storage->register_num_dead_callback(&gc_notification);
 
+#if INCLUDE_CDS_JAVA_HEAP
   if (ArchiveHeapLoader::are_archived_strings_available()) {
     _shared_table_array = OopHandle(Universe::vm_global(), HeapShared::get_root(_shared_table_array_root_index));
     if (UseNewCode) {
       print_all_strings();
     }
   }
+#endif
 }
 
 size_t StringTable::item_added() {
