@@ -569,6 +569,7 @@ void HeapShared::copy_interned_strings() {
     if (!ArchiveHeapWriter::is_too_large_to_archive(value)) {
       bool success = archive_reachable_objects_from(1, _default_subgraph_info,
                                                     s, /*is_closed_archive=*/true);
+      //append_root(s);
       assert(success, "must be");
     }
   };
