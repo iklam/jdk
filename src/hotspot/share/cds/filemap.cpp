@@ -2071,7 +2071,8 @@ static int num_open_heap_regions = 0;
 
 #if INCLUDE_CDS_JAVA_HEAP
 bool FileMapInfo::has_heap_regions() {
-  return (region_at(MetaspaceShared::first_closed_heap_region)->used() > 0);
+  return (region_at(MetaspaceShared::first_closed_heap_region)->used() > 0) ||
+         (region_at(MetaspaceShared::first_open_heap_region)->used() > 0);
 }
 
 // Returns the address range of the archived heap regions computed using the
@@ -2279,6 +2280,7 @@ void FileMapInfo::map_heap_regions_impl() {
 
   log_info(cds)("CDS heap data relocation delta = " INTX_FORMAT " bytes", delta);
 
+#if 0
   FileMapRegion* r = region_at(MetaspaceShared::first_closed_heap_region);
   address relocated_closed_heap_region_bottom = heap_region_requested_address(r) + delta;
 
@@ -2294,12 +2296,15 @@ void FileMapInfo::map_heap_regions_impl() {
                   align, delta);
     _heap_pointers_need_patching = true;
   }
+#endif
 
   ArchiveHeapLoader::init_mapped_heap_relocation(delta, narrow_oop_shift());
+#if 0
   relocated_closed_heap_region_bottom = heap_region_mapped_address(r);
 
   assert(is_aligned(relocated_closed_heap_region_bottom, HeapRegion::GrainBytes),
          "must be");
+#endif
 
   if (_heap_pointers_need_patching) {
     char* bitmap_base = map_bitmap_region();
@@ -2310,11 +2315,13 @@ void FileMapInfo::map_heap_regions_impl() {
     }
   }
 
+#if 0
   // Map the closed heap regions: GC does not write into these regions.
   if (map_heap_regions(MetaspaceShared::first_closed_heap_region,
                        MetaspaceShared::max_num_closed_heap_regions,
                        /*is_open_archive=*/ false,
                        &closed_heap_regions, &num_closed_heap_regions)) {
+#endif
     ArchiveHeapLoader::set_closed_regions_mapped();
 
     // Now, map the open heap regions: GC can write into these regions.
@@ -2324,7 +2331,7 @@ void FileMapInfo::map_heap_regions_impl() {
                          &open_heap_regions, &num_open_heap_regions)) {
       ArchiveHeapLoader::set_open_regions_mapped();
     }
-  }
+//  }
 }
 
 bool FileMapInfo::map_heap_regions() {

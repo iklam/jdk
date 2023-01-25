@@ -534,6 +534,7 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
                                  GrowableArray<ArchiveHeapBitmapInfo>* open_bitmaps) {
   {
     NoSafepointVerifier nsv;
+    _copying_open_region_objects = true; // FIXME
 
     _default_subgraph_info = init_subgraph_info(vmClasses::Object_klass(), false);
 
@@ -548,7 +549,6 @@ void HeapShared::archive_objects(GrowableArray<MemRegion>* closed_regions,
     log_info(cds)("Dumping objects to closed archive heap region ...");
     copy_closed_objects();
 
-    _copying_open_region_objects = true;
 
     log_info(cds)("Dumping objects to open archive heap region ...");
     copy_open_objects();

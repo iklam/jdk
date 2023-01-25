@@ -374,7 +374,7 @@ void ArchiveHeapWriter::set_requested_address_for_regions(GrowableArray<MemRegio
 
   size_t closed_region_byte_size = _closed_top - _closed_bottom;
   size_t open_region_byte_size = _open_top - _open_bottom;
-  assert(closed_region_byte_size > 0, "must archived at least one object for closed region!");
+  //assert(closed_region_byte_size > 0, "must archived at least one object for closed region!");
   assert(open_region_byte_size > 0, "must archived at least one object for open region!");
 
   // The following two asserts are ensured by copy_source_objs_to_buffer_by_region().
@@ -392,8 +392,8 @@ void ArchiveHeapWriter::set_requested_address_for_regions(GrowableArray<MemRegio
 
   assert(_requested_open_region_top <= _requested_closed_region_bottom, "no overlap");
 
-  closed_regions->append(MemRegion(offset_to_buffered_address<HeapWord*>(_closed_bottom),
-                                   offset_to_buffered_address<HeapWord*>(_closed_top)));
+//  closed_regions->append(MemRegion(offset_to_buffered_address<HeapWord*>(_closed_bottom),
+//                                   offset_to_buffered_address<HeapWord*>(_closed_top)));
   open_regions->append(  MemRegion(offset_to_buffered_address<HeapWord*>(_open_bottom),
                                    offset_to_buffered_address<HeapWord*>(_open_top)));
 }

@@ -200,12 +200,15 @@ void ArchiveHeapLoader::init_loaded_heap_relocation(LoadedArchiveHeapRegion* loa
   _runtime_offset_2 = loaded_regions[2]._runtime_offset;
   _runtime_offset_3 = loaded_regions[3]._runtime_offset;
 
-  assert(2 <= num_loaded_regions && num_loaded_regions <= 4, "must be");
+  assert(1 <= num_loaded_regions && num_loaded_regions <= 4, "must be");
   if (num_loaded_regions < 4) {
     _dumptime_base_3 = UINTPTR_MAX;
   }
   if (num_loaded_regions < 3) {
     _dumptime_base_2 = UINTPTR_MAX;
+  }
+  if (num_loaded_regions < 2) {
+    _dumptime_base_1 = UINTPTR_MAX;
   }
 }
 
@@ -231,7 +234,7 @@ class PatchLoadedRegionPointers: public BitMapClosure {
   uintptr_t _top;
 
   static_assert(MetaspaceShared::max_num_heap_regions == 4, "can't handle more than 4 regions");
-  static_assert(NUM_LOADED_REGIONS >= 2, "we have at least 2 loaded regions");
+  static_assert(NUM_LOADED_REGIONS >= 1, "we have at least 1 loaded regions");
   static_assert(NUM_LOADED_REGIONS <= 4, "we have at most 4 loaded regions");
 
  public:
@@ -261,7 +264,7 @@ class PatchLoadedRegionPointers: public BitMapClosure {
       o += _offset_3;
     } else if (NUM_LOADED_REGIONS > 2 && o >= _base_2) {
       o += _offset_2;
-    } else if (o >= _base_1) {
+    } else if (NUM_LOADED_REGIONS > 1 && o >= _base_1) {
       o += _offset_1;
     } else {
       o += _offset_0;
@@ -354,9 +357,12 @@ bool ArchiveHeapLoader::load_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegi
     } else if (num_loaded_regions == 3) {
       PatchLoadedRegionPointers<3> patcher((narrowOop*)load_address, loaded_regions);
       bm.iterate(&patcher);
-    } else {
-      assert(num_loaded_regions == 2, "must be");
+    } else if (num_loaded_regions == 2) {
       PatchLoadedRegionPointers<2> patcher((narrowOop*)load_address, loaded_regions);
+      bm.iterate(&patcher);
+    } else {
+      assert(num_loaded_regions == 1, "must be");
+      PatchLoadedRegionPointers<1> patcher((narrowOop*)load_address, loaded_regions);
       bm.iterate(&patcher);
     }
 
