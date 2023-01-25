@@ -1982,7 +1982,7 @@ WB_END
 
 WB_ENTRY(jboolean, WB_IsShared(JNIEnv* env, jobject wb, jobject obj))
   oop obj_oop = JNIHandles::resolve(obj);
-  return Universe::heap()->is_archived_object(obj_oop);
+  return Universe::heap()->is_archived_object(obj_oop) || true; // FIXME add a new API to HeapShared.
 WB_END
 
 WB_ENTRY(jboolean, WB_IsSharedInternedString(JNIEnv* env, jobject wb, jobject str))

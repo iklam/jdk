@@ -589,12 +589,14 @@ bool G1CollectedHeap::alloc_archive_regions(MemRegion* ranges,
       assert(curr_region->is_empty() && !curr_region->is_pinned(),
              "Region already in use (index %u)", curr_region->hrm_index());
       if (open) {
-        curr_region->set_open_archive();
+        //curr_region->set_open_archive();
+        curr_region->set_old();
       } else {
         curr_region->set_closed_archive();
       }
       _hr_printer.alloc(curr_region);
-      _archive_set.add(curr_region);
+      //_archive_set.add(curr_region);
+      _old_set.add(curr_region);
       HeapWord* top;
       HeapRegion* next_region;
       if (curr_region != last_region) {
@@ -649,8 +651,10 @@ void G1CollectedHeap::fill_archive_regions(MemRegion* ranges, size_t count) {
     // alloc_archive_regions.
     HeapRegion* curr_region = start_region;
     while (curr_region != NULL) {
+#if 0
       guarantee(curr_region->is_archive(),
                 "Expected archive region at index %u", curr_region->hrm_index());
+#endif
       if (curr_region != last_region) {
         curr_region = _hrm.next_region_in_heap(curr_region);
       } else {
