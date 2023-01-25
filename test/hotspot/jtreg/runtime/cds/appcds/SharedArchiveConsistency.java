@@ -50,10 +50,7 @@ public class SharedArchiveConsistency {
         "rw",          // ReadWrite
         "ro",          // ReadOnly
         "bm",          // relocation bitmaps
-        "first_closed_archive",
-        "last_closed_archive",
-        "first_open_archive",
-        "last_open_archive"
+        "hp",          // heap
     };
 
     public static final String HELLO_WORLD = "Hello World";

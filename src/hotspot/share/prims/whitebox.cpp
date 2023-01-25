@@ -1998,7 +1998,7 @@ WB_ENTRY(jboolean, WB_IsSharedClass(JNIEnv* env, jobject wb, jclass clazz))
 WB_END
 
 WB_ENTRY(jboolean, WB_AreSharedStringsMapped(JNIEnv* env))
-  return ArchiveHeapLoader::closed_regions_mapped();
+  return ArchiveHeapLoader::is_mapped();
 WB_END
 
 WB_ENTRY(jobject, WB_GetResolvedReferences(JNIEnv* env, jobject wb, jclass clazz))
@@ -2023,7 +2023,7 @@ WB_ENTRY(void, WB_LinkClass(JNIEnv* env, jobject wb, jclass clazz))
 WB_END
 
 WB_ENTRY(jboolean, WB_AreOpenArchiveHeapObjectsMapped(JNIEnv* env))
-  return ArchiveHeapLoader::open_regions_mapped();
+  return ArchiveHeapLoader::is_mapped();
 WB_END
 
 WB_ENTRY(jboolean, WB_IsCDSIncluded(JNIEnv* env))
