@@ -98,17 +98,7 @@ class ResourceHashtableBase : public STORAGE {
 
   ~ResourceHashtableBase() {
     if (ALLOC_TYPE == AnyObj::C_HEAP) {
-      Node* const* bucket = table();
-      const unsigned sz = table_size();
-      while (bucket < bucket_at(sz)) {
-        Node* node = *bucket;
-        while (node != nullptr) {
-          Node* cur = node;
-          node = node->_next;
-          delete cur;
-        }
-        ++bucket;
-      }
+      unlink_all();
     }
   }
 
@@ -255,15 +245,15 @@ class ResourceHashtableBase : public STORAGE {
   // ITER contains bool do_entry(K const&, V const&), which will be
   // called for each entry in the table.  If do_entry() returns true,
   // the entry is deleted.
-  template<class ITER>
-  void unlink(ITER* iter) {
+  template<typename Function>
+  void unlink(Function function) {
     const unsigned sz = table_size();
     for (unsigned index = 0; index < sz; index++) {
       Node** ptr = bucket_at(index);
       while (*ptr != nullptr) {
         Node* node = *ptr;
         // do_entry must clean up the key and value in Node.
-        bool clean = iter->do_entry(node->_key, node->_value);
+        bool clean = function(node->_key, node->_value);
         if (clean) {
           *ptr = node->_next;
           if (ALLOC_TYPE == AnyObj::C_HEAP) {
@@ -275,6 +265,30 @@ class ResourceHashtableBase : public STORAGE {
         }
       }
     }
+  }
+
+  template<class ITER>
+  void unlink(ITER* iter) {
+    auto function = [&] (K& k, V& v) {
+      return iter->do_entry(k, v);
+    };
+    unlink(function);
+  }
+
+  template<typename Function>
+  void unlink_all(Function function) {
+    auto wrapper = [&] (K& k, V& v) {
+      function(k, v);
+      return true;
+    };
+    unlink(wrapper);
+  }
+
+  void unlink_all() {
+    auto wrapper = [&] (K& k, V& v) {
+      return true;
+    };
+    unlink(wrapper);
   }
 
   template<typename Function>
