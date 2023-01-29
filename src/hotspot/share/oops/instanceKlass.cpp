@@ -971,7 +971,31 @@ void InstanceKlass::initialize_super_interfaces(TRAPS) {
   }
 }
 
-ResourceHashtable<const InstanceKlass*, OopHandle, 107, AnyObj::C_HEAP, mtClass>
+class InitializationError {
+  OopHandle _cause_handle;
+
+public:
+  InitializationError() {}
+
+  void init(oop cause) {
+    _cause_handle = OopHandle(Universe::vm_global(), cause);
+  }
+  oop cause() {
+    return _cause_handle.resolve();
+  }
+
+  ~InitializationError() {
+    //tty->print_cr("Cleaning " INTPTR_FORMAT, p2i(cause()));
+    _cause_handle.release(Universe::vm_global());
+  }
+
+  // Delete the copy constructor so you can't use put(K const& key, V const& value)
+  // or put_if_absent(K const& key, V const& value, bool* p_created) from ResourceHashtable.
+  // Otherwise the clean up of _cause_handle will be problematic.
+  InitializationError(const InitializationError& from) = delete;
+};
+
+ResourceHashtable<const InstanceKlass*, InitializationError, 107, AnyObj::C_HEAP, mtClass>
       _initialization_error_table;
 
 void InstanceKlass::add_initialization_error(JavaThread* current, Handle exception) {
@@ -987,26 +1011,26 @@ void InstanceKlass::add_initialization_error(JavaThread* current, Handle excepti
   }
 
   MutexLocker ml(THREAD, ClassInitError_lock);
-  OopHandle elem = OopHandle(Universe::vm_global(), cause());
   bool created = false;
-  _initialization_error_table.put_if_absent(this, elem, &created);
+  InitializationError* ie = _initialization_error_table.put_if_absent(this, &created);
   assert(created, "Initialization is single threaded");
+  ie->init(cause());
   ResourceMark rm(THREAD);
   log_trace(class, init)("Initialization error added for class %s", external_name());
 }
 
 oop InstanceKlass::get_initialization_error(JavaThread* current) {
   MutexLocker ml(current, ClassInitError_lock);
-  OopHandle* h = _initialization_error_table.get(this);
-  return (h != nullptr) ? h->resolve() : nullptr;
+  InitializationError* ie = _initialization_error_table.get(this);
+  return (ie != nullptr) ? ie->cause() : nullptr;
 }
 
 // Need to remove entries for unloaded classes.
 void InstanceKlass::clean_initialization_error_table() {
   struct InitErrorTableCleaner {
-    bool do_entry(const InstanceKlass* ik, OopHandle h) {
+    bool do_entry(const InstanceKlass* ik, const InitializationError& ie) {
       if (!ik->is_loader_alive()) {
-        h.release(Universe::vm_global());
+        //tty->print_cr("Cleaning %p", ik);
         return true;
       } else {
         return false;
