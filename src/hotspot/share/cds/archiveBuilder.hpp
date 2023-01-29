@@ -152,16 +152,32 @@ private:
                              // later if _ref is relocated.
     address _buffered_addr;  // The copy of _ref->obj() insider the buffer.
   public:
-    SourceObjInfo(MetaspaceClosure::Ref* ref, bool read_only, FollowMode follow_mode) :
-      _ref(ref), _ptrmap_start(0), _ptrmap_end(0), _read_only(read_only), _follow_mode(follow_mode),
-      _size_in_bytes(ref->size() * BytesPerWord), _msotype(ref->msotype()),
-      _source_addr(ref->obj()) {
+    SourceObjInfo() : _ref(nullptr) {}
+    void init(MetaspaceClosure::Ref* ref, bool read_only, FollowMode follow_mode) {
+      _ref = ref;
+      _ptrmap_start = 0;
+      _ptrmap_end = 0;
+      _read_only = read_only;
+      _follow_mode = follow_mode;
+      _size_in_bytes = ref->size() * BytesPerWord;
+      _msotype = ref->msotype();
+      _source_addr = ref->obj();
       if (follow_mode == point_to_it) {
         _buffered_addr = ref->obj();
       } else {
         _buffered_addr = nullptr;
       }
     }
+
+    ~SourceObjInfo() {
+      assert(_ref != nullptr, "init() must have been called");
+      delete _ref;
+    }
+
+    // Delete the copy constructor so you can't use put(K const& key, V const& value)
+    // or put_if_absent(K const& key, V const& value, bool* p_created) from ResourceHashtable.
+    // Otherwise the clean up of _ref will be problematic.
+    SourceObjInfo(const SourceObjInfo& from) = delete;
 
     bool should_copy() const { return _follow_mode == make_a_copy; }
     MetaspaceClosure::Ref* ref() const { return  _ref; }
@@ -202,14 +218,6 @@ private:
 
     // convenience accessor
     SourceObjInfo* at(int i) const { return objs()->at(i); }
-  };
-
-  class SrcObjTableCleaner {
-  public:
-    bool do_entry(address key, const SourceObjInfo& value) {
-      delete value.ref();
-      return true;
-    }
   };
 
   class CDSMapLogger;
@@ -276,7 +284,6 @@ private:
   void relocate_embedded_pointers(SourceObjList* src_objs);
 
   bool is_excluded(Klass* k);
-  void clean_up_src_obj_table();
 
 protected:
   virtual void iterate_roots(MetaspaceClosure* it, bool is_relocating_pointers) = 0;

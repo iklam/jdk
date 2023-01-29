@@ -177,8 +177,6 @@ ArchiveBuilder::~ArchiveBuilder() {
   assert(_current == this, "must be");
   _current = nullptr;
 
-  clean_up_src_obj_table();
-
   for (int i = 0; i < _symbols->length(); i++) {
     _symbols->at(i)->decrement_refcount();
   }
@@ -446,18 +444,16 @@ bool ArchiveBuilder::gather_one_source_obj(MetaspaceClosure::Ref* enclosing_ref,
   remember_embedded_pointer_in_copied_obj(enclosing_ref, ref);
 
   FollowMode follow_mode = get_follow_mode(ref);
-  SourceObjInfo src_info(ref, read_only, follow_mode);
   bool created;
-  SourceObjInfo* p = _src_obj_table.put_if_absent(src_obj, src_info, &created);
+  SourceObjInfo* p = _src_obj_table.put_if_absent(src_obj, &created);
   if (created) {
+    p->init(ref, read_only, follow_mode);
     if (_src_obj_table.maybe_grow()) {
       log_info(cds, hashtables)("Expanded _src_obj_table table to %d", _src_obj_table.table_size());
     }
   }
 
-  assert(p->read_only() == src_info.read_only(), "must be");
-
-  if (created && src_info.should_copy()) {
+  if (created && p->should_copy()) {
     ref->set_user_data((void*)p);
     if (read_only) {
       _ro_src_objs.append(enclosing_ref, p);
@@ -1157,11 +1153,6 @@ public:
 
 void ArchiveBuilder::print_stats() {
   _alloc_stats.print_stats(int(_ro_region.used()), int(_rw_region.used()));
-}
-
-void ArchiveBuilder::clean_up_src_obj_table() {
-  SrcObjTableCleaner cleaner;
-  _src_obj_table.iterate(&cleaner);
 }
 
 void ArchiveBuilder::write_archive(FileMapInfo* mapinfo,
