@@ -106,6 +106,23 @@ typedef CompactHashtable<
   java_lang_String::equals> SharedStringTable;
 
 static SharedStringTable _shared_table;
+
+void print_all_strings() {
+  ResourceMark rm;
+  objArrayOop array = (objArrayOop)(_shared_table_array.resolve());
+  if (array != nullptr) {
+    for (int i = 0; i < array->length(); i++) {
+      oop s = array->obj_at(i);
+      tty->print("%d: ", i);
+      if (s != nullptr) {
+        s->print_value_on(tty);
+      } else {
+        tty->print("NULL");
+      }
+      tty->cr();
+    }
+  }
+}
 #endif
 
 // --------------------------------------------------------------------------
@@ -235,10 +252,14 @@ void StringTable::create_table() {
   _local_table = new StringTableHash(start_size_log_2, END_SIZE, REHASH_LEN, true);
   _oop_storage = OopStorageSet::create_weak("StringTable Weak", mtSymbol);
   _oop_storage->register_num_dead_callback(&gc_notification);
-
+#if INCLUDE_CDS_JAVA_HEAP
   if (ArchiveHeapLoader::are_archived_strings_available()) {
     _shared_table_array = OopHandle(Universe::vm_global(), HeapShared::get_root(_shared_table_array_root_index));
+    if (UseNewCode) {
+      print_all_strings();
+    }
   }
+#endif
 }
 
 size_t StringTable::item_added() {
@@ -854,6 +875,9 @@ oop StringTable::init_shared_table(const DumpedInternedStrings* dumped_interned_
   log_info(cds)("string table array length = %d, copied %d elements", array->length(), index);
   writer.dump(&_shared_table, "string");
 
+  if (UseNewCode) {
+    print_all_strings();
+  }
   return array;
 }
 

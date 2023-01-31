@@ -75,10 +75,7 @@ public class CDSArchiveUtils {
         "rw",          // ReadWrite
         "ro",          // ReadOnly
         "bm",          // relocation bitmaps
-        "first_closed_archive",
-        "last_closed_archive",
-        "first_open_archive",
-        "last_open_archive"
+        "hp",          // heap
     };
     private static int num_regions = shared_region_name.length;
 
