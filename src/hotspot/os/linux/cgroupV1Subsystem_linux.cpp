@@ -89,8 +89,8 @@ void CgroupV1MemoryController::set_subsystem_path(char *cgroup_path) {
 }
 
 jlong CgroupV1Subsystem::read_memory_limit_in_bytes() {
-  GET_CONTAINER_INFO(julong, _memory->controller(), "/memory.limit_in_bytes",
-                     "Memory Limit is: " JULONG_FORMAT, JULONG_FORMAT, memlimit);
+  GET_CONTAINER_INFO_NEW(julong, _memory->controller(), "/memory.limit_in_bytes",
+                         "Memory Limit", JULONG_FORMAT, JULONG_FORMAT, memlimit);
 
   if (memlimit >= os::Linux::physical_memory()) {
     log_trace(os, container)("Non-Hierarchical Memory Limit is: Unlimited");
@@ -234,8 +234,8 @@ char * CgroupV1Subsystem::cpu_cpuset_cpus() {
 }
 
 char * CgroupV1Subsystem::cpu_cpuset_memory_nodes() {
-  GET_CONTAINER_INFO_CPTR(cptr, _cpuset, "/cpuset.mems",
-                     "cpuset.mems is: %s", "%1023s", mems, 1024);
+  GET_CONTAINER_INFO_CPTR_NEW(cptr, _cpuset, "/cpuset.mems",
+                     "cpuset.mems", mems, 1024);
   return os::strdup(mems);
 }
 

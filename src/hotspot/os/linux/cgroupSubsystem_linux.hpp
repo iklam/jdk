@@ -159,6 +159,26 @@ template <typename T> int subsystem_file_line_contents(CgroupController* c,
 }
 PRAGMA_DIAG_POP
 
+// log_fmt can be different than scan_fmt. E.g.
+// log_fmt="%d", scan_fmt="%*s %d"
+#define GET_CONTAINER_INFO_NEW(return_type, subsystem, filename,          \
+                           logstring, log_fmt, scan_fmt, variable)        \
+  return_type variable;                                                   \
+{                                                                         \
+  int err;                                                                \
+  err = subsystem_file_line_contents(subsystem,                           \
+                                     filename,                            \
+                                     nullptr,                             \
+                                     scan_fmt,                            \
+                                     &variable);                          \
+  if (err != 0) {                                                         \
+    log_trace(os, container)(logstring " is: %d", OSCONTAINER_ERROR);     \
+    return (return_type) OSCONTAINER_ERROR;                               \
+  }                                                                       \
+                                                                          \
+  log_trace(os, container)(logstring " is: " log_fmt, variable);          \
+}
+
 #define GET_CONTAINER_INFO(return_type, subsystem, filename,              \
                            logstring, scan_fmt, variable)                 \
   return_type variable;                                                   \
@@ -175,6 +195,28 @@ PRAGMA_DIAG_POP
   }                                                                       \
                                                                           \
   log_trace(os, container)(logstring, variable);                          \
+}
+
+
+#define GET_CONTAINER_INFO_CPTR_NEW(return_type, subsystem, filename,     \
+                                    logstring, variable, bufsize)         \
+  char variable[bufsize];                                                 \
+  char scan_fmt[32];                                                      \
+{                                                                         \
+  int err;                                                                \
+  assert(bufsize > 1, "must be");                                         \
+  os::snprintf(scan_fmt, sizeof(scan_fmt), "%d%%s", bufsize-1);           \
+  err = subsystem_file_line_contents(subsystem,                           \
+                                     filename,                            \
+                                     nullptr,                             \
+                                     scan_fmt,                            \
+                                     variable);                           \
+  if (err != 0) {                                                         \
+    return (return_type) nullptr;                                         \
+    log_trace(os, container)(logstring " is not specified");              \
+  }                                                                       \
+                                                                          \
+  log_trace(os, container)(logstring " is: %s", variable);                \
 }
 
 #define GET_CONTAINER_INFO_CPTR(return_type, subsystem, filename,         \

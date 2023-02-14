@@ -90,8 +90,8 @@ int CgroupV2Subsystem::cpu_quota() {
 }
 
 char * CgroupV2Subsystem::cpu_cpuset_cpus() {
-  GET_CONTAINER_INFO_CPTR(cptr, _unified, "/cpuset.cpus",
-                     "cpuset.cpus is: %s", "%1023s", cpus, 1024);
+  GET_CONTAINER_INFO_CPTR_NEW(cptr, _unified, "/cpuset.cpus",
+                     "cpuset.cpus", cpus, 1024);
   return os::strdup(cpus);
 }
 
@@ -108,8 +108,8 @@ char * CgroupV2Subsystem::cpu_cpuset_memory_nodes() {
 }
 
 int CgroupV2Subsystem::cpu_period() {
-  GET_CONTAINER_INFO(int, _unified, "/cpu.max",
-                     "CPU Period is: %d", "%*s %d", period);
+  GET_CONTAINER_INFO_NEW(int, _unified, "/cpu.max",
+                     "CPU Period", "%d", "%*s %d", period);
   return period;
 }
 
