@@ -35,6 +35,7 @@
 #include "utilities/macros.hpp"
 
 #if INCLUDE_CDS
+class SerializeClosure;
 
 class DynamicArchiveHeader : public FileMapHeader {
   friend class CDSConstants;
@@ -63,6 +64,9 @@ public:
   static void dump_at_exit(JavaThread* current, const char* archive_name);
   static bool is_mapped() { return FileMapInfo::dynamic_info() != nullptr; }
   static bool validate(FileMapInfo* dynamic_info);
+  static void init_training_data();
+  static void dump_additional_data();
+  static void serialize_additional_data(SerializeClosure* soc);
 };
 #endif // INCLUDE_CDS
 #endif // SHARE_CDS_DYNAMICARCHIVE_HPP

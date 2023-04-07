@@ -143,11 +143,13 @@ public:
 
       ArchiveBuilder::OtherROAllocMark mark;
       SystemDictionaryShared::write_to_archive(false);
+      DynamicArchive::dump_additional_data();
 
       serialized_data = ro_region()->top();
       WriteClosure wc(ro_region());
       SymbolTable::serialize_shared_table_header(&wc, false);
       SystemDictionaryShared::serialize_dictionary_headers(&wc, false);
+      DynamicArchive::serialize_additional_data(&wc);
     }
 
     verify_estimate_size(_estimated_hashtable_bytes, "Hashtables");
@@ -387,6 +389,7 @@ void DynamicArchive::dump_at_exit(JavaThread* current, const char* archive_name)
   }
 
   log_info(cds, dynamic)("Preparing for dynamic dump at exit in thread %s", current->name());
+  DynamicArchive::init_training_data(); // temp -- example
 
   JavaThread* THREAD = current; // For TRAPS processing related to link_shared_classes
   MetaspaceShared::link_shared_classes(false/*not from jcmd*/, THREAD);
@@ -442,4 +445,113 @@ bool DynamicArchive::validate(FileMapInfo* dynamic_info) {
   }
 
   return true;
+}
+
+/*
+
+This is an example of writing additional data into the CDS archive that can be readily accessed at runtime.
+
+For the leyden-premain CDS exercises, at this point (2023/04/06), it may be easier to use the CDS dynamic archive:
+
+[1] This makes the "training run" and stores all the classes used by the HelloWorld app into HelloWorld.jsa.
+    It also stores the "training data" that are gathered during the training run.
+
+    $ java -Xlog:cds -cp HelloWorld.jar -XX:ArchiveClassesAtExit=HelloWorld.jsa HelloWorld
+
+
+[2] This loads the HelloWorld classes from HelloWorld.jsa, and some system classes from the base archive:
+
+    $ java -Xlog:cds -cp HelloWorld.jar -XX:SharedArchiveFile=HelloWorld.jsa HelloWorld
+    ....
+    # the range of the metadata (InstanceKlass, Method, etc)
+    [0.014s][info][cds] Mapped static  region #0 at base 0x0000000800000000 top 0x0000000800505000 (ReadWrite)
+    [0.014s][info][cds] Mapped static  region #1 at base 0x0000000800505000 top 0x0000000800d20000 (ReadOnly)
+    [0.014s][info][cds] Mapped dynamic region #0 at base 0x0000000800d20000 top 0x0000000800d2f000 (ReadWrite)
+    [0.014s][info][cds] Mapped dynamic region #1 at base 0x0000000800d2f000 top 0x0000000800d3f000 (ReadOnly)
+    ....
+    # the fake "training data" (the array is in "dynamic region #1")
+    _archived_training_data = 0x0000000800d3e5a0
+    _archived_training_data[ 0] = 0x0000000800505308 (java/lang/Boolean)
+    _archived_training_data[ 1] = 0x0000000800505320 (java/lang/Character)
+    _archived_training_data[ 2] = 0x0000000800505340 (java/lang/Character$CharacterCache)
+    _archived_training_data[ 3] = 0x0000000800505368 (java/lang/CharacterDataLatin1)
+    _archived_training_data[ 4] = 0x0000000800505390 (java/lang/Float)
+    _archived_training_data[ 5] = 0x00000008005053a8 (java/lang/Double)
+    _archived_training_data[ 6] = 0x00000008005053c0 (java/lang/Byte)
+    _archived_training_data[ 7] = 0x00000008005053d8 (java/lang/Byte$ByteCache)
+    _archived_training_data[ 8] = 0x00000008005053f8 (java/lang/Short)
+    _archived_training_data[ 9] = 0x0000000800505410 (java/lang/Short$ShortCache)
+    _archived_training_data[10] = 0x0000000800505430 (java/lang/Integer)
+    _archived_training_data[11] = 0x0000000800505448 (java/lang/Integer$IntegerCache)
+    _archived_training_data[12] = 0x0000000800505470 (java/lang/Long)
+    _archived_training_data[13] = 0x0000000800505488 (java/lang/Long$LongCache)
+    _aot_code = 0x0000000800d3e618
+    _aot_code size = 12345 bytes
+
+*/
+
+static GrowableArrayCHeap<Symbol*, mtClassShared>* _live_training_data = nullptr;
+static Array<Symbol*>* _archived_training_data = nullptr;
+static Array<char>* _aot_code = nullptr;
+
+// This is called before we enter the VM_PopulateDynamicDumpSharedSpace safepoint.
+// Theoretically, this could be called by various CompilerThreads to store some
+// training data data into _live_training_data (with proper synchronization),
+// and would be part of the Compiler class instead.
+void DynamicArchive::init_training_data() {
+  _live_training_data = new GrowableArrayCHeap<Symbol*, mtClassShared>(150);
+
+  _live_training_data->append(vmSymbols::java_lang_Boolean());
+  _live_training_data->append(vmSymbols::java_lang_Character());
+  _live_training_data->append(vmSymbols::java_lang_Character_CharacterCache());
+  _live_training_data->append(vmSymbols::java_lang_CharacterDataLatin1());
+  _live_training_data->append(vmSymbols::java_lang_Float());
+  _live_training_data->append(vmSymbols::java_lang_Double());
+  _live_training_data->append(vmSymbols::java_lang_Byte());
+  _live_training_data->append(vmSymbols::java_lang_Byte_ByteCache());
+  _live_training_data->append(vmSymbols::java_lang_Short());
+  _live_training_data->append(vmSymbols::java_lang_Short_ShortCache());
+  _live_training_data->append(vmSymbols::java_lang_Integer());
+  _live_training_data->append(vmSymbols::java_lang_Integer_IntegerCache());
+  _live_training_data->append(vmSymbols::java_lang_Long());
+  _live_training_data->append(vmSymbols::java_lang_Long_LongCache());                              
+}
+
+// This is called inside the VM_PopulateDynamicDumpSharedSpace safepoint
+void DynamicArchive::dump_additional_data() {
+  // The following could be refactored to a call to Compiler::dump_training_data(), etc.
+  int len = _live_training_data->length();
+  _archived_training_data = ArchiveBuilder::new_ro_array<Symbol*>(len);
+
+ // FIXME: we should have a utility function that does the copying and ptr marking for us.
+  for (int i = 0; i < len; i++) {
+    Symbol* s = _live_training_data->at(i);
+    _archived_training_data->at_put(i, s);
+    ArchivePtrMarker::mark_pointer(_archived_training_data->adr_at(i)); // must mark the pointer
+  }
+
+  // Allocate some space in the archive to be used to store AOT code.
+  _aot_code =  ArchiveBuilder::new_ro_array<char>(12345);
+}
+
+void DynamicArchive::serialize_additional_data(SerializeClosure* soc) {
+  // The following could be refactored to a call to Compiler::serialize_training_data(), etc.
+  soc->do_ptr((void**)&_archived_training_data);
+  soc->do_ptr((void**)&_aot_code);
+
+  if (soc->reading()) {
+    tty->print_cr("_archived_training_data = " INTPTR_FORMAT, p2i(_archived_training_data));
+    if (_archived_training_data != nullptr) {
+      for (int i = 0; i < _archived_training_data->length(); i++) {
+        ResourceMark rm;
+        Symbol* s = _archived_training_data->at(i);
+        tty->print_cr("_archived_training_data[%2d] = " INTPTR_FORMAT " (%s)", i, p2i(s), s->as_quoted_ascii());
+      }
+    }
+
+    tty->print_cr("_aot_code = " INTPTR_FORMAT, p2i(_aot_code));
+    if (_aot_code != nullptr) {
+      tty->print_cr("_aot_code size = %d bytes", _aot_code->length());
+    }
+  }
 }
