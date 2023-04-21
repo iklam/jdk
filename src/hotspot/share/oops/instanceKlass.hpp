@@ -377,6 +377,10 @@ class InstanceKlass: public Klass {
     _transitive_interfaces = a;
   }
 
+  template<typename Function>
+  bool iterate_local_interfaces(Function function);
+  void update_preinited_class(TRAPS);
+
  private:
   friend class fieldDescriptor;
   FieldInfo field(int index) const;

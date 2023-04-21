@@ -407,7 +407,7 @@ private:
   static void initialize_from_archived_subgraph(JavaThread* current, Klass* k) NOT_CDS_JAVA_HEAP_RETURN;
 
   static void init_for_dumping(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
-  static void write_subgraph_info_table() NOT_CDS_JAVA_HEAP_RETURN;
+  static void write_tables() NOT_CDS_JAVA_HEAP_RETURN;
   static void serialize_root(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
   static void serialize_tables(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
   static bool initialize_enum_klass(InstanceKlass* k, TRAPS) NOT_CDS_JAVA_HEAP_RETURN_(false);

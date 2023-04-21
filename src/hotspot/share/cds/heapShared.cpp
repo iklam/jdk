@@ -28,6 +28,7 @@
 #include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/cdsHeapVerifier.hpp"
+#include "cds/classPreinitializer.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderData.hpp"
@@ -412,7 +413,9 @@ void HeapShared::archive_java_mirrors() {
   for (int i = 0; i < klasses->length(); i++) {
     Klass* orig_k = klasses->at(i);
     oop m = orig_k->java_mirror();
-    if (scratch_java_mirror(orig_k) != nullptr) {
+    oop sm = scratch_java_mirror(orig_k);
+    if (sm != nullptr) {
+      ClassPreinitializer::copy_mirror_if_safe(orig_k, sm);
       Klass* buffered_k = ArchiveBuilder::get_buffered_klass(orig_k);
       bool success = archive_reachable_objects_from(1, _default_subgraph_info, m);
       guarantee(success, "scratch mirrors must point to only archivable objects");
@@ -829,7 +832,7 @@ struct CopyKlassSubGraphInfoToArchive : StackObj {
 //   info. The value is stored back to the corresponding field at runtime.
 // - A list of klasses that need to be loaded/initialized before archived
 //   java object sub-graph can be accessed at runtime.
-void HeapShared::write_subgraph_info_table() {
+void HeapShared::write_tables() {
   // Allocate the contents of the hashtable(s) inside the RO region of the CDS archive.
   DumpTimeKlassSubGraphInfoTable* d_table = _dump_time_subgraph_info_table;
   CompactHashtableStats stats;
@@ -852,6 +855,8 @@ void HeapShared::write_subgraph_info_table() {
   if (log_is_enabled(Info, cds, heap)) {
     print_stats();
   }
+
+  ClassPreinitializer::write_tables();
 }
 
 void HeapShared::serialize_root(SerializeClosure* soc) {
@@ -885,6 +890,7 @@ void HeapShared::serialize_tables(SerializeClosure* soc) {
 #endif
 
   _run_time_subgraph_info_table.serialize_header(soc);
+  ClassPreinitializer::serialize_tables(soc);
 }
 
 static void verify_the_heap(Klass* k, const char* which) {
@@ -1190,6 +1196,11 @@ oop HeapShared::replace_with_scratch_java_mirror(int level, KlassSubGraphInfo* s
     }
   }
 
+  if (java_lang_Class::is_primitive(orig_obj)) {
+    return scratch_java_mirror(orig_obj);
+  }
+
+
   // If you get an error here, you probably made a change in the JDK library that has added a Class
   // object that is referenced (directly or indirectly) by an ArchivableStaticFieldInfo
   // defined at the top of this file.
@@ -1402,12 +1413,14 @@ void HeapShared::check_default_subgraph_classes() {
           i, subgraph_k->external_name());
     }
 
+#if 0
     guarantee(subgraph_k->name()->equals("java/lang/Class") ||
               subgraph_k->name()->equals("java/lang/String") ||
               subgraph_k->name()->equals("[Ljava/lang/Object;") ||
               subgraph_k->name()->equals("[C") ||
               subgraph_k->name()->equals("[B"),
               "default subgraph can have only these objects");
+#endif
   }
 }
 

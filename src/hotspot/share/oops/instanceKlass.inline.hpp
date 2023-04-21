@@ -191,4 +191,15 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_bounded(oop obj, OopClosureType
   oop_oop_iterate_oop_maps_bounded<T>(obj, closure, mr);
 }
 
+template<typename Function>
+bool InstanceKlass::iterate_local_interfaces(Function function) {
+  Array<InstanceKlass*>* interfaces = local_interfaces();
+  int num_interfaces = interfaces->length();
+  for (int index = 0; index < num_interfaces; index++) {
+    if (!function(interfaces->at(index))) {
+      return false;
+    }
+  }
+  return true;
+}
 #endif // SHARE_OOPS_INSTANCEKLASS_INLINE_HPP

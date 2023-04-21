@@ -29,6 +29,7 @@
 #include "cds/dumpAllocStats.hpp"
 #include "memory/metaspaceClosure.hpp"
 #include "oops/array.hpp"
+#include "oops/instanceKlass.hpp"
 #include "oops/klass.hpp"
 #include "runtime/os.hpp"
 #include "utilities/bitMap.hpp"
@@ -39,7 +40,6 @@
 class ArchiveHeapInfo;
 class CHeapBitMap;
 class FileMapInfo;
-class Klass;
 class MemRegion;
 class Symbol;
 
@@ -442,7 +442,10 @@ public:
     assert(klass != nullptr && klass->is_klass(), "must be");
     return klass;
   }
-
+  static InstanceKlass* get_buffered_klass(InstanceKlass* src_klass) {
+    Klass* k = get_buffered_klass((Klass*)src_klass);
+    return InstanceKlass::cast(k);
+  }
   static Symbol* get_buffered_symbol(Symbol* src_symbol) {
     return (Symbol*)current()->get_buffered_addr((address)src_symbol);
   }

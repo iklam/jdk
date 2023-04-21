@@ -25,6 +25,7 @@
 
 #include "precompiled.hpp"
 #include "cds/cds_globals.hpp"
+#include "cds/classPreinitializer.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/javaClasses.hpp"
@@ -347,6 +348,8 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   Universe::set_main_thread_group(thread_group());
   initialize_class(vmSymbols::java_lang_Thread(), CHECK);
   create_initial_thread(thread_group, main_thread, CHECK);
+
+  ClassPreinitializer::initialize(CHECK);
 
   // The VM creates objects of this class.
   initialize_class(vmSymbols::java_lang_Module(), CHECK);

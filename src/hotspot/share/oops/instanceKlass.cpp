@@ -815,6 +815,12 @@ bool InstanceKlass::link_class_impl(TRAPS) {
   if (is_linked()) {
     return true;
   }
+#if 0
+  {
+    ResourceMark rm;
+    tty->print_cr("linking %s", external_name());
+  }
+#endif
 
   // Timing
   // timer handles recursion
@@ -2684,6 +2690,34 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
 
   // restore the monitor
   _init_monitor = create_init_monitor("InstanceKlassInitMonitorRestored_lock");
+}
+
+void InstanceKlass::update_preinited_class(TRAPS) {
+  link_class(CHECK);
+  assert(java_super() != nullptr, "java/lang/Object is handled differently");
+  assert(java_super()->is_initialized(), "preinit must happen in correct order");
+
+  iterate_local_interfaces([&] (InstanceKlass* interface) {
+      assert(java_super()->is_initialized(), "preinit must happen in correct order");
+      return true;
+    });
+
+  assert(is_loaded(), "must have been loaded into system dictionary");
+  assert(!is_initialized(), "must not be initialized twice");
+
+  // FIXME -- refactor the following
+  methodHandle h_method(THREAD, class_initializer());
+  LogTarget(Info, class, init) lt;
+  if (lt.is_enabled()) {
+    ResourceMark rm(THREAD);
+    LogStream ls(lt);
+    ls.print("%d Initializing ", call_class_initializer_counter++);
+    name()->print_value_on(&ls);
+    ls.print_cr("%s (" PTR_FORMAT ") - quick", h_method() == nullptr ? "(no method)" : "", p2i(this));
+  }
+
+  MonitorLocker ml(THREAD, _init_monitor);
+  set_init_state(fully_initialized);
 }
 
 // Check if a class or any of its supertypes has a version older than 50.

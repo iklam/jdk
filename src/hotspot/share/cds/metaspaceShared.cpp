@@ -30,6 +30,7 @@
 #include "cds/cdsProtectionDomain.hpp"
 #include "cds/classListWriter.hpp"
 #include "cds/classListParser.hpp"
+#include "cds/classPreinitializer.hpp"
 #include "cds/classPrelinker.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/dumpAllocStats.hpp"
@@ -642,6 +643,10 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
     // Class linking includes verification which may load more classes.
     // Keep scanning until we have linked no more classes.
   }
+
+  if (HeapShared::can_write()) {
+    ClassPreinitializer::setup_preinit_classes(CHECK);
+  }
 }
 
 void MetaspaceShared::prepare_for_dumping() {
@@ -860,7 +865,7 @@ void VM_PopulateDumpSharedSpace::dump_java_heap_objects(GrowableArray<Klass*>* k
 
   HeapShared::archive_objects(&_heap_info);
   ArchiveBuilder::OtherROAllocMark mark;
-  HeapShared::write_subgraph_info_table();
+  HeapShared::write_tables();
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 
