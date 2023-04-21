@@ -158,8 +158,9 @@ public:
   static bool is_subgraph_root_class(InstanceKlass* ik);
 
   // Scratch objects for archiving Klass::java_mirror()
-  static oop scratch_java_mirror(BasicType t) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
-  static oop scratch_java_mirror(Klass* k)    NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(BasicType t)     NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(Klass* k)        NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(oop java_mirror) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
 
 private:
 #if INCLUDE_CDS_JAVA_HEAP
@@ -268,7 +269,7 @@ private:
       mtClassShared,
       HeapShared::oop_hash> SeenObjectsTable;
 
-  static SeenObjectsTable *_seen_objects_table;
+  static SeenObjectsTable* _seen_objects_table;
 
   // The "default subgraph" is the root of all archived objects that do not belong to any
   // of the classes defined in the <xxx>_archive_subgraph_entry_fields[] arrays:
@@ -334,6 +335,8 @@ private:
   static void fill_failed_loaded_region();
   static void mark_native_pointers(oop orig_obj);
   static bool has_been_archived(oop orig_obj);
+  static oop  current_referencing_obj();
+  static oop  replace_with_scratch_java_mirror(int level, KlassSubGraphInfo* subgraph_info, oop orig_obj);
   static void archive_java_mirrors();
   static void archive_strings();
  public:

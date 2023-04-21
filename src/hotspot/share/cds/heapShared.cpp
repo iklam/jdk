@@ -350,6 +350,29 @@ void HeapShared::init_scratch_objects(TRAPS) {
   _scratch_java_mirror_table = new (mtClass)KlassToOopHandleTable();
 }
 
+// Given java_mirror that represents a (primitive or reference) type T,
+// return the "scratch" version that represents the same type T.
+//
+// See java_lang_Class::create_scratch_mirror() for more info.
+oop HeapShared::scratch_java_mirror(oop java_mirror) {
+  assert(java_lang_Class::is_instance(java_mirror), "must be");
+
+  oop sm;
+  if (java_lang_Class::is_primitive(java_mirror)) {
+    sm = scratch_java_mirror(java_lang_Class::as_BasicType(java_mirror));
+    assert(sm != nullptr, "must have created primitive scratch mirror");
+  } else {
+    Klass* k = java_lang_Class::as_Klass(java_mirror);
+    assert(k->class_loader() == nullptr ||
+           k->class_loader() == SystemDictionary::java_platform_loader() ||
+           k->class_loader() == SystemDictionary::java_system_loader(),
+           "we must only see mirrors loaded by the built-in loaders during heap archiving");
+    sm = scratch_java_mirror(k);
+    assert(sm != nullptr, "must have created scratch mirror for Java class");
+  }
+  return sm;
+}
+
 oop HeapShared::scratch_java_mirror(BasicType t) {
   assert((uint)t < T_VOID+1, "range check");
   assert(!is_reference_type(t), "sanity");
@@ -372,8 +395,7 @@ void HeapShared::archive_java_mirrors() {
   for (int i = T_BOOLEAN; i < T_VOID+1; i++) {
     BasicType bt = (BasicType)i;
     if (!is_reference_type(bt)) {
-      oop m = _scratch_basic_type_mirrors[i].resolve();
-      assert(m != nullptr, "sanity");
+      oop m = Universe::java_mirror(bt);
       bool success = archive_reachable_objects_from(1, _default_subgraph_info, m);
       assert(success, "sanity");
 
@@ -389,8 +411,8 @@ void HeapShared::archive_java_mirrors() {
   assert(klasses != nullptr, "sanity");
   for (int i = 0; i < klasses->length(); i++) {
     Klass* orig_k = klasses->at(i);
-    oop m = scratch_java_mirror(orig_k);
-    if (m != nullptr) {
+    oop m = orig_k->java_mirror();
+    if (scratch_java_mirror(orig_k) != nullptr) {
       Klass* buffered_k = ArchiveBuilder::get_buffered_klass(orig_k);
       bool success = archive_reachable_objects_from(1, _default_subgraph_info, m);
       guarantee(success, "scratch mirrors must point to only archivable objects");
@@ -1139,10 +1161,43 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
 
 WalkOopAndArchiveClosure* WalkOopAndArchiveClosure::_current = nullptr;
 
+// The object that's causing the current object to be visited by HeapShared::archive_reachable_objects_from()
+oop HeapShared::current_referencing_obj() {
+  WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
+  return (walker == nullptr) ? nullptr : walker->referencing_obj();
+}
+
 HeapShared::CachedOopInfo HeapShared::make_cached_oop_info() {
   WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
   oop referrer = (walker == nullptr) ? nullptr : walker->referencing_obj();
   return CachedOopInfo(referrer);
+}
+
+oop HeapShared::replace_with_scratch_java_mirror(int level, KlassSubGraphInfo* subgraph_info, oop orig_obj) {
+  if (subgraph_info == _default_subgraph_info) {
+    if (level == 1) {
+      // We are called directly from HeapShared::archive_java_mirrors()
+      return scratch_java_mirror(orig_obj);
+    } else {
+      oop referrer = current_referencing_obj();
+      assert(referrer != nullptr, "must have a referrer since we are not the first level");
+      Klass* rk = java_lang_Class::as_Klass(referrer);
+      if (rk->is_array_klass() && orig_obj == java_lang_Class::component_mirror(rk->java_mirror())) {
+        // Mirrors for array klasses do not have injected fields, so this field must
+        // be at java_lang_Class::_component_mirror_offset(). FIXME - add assert
+        return scratch_java_mirror(orig_obj);
+      }
+    }
+  }
+
+  // If you get an error here, you probably made a change in the JDK library that has added a Class
+  // object that is referenced (directly or indirectly) by an ArchivableStaticFieldInfo
+  // defined at the top of this file.
+  ResourceMark rm;
+  log_error(cds, heap)("(%d) Unknown java.lang.Class object is in the archived sub-graph: %s", level,
+                       java_lang_Class::as_external_name(orig_obj));
+  MetaspaceShared::unrecoverable_writing_error();
+  return nullptr; // FIXME
 }
 
 // (1) If orig_obj has not been archived yet, archive it.
@@ -1163,14 +1218,8 @@ bool HeapShared::archive_reachable_objects_from(int level,
     MetaspaceShared::unrecoverable_writing_error();
   }
 
-  // java.lang.Class instances cannot be included in an archived object sub-graph. We only support
-  // them as Klass::_archived_mirror because they need to be specially restored at run time.
-  //
-  // If you get an error here, you probably made a change in the JDK library that has added a Class
-  // object that is referenced (directly or indirectly) by static fields.
-  if (java_lang_Class::is_instance(orig_obj) && subgraph_info != _default_subgraph_info) {
-    log_error(cds, heap)("(%d) Unknown java.lang.Class object is in the archived sub-graph", level);
-    MetaspaceShared::unrecoverable_writing_error();
+  if (java_lang_Class::is_instance(orig_obj)) {
+    orig_obj = replace_with_scratch_java_mirror(level, subgraph_info, orig_obj);
   }
 
   if (has_been_seen_during_subgraph_recording(orig_obj)) {
