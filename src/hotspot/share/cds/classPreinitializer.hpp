@@ -66,6 +66,7 @@ public:
   static void copy_mirror_if_safe(Klass* k, oop scratch_mirror);
   static void write_tables();
   static void serialize_tables(SerializeClosure* soc);
+  static bool is_safe_class(InstanceKlass* ik);
 };
 
 // Check if a method runs "safe" code only (for some defintions of "safe")
@@ -119,9 +120,13 @@ class SafeMethodChecker: StackObj {
   // For invoke, field, etc
   int cpc_to_cp_index(int cpc_index);
 
+  InstanceKlass* resolve_klass(Symbol* name); // as resolved by this->method()
+  Method* resolve_method(Symbol* klass_name, Symbol* method_name, Symbol* signature, bool is_static);
+
   void load_constant();
   void put_static();
-  void invoke_static();
+  void new_instance();
+  void simple_invoke(bool is_static); // Hmmm, how to invoke interface??
 
   void push(Value v) { _stack->push(v); }
   Value pop()        { return _stack->pop(); }

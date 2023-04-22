@@ -78,6 +78,7 @@ void ClassPreinitializer::setup_preinit_classes(TRAPS) {
   if (!DumpSharedSpaces) {
     return;
   }
+
   ClassLoaderData* cld = ClassLoaderData::the_null_class_loader_data();
   for (Klass* k = cld->klasses(); k != nullptr; k = k->next_link()) {
     if (k->is_instance_klass()) {
@@ -97,6 +98,11 @@ void ClassPreinitializer::setup_preinit_classes(TRAPS) {
       ik->initialize(CHECK);
     }
   }
+}
+
+bool ClassPreinitializer::is_safe_class(InstanceKlass* ik) {
+  PreInitType* v = _is_preinit_safe->get(ik);
+  return (v != nullptr && *v != PreInitType::UNSAFE);
 }
 
 bool ClassPreinitializer::check_preinit_safety(InstanceKlass* ik) {
@@ -122,6 +128,13 @@ bool ClassPreinitializer::check_preinit_safety(InstanceKlass* ik) {
 
 bool ClassPreinitializer::check_preinit_safety_impl(InstanceKlass* ik) {
   assert(ik->java_super() != nullptr, "java/lang/Object should already be in _is_preinit_safe table");
+
+  if (ik->name() == vmSymbols::jdk_internal_misc_UnsafeConstants()) {
+      ResourceMark rm;
+      log_debug(cds, heap, init)("unsafe %s, static fields are initialized by HotSpot",
+                                 ik->external_name());
+      return false;
+  }
 
   if (!check_preinit_safety(ik->java_super())) {
     ResourceMark rm;
@@ -290,12 +303,18 @@ bool SafeMethodChecker::check_safety(SafeMethodChecker::Stack* caller_stack) {
 
     if (lt.is_enabled()) {
       ResourceMark rm;
-      LogStream ls(lt);
+      stringStream ss;
       int flags = ClassPrinter::PRINT_METHOD_NAME |
                   ClassPrinter::PRINT_BYTECODE |
                   ClassPrinter::PRINT_DYNAMIC |
                   ClassPrinter::PRINT_METHOD_HANDLE;
-      BytecodeTracer::print_method_codes(mh, _bci, _next_bci, &ls, flags);
+      BytecodeTracer::print_method_codes(mh, _bci, _next_bci, &ss, flags);
+      char* s = ss.as_string();
+      size_t len = strlen(s);
+      if (len > 0 && s[len-1] == '\n') {
+        s[len-1] = 0;
+      }
+      lt.print("[%2d] %s", _stack->length(), s);
     }
 
     Bytecode bc = s.bytecode();
@@ -308,12 +327,33 @@ bool SafeMethodChecker::check_safety(SafeMethodChecker::Stack* caller_stack) {
       load_constant();
       break;
 
+    case Bytecodes::_new:
+      new_instance();
+      break;
+
     case Bytecodes::_putstatic:
       put_static();
       break;
 
     case Bytecodes::_invokestatic:
-      invoke_static();
+      simple_invoke(true);
+      break;
+
+    case Bytecodes::_invokespecial:
+      simple_invoke(false);
+      break;
+
+    case Bytecodes::_dup:
+      push(_stack->top());
+      break;
+
+    case Bytecodes::_iconst_0:
+    case Bytecodes::_iconst_1:
+    case Bytecodes::_iconst_2:
+    case Bytecodes::_iconst_3:
+    case Bytecodes::_iconst_4:
+    case Bytecodes::_iconst_5:
+      push(Value(T_INT)); // FIXME: remember specific const value so we can eliminate branches.
       break;
 
     case Bytecodes::_return:
@@ -344,6 +384,28 @@ int SafeMethodChecker::object_to_cp_index(int obj_index) {
 
   assert(i >= 0 && i < constants->resolved_references()->length(), "must be");
   return constants->object_to_cp_index(i);
+}
+
+InstanceKlass* SafeMethodChecker::resolve_klass(Symbol* name) {
+  if (name == init_klass()->name()) {
+    // FIXME this is not right. Need to resolve name from the context of this->method()
+    return init_klass();
+  } else {
+    return nullptr; // FIXME ....
+  }
+}
+
+Method* SafeMethodChecker::resolve_method(Symbol* klass_name, Symbol* method_name, Symbol* signature, bool is_static) {
+  InstanceKlass* ik = resolve_klass(klass_name);
+  if (ik == nullptr) {
+    return nullptr;
+  }
+  Method* m = ik->find_method(method_name, signature);
+  if (m != nullptr && m->is_static() == is_static) {
+    return m;
+  } else {
+    return nullptr;
+  }
 }
 
 void SafeMethodChecker::load_constant() {
@@ -387,7 +449,18 @@ void SafeMethodChecker::load_constant() {
   }
 }
 
-void SafeMethodChecker::invoke_static() {
+void SafeMethodChecker::new_instance() {
+  int i = get_index_u2();
+  Symbol* name = method()->constants()->klass_name_at(i);
+  InstanceKlass* k = resolve_klass(name);
+  if (k == nullptr || k != init_klass()) {
+    // FIXME: now we allow only new'ing of the class being initialized
+    fail("Cannot new %s", name->as_C_string());
+  }
+  push(Value(T_OBJECT)); // TODO: remember type
+}
+
+void SafeMethodChecker::simple_invoke(bool is_static) {
   assert(Bytecodes::uses_cp_cache(raw_code()), "must be");
   ConstantPool* constants = method()->constants();
   int i = cpc_to_cp_index(get_index_u2_cpcache());
@@ -397,14 +470,35 @@ void SafeMethodChecker::invoke_static() {
   Symbol* method_name = constants->uncached_name_ref_at(i);
   Symbol* signature = constants->uncached_signature_ref_at(i);
 
-  if (klass_name->equals("java/lang/Class") && 
+  // Some built-in methods ....
+  if (is_static &&
+      klass_name->equals("java/lang/Class") && 
       method_name->equals("getPrimitiveClass") &&
       signature->equals("(Ljava/lang/String;)Ljava/lang/Class;")) {
     pop();
     push(Value(T_OBJECT));
+    return;
+  }
+
+  if (!is_static &&
+      klass_name->equals("java/lang/Object") && 
+      method_name->equals("<init>") &&
+      signature->equals("()V")) {
+    pop();
+    return;
+  }
+
+  Method* m = resolve_method(klass_name, method_name, signature, is_static);
+  if (m != nullptr && !m->is_native()
+      && klass_name->equals("java/lang/Boolean") && 
+      method_name->equals("<init>") &&
+      signature->equals("(Z)V")) {
+    pop();
+    pop();
   } else {
     ResourceMark rm;
-    fail("Cannot handle static method %s.%s:%s", klass_name->as_C_string(),
+    fail("Cannot handle %s method %s.%s:%s", is_static ? "static" : "instance",
+         klass_name->as_C_string(),
          method_name->as_C_string(), signature->as_C_string());
   }
 }
@@ -418,10 +512,16 @@ void SafeMethodChecker::put_static() {
   Symbol* klass_name = constants->klass_name_at(constants->uncached_klass_ref_index_at(i));
   Symbol* field_name = constants->uncached_name_ref_at(i);
   Symbol* signature = constants->uncached_signature_ref_at(i);
+  fieldDescriptor fd;
 
-  if (klass_name == init_klass()->name() && signature->equals("Ljava/lang/Class;")) {
-    // FIXME -- check that this field is static final
-    pop(); // FIXME pop two words if it's double/long
+  if (klass_name == init_klass()->name() &&
+      init_klass()->find_local_field(field_name, signature, &fd) &&
+      fd.is_static() && fd.is_final()) {
+    // FIXME -- check that tos is a safe value
+    pop();
+    if (is_double_word_type(fd.field_type())) { // FIXME -- use macro.
+      pop();
+    }
   } else {
     ResourceMark rm;
     fail("Cannot handle put static field %s.%s:%s", klass_name->as_C_string(),

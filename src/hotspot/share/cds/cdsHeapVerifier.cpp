@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/cdsHeapVerifier.hpp"
+#include "cds/classPreinitializer.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/javaClasses.inline.hpp"
 #include "logging/log.hpp"
@@ -211,6 +212,10 @@ void CDSHeapVerifier::do_klass(Klass* k) {
       // ik is inside one of the ArchivableStaticFieldInfo tables
       // in heapShared.cpp. We assume such classes are programmed to
       // update their static fields correctly at runtime.
+      return;
+    }
+
+    if (ClassPreinitializer::is_safe_class(ik)) {
       return;
     }
 
