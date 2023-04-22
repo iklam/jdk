@@ -159,7 +159,7 @@ bool ClassPreinitializer::check_preinit_safety_impl(InstanceKlass* ik) {
 
   if (ik->class_initializer() != nullptr) {
     SafeMethodChecker checker(ik, ik->class_initializer());
-    if (!checker.check_safety(nullptr)) {
+    if (!checker.check_safety()) {
       ResourceMark rm;
       log_debug(cds, heap, init)("unsafe %s, has unsafe <clinit>", ik->external_name());
       return false;
@@ -272,17 +272,18 @@ void ClassPreinitializer::serialize_tables(SerializeClosure* soc) {
 }
 
 SafeMethodChecker::SafeMethodChecker(InstanceKlass* ik, Method* method) 
-  : _init_klass(ik), _method(method), _bc(nullptr) {
+  : _init_klass(ik), _method(method), _current_frame(method->max_locals()), _bc(nullptr) {
   assert(ik->is_linked(), "bytecodes must have been rewritten");
-  _locals = NEW_C_HEAP_ARRAY(Value, _method->max_locals(), mtClassShared);
-  _stack = new Stack();
   _failed = false;
 }
 
-bool SafeMethodChecker::check_safety(SafeMethodChecker::Stack* caller_stack) {
+bool SafeMethodChecker::check_safety() {
+#if 0
+  // FIXME
   for (int i = _method->size_of_parameters() - 1; i >= 0; i--) {
     _locals[i] = caller_stack->pop();
   }
+#endif
 
   log_debug(cds, heap, init)("==================== Checking %s", _method->external_name());
 
@@ -314,7 +315,7 @@ bool SafeMethodChecker::check_safety(SafeMethodChecker::Stack* caller_stack) {
       if (len > 0 && s[len-1] == '\n') {
         s[len-1] = 0;
       }
-      lt.print("[%2d] %s", _stack->length(), s);
+      lt.print("[%2d] %s", _current_frame.stack_length(), s);
     }
 
     Bytecode bc = s.bytecode();
@@ -340,11 +341,12 @@ bool SafeMethodChecker::check_safety(SafeMethodChecker::Stack* caller_stack) {
       break;
 
     case Bytecodes::_invokespecial:
+    case Bytecodes::_invokevirtual:
       simple_invoke(false);
       break;
 
     case Bytecodes::_dup:
-      push(_stack->top());
+      push(_current_frame.stack_top());
       break;
 
     case Bytecodes::_iconst_0:
@@ -440,8 +442,14 @@ void SafeMethodChecker::load_constant() {
   } else if (tag.is_string()) {
     push(Value(T_OBJECT)); // mark this as a safe object?
   } else if (tag.is_klass() || tag.is_unresolved_klass()) {
-    // FIXME -- OK to push current class, or if check_preinit_safety(klass) returns OK
-    fail("ldc Class not supported");
+    Symbol* klass_name = constants->klass_name_at(cp_index);
+    InstanceKlass* ik = resolve_klass(klass_name);
+    if (ik == init_klass()) { // FIXME: also if check_preinit_safety(klass) returns OK
+      push(Value(T_OBJECT)); // mark this as a safe object?
+    } else {
+      ResourceMark rm;
+      fail("ldc Class not supported %s", klass_name->as_C_string());
+    }
   } else if (tag.is_method_type()) {
     fail("ldc MethodType not supported");
   } else if (tag.is_method_handle()) {
@@ -464,7 +472,9 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
   assert(Bytecodes::uses_cp_cache(raw_code()), "must be");
   ConstantPool* constants = method()->constants();
   int i = cpc_to_cp_index(get_index_u2_cpcache());
-  assert(constants->tag_at(i).value() == JVM_CONSTANT_Methodref, "must be");
+
+  // InterfaceMethodref is for invokestatic on static methods inside interfaces.
+  assert(constants->tag_at(i).value() == JVM_CONSTANT_Methodref || constants->tag_at(i).value() == JVM_CONSTANT_InterfaceMethodref, "must be");
 
   Symbol* klass_name = constants->klass_name_at(constants->uncached_klass_ref_index_at(i));
   Symbol* method_name = constants->uncached_name_ref_at(i);
@@ -477,6 +487,16 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
       signature->equals("(Ljava/lang/String;)Ljava/lang/Class;")) {
     pop();
     push(Value(T_OBJECT));
+    return;
+  }
+
+  if (!is_static &&
+      klass_name->equals("java/lang/Class") && 
+      method_name->equals("desiredAssertionStatus") &&
+      signature->equals("()Z")) {
+    // FIXME -- mark this class to be reinitialized with desiredAssertionStatus
+    pop(); // this
+    push(Value(T_BOOLEAN));
     return;
   }
 
@@ -539,4 +559,24 @@ void SafeMethodChecker::fail(const char* format, ...) {
     msg.vwrite(LogLevel::Debug, format, ap);
     va_end(ap);
   }
+}
+
+SafeMethodChecker::Frame::Frame(int max_locals) : _max_locals(max_locals) {
+  _states = new States();
+  for (int i = 0; i < max_locals; i++) {
+    _states->push(Value(T_ILLEGAL));
+  }
+}
+
+SafeMethodChecker::Frame::Frame(Frame& from_frame) {
+  _max_locals = from_frame._max_locals;
+  _states = new States();
+  States* from_states = from_frame._states;
+  for (int i = 0; i < from_states->length(); i++) {
+    _states->push(from_states->at(i));
+  }
+}
+
+SafeMethodChecker::Frame::~Frame() {
+  delete _states;
 }

@@ -86,19 +86,46 @@ class SafeMethodChecker: StackObj {
     Value(BasicType type) : _valid(true), _type(type) {}
   };
 
-  using Stack = GrowableArrayCHeap<Value, mtClassShared>;
+  class Frame { // The values of the local vars and expression stack at a given bci
+    using States = GrowableArrayCHeap<Value, mtClassShared>;
+    int _max_locals;
+    States* _states;
+    bool is_stack_empty() { return  _states->length() <= _max_locals; }
+
+  public:
+    Frame(int max_locals);
+    Frame(Frame& from_frame); // make a copy of from_frame
+    ~Frame();
+
+    void push(Value v) { _states->push(v); }
+    Value pop() {
+      assert(!is_stack_empty(), "unverflow");
+      return _states->pop();
+    }
+    int stack_length() { return _states->length() - _max_locals; }
+    Value stack_top() {
+      assert(!is_stack_empty(), "sanity");
+      return _states->top();
+    }
+  };
+
+  class Branch {
+    int _target_bci;       // We are branching to _target_bci
+    Frame _frame;          // The frame when we start executing at _target_bci
+  public:
+    Branch(int bci, Frame& frame) : _target_bci(bci), _frame(frame) {}
+  };
 
   InstanceKlass* _init_klass;   // The class is being analyzed.
   Method* _method;              // Is this method "safe" when it's executed during
                                 // the initialization of _init_klass?
-  Value* _locals;               // local variables of this method
-  Stack* _stack;                // call stack of this method
+  Frame _current_frame;         // frame state at _bci
   bool _failed;
   int _bci;
   int _next_bci;
 
   bool      _is_wide;
-  Bytecode* _bc;
+  Bytecode* _bc;                // FIXME -- why can't this be 'Bytecode _bc'?
   Bytecodes::Code _code;
   Bytecodes::Code _raw_code;
 
@@ -128,8 +155,8 @@ class SafeMethodChecker: StackObj {
   void new_instance();
   void simple_invoke(bool is_static); // Hmmm, how to invoke interface??
 
-  void push(Value v) { _stack->push(v); }
-  Value pop()        { return _stack->pop(); }
+  void push(Value v) { _current_frame.push(v); }
+  Value pop()        { return _current_frame.pop(); }
 
   void fail(const char* format, ...) ATTRIBUTE_PRINTF(2, 3);
 public:
@@ -138,7 +165,7 @@ public:
   // Perform abstract execution on the method's bytecode. Incoming parameters
   // are popped from the caller's stack. Return value, if any, is pushed onto
   // the caller's stack.
-  bool check_safety(Stack* caller_stack);
+  bool check_safety();
 };
 
 

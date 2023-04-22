@@ -329,7 +329,7 @@ void BytecodePrinter::print_constant_nocheck(int i, outputStream* st) {
     st->print_cr(" %f", constants->double_at(i));
   } else if (tag.is_string()) {
     const char* string = constants->string_at_noresolve(i);
-    st->print_cr(" %s", string);
+    st->print_cr(" \"%s\"", string);
   } else if (tag.is_klass()) {
     st->print_cr(" %s", constants->resolved_klass_at(i)->external_name());
   } else if (tag.is_unresolved_klass()) {
