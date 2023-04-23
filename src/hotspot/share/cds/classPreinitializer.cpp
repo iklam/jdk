@@ -49,7 +49,7 @@ ClassPreinitializer::ClassesTable* ClassPreinitializer::_is_preinit_safe = nullp
 void ClassPreinitializer::initialize(TRAPS) {
   if (DumpSharedSpaces) {
     _dumptime_classes = new GrowableArrayCHeap<InstanceKlass*, mtClassShared>();
-    _is_preinit_safe = new (mtClass)ClassesTable();
+    _is_preinit_safe = new (mtClassShared)ClassesTable();
 
     ClassLoaderData* cld = ClassLoaderData::the_null_class_loader_data();
     for (Klass* k = cld->klasses(); k != nullptr; k = k->next_link()) {
@@ -272,7 +272,8 @@ void ClassPreinitializer::serialize_tables(SerializeClosure* soc) {
 }
 
 SafeMethodChecker::SafeMethodChecker(InstanceKlass* ik, Method* method) 
-  : _init_klass(ik), _method(method), _current_frame(method->max_locals()), _bc(nullptr) {
+  : _init_klass(ik), _method(method), _current_frame(method->max_locals()), _bc(nullptr),
+    _ended(false), _branch_targets(nullptr), _pending_branches(nullptr) {
   assert(ik->is_linked(), "bytecodes must have been rewritten");
   _failed = false;
 }
@@ -290,6 +291,8 @@ bool SafeMethodChecker::check_safety() {
   LogTarget(Trace, cds, heap, init) lt;
   methodHandle mh(Thread::current(), _method);
   BytecodeStream s(mh);
+  _bytecode_stream = &s;
+
   while (true) {
     _code = s.next();
     _raw_code = s.raw_code();
@@ -358,8 +361,38 @@ bool SafeMethodChecker::check_safety() {
       push(Value(T_INT)); // FIXME: remember specific const value so we can eliminate branches.
       break;
 
+    case Bytecodes::_ifeq:
+    case Bytecodes::_ifnull:
+    case Bytecodes::_iflt:
+    case Bytecodes::_ifle:
+    case Bytecodes::_ifne:
+    case Bytecodes::_ifnonnull:
+    case Bytecodes::_ifgt:
+    case Bytecodes::_ifge:
+    case Bytecodes::_if_icmpeq:
+    case Bytecodes::_if_icmpne:
+    case Bytecodes::_if_icmplt:
+    case Bytecodes::_if_icmpgt:
+    case Bytecodes::_if_icmple:
+    case Bytecodes::_if_icmpge:
+    case Bytecodes::_if_acmpeq:
+    case Bytecodes::_if_acmpne:
+      if_branch(s.dest());
+      break;
+
+    case Bytecodes::_goto:
+  //case Bytecodes::_jsr: Not supported (need to check classfile version)
+      goto_branch(s.dest());
+      break;
+
+    case Bytecodes::_goto_w:
+  //case Bytecodes::_jsr_w:
+      goto_branch(s.dest_w());
+      break;
+
     case Bytecodes::_return:
-      return true; // We haven't found any bad instructions, so we are OK.
+      end_basic_block();
+      break;
 
     default:
       fail("Unsupported bytecode: %s", Bytecodes::name(_code));
@@ -368,6 +401,9 @@ bool SafeMethodChecker::check_safety() {
 
     if (_failed) {
       return false;
+    }
+    if (_ended) {
+      return true; // FIXME -- return a value to the caller
     }
   }
 }
@@ -549,6 +585,54 @@ void SafeMethodChecker::put_static() {
   }
 }
 
+void SafeMethodChecker::if_branch(int dest_bci) {
+  pop(); // FIXME -- check if the condition is safe, if not, fail
+  maybe_branch_to(dest_bci);
+  maybe_branch_to(_next_bci);
+  end_basic_block();
+}
+
+void SafeMethodChecker::goto_branch(int dest_bci) {
+  maybe_branch_to(dest_bci);
+  end_basic_block();
+}
+
+void SafeMethodChecker::maybe_branch_to(int dest_bci) {
+  if (_branch_targets == nullptr) {
+    _branch_targets = new (mtClassShared)BranchTargetsTable();
+  }
+  if (_pending_branches == nullptr) {
+    _pending_branches = new GrowableArrayCHeap<int, mtClassShared>();
+  }
+
+  bool created;
+  BranchTarget* bt = _branch_targets->put_if_absent(dest_bci, &created);
+  bt->merge_from(_current_frame);
+  if (!bt->is_pending()) {
+    bt->set_is_pending(true);
+    _pending_branches->push(dest_bci);
+    log_trace(cds, heap, init)("New pending block at bci = %d", dest_bci);
+  }
+}
+
+void SafeMethodChecker::end_basic_block() {
+  if (_pending_branches == nullptr || _pending_branches->length() == 0) {
+    _ended = true;
+  } else {
+    int next_bci = _pending_branches->pop();
+    BranchTarget* bt = _branch_targets->get(next_bci);
+    assert(bt != nullptr, "sanity");
+    bt->set_is_pending(false);
+
+    // FIXME -- if bt is already the same as _current_frame, there is no need to iterate.
+
+    bt->clone_to(_current_frame);
+    _next_bci = next_bci;
+    _bytecode_stream->set_next_bci(next_bci);
+    log_trace(cds, heap, init)("Start new block at bci = %d", next_bci);
+  }
+}
+
 void SafeMethodChecker::fail(const char* format, ...) {
   _failed = true;
   LogMessage(cds, heap, init) msg;
@@ -561,6 +645,11 @@ void SafeMethodChecker::fail(const char* format, ...) {
   }
 }
 
+void SafeMethodChecker::Value::merge_from(const Value other) { // FIXME -- implement proper merging
+  _valid = other._valid;
+  _type = other._type;
+}
+
 SafeMethodChecker::Frame::Frame(int max_locals) : _max_locals(max_locals) {
   _states = new States();
   for (int i = 0; i < max_locals; i++) {
@@ -568,6 +657,34 @@ SafeMethodChecker::Frame::Frame(int max_locals) : _max_locals(max_locals) {
   }
 }
 
+void SafeMethodChecker::Frame::merge_from(Frame& other) {
+  States* other_states = other._states;
+  if (_max_locals == -1) { // not initialized
+    _max_locals = other._max_locals;
+    _states = new States();
+    for (int i = 0; i < other_states->length(); i++) {
+      _states->push(other_states->at(i));
+    }
+  } else {
+    assert(_max_locals == other._max_locals, "must be");
+    assert(_states->length() == other_states->length(), "must be");
+    for (int i = 0; i < other_states->length(); i++) {
+      _states->adr_at(i)->merge_from(other_states->at(i));
+    }
+  }
+}
+
+void SafeMethodChecker::Frame::clone_to(Frame& other) {
+  assert(_max_locals == other._max_locals, "must be");
+  States* other_states = other._states;
+
+  other_states->clear();
+  for (int i = 0; i < _states->length(); i++) {
+    other_states->push(_states->at(i));
+  }
+}
+
+#if 0
 SafeMethodChecker::Frame::Frame(Frame& from_frame) {
   _max_locals = from_frame._max_locals;
   _states = new States();
@@ -576,6 +693,7 @@ SafeMethodChecker::Frame::Frame(Frame& from_frame) {
     _states->push(from_states->at(i));
   }
 }
+#endif
 
 SafeMethodChecker::Frame::~Frame() {
   delete _states;

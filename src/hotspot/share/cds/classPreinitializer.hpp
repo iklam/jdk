@@ -39,6 +39,7 @@
 #include "utilities/align.hpp"
 #include "utilities/bytes.hpp"
 
+class BytecodeStream;
 class SerializeClosure;
 
 // ClassPreinitializer stores qualified classes into the CDS archive in an
@@ -84,6 +85,7 @@ class SafeMethodChecker: StackObj {
 
     Value() : _valid(false), _type(T_ILLEGAL) {}
     Value(BasicType type) : _valid(true), _type(type) {}
+    void merge_from(const Value other);
   };
 
   class Frame { // The values of the local vars and expression stack at a given bci
@@ -94,7 +96,7 @@ class SafeMethodChecker: StackObj {
 
   public:
     Frame(int max_locals);
-    Frame(Frame& from_frame); // make a copy of from_frame
+    Frame() : _max_locals(-1), _states(nullptr) {}
     ~Frame();
 
     void push(Value v) { _states->push(v); }
@@ -107,13 +109,21 @@ class SafeMethodChecker: StackObj {
       assert(!is_stack_empty(), "sanity");
       return _states->top();
     }
+
+    void merge_from(Frame& frame);
+    void clone_to(Frame& frame);
   };
 
-  class Branch {
-    int _target_bci;       // We are branching to _target_bci
-    Frame _frame;          // The frame when we start executing at _target_bci
+  class BranchTarget {
+    bool _is_pending;       // Is the target bci of this branch in _pending_branches
+    Frame _frame;          // The frame when we start executing this branch.
   public:
-    Branch(int bci, Frame& frame) : _target_bci(bci), _frame(frame) {}
+    BranchTarget() : _is_pending(false), _frame() {}
+  //BranchTarget(int bci, Frame& frame) : _is_pending(false), _frame(frame) {}
+    bool is_pending() const { return _is_pending; }
+    void set_is_pending(bool v) { _is_pending = v; }
+    void merge_from(Frame& other) { _frame.merge_from(other); }
+    void clone_to(Frame& other) { _frame.clone_to(other); }
   };
 
   InstanceKlass* _init_klass;   // The class is being analyzed.
@@ -126,8 +136,14 @@ class SafeMethodChecker: StackObj {
 
   bool      _is_wide;
   Bytecode* _bc;                // FIXME -- why can't this be 'Bytecode _bc'?
+  BytecodeStream* _bytecode_stream;
   Bytecodes::Code _code;
   Bytecodes::Code _raw_code;
+  bool _ended;
+
+  using BranchTargetsTable = ResourceHashtable<int, BranchTarget, 347, AnyObj::C_HEAP, mtClassShared>;
+  BranchTargetsTable* _branch_targets; 
+  GrowableArrayCHeap<int, mtClassShared>* _pending_branches;
 
   InstanceKlass* init_klass() const { return _init_klass; }
   Method*   method()          const { return _method; }
@@ -154,6 +170,11 @@ class SafeMethodChecker: StackObj {
   void put_static();
   void new_instance();
   void simple_invoke(bool is_static); // Hmmm, how to invoke interface??
+  void if_branch(int dest_bci);
+  void goto_branch(int dest_bci);
+
+  void maybe_branch_to(int dest_bci);
+  void end_basic_block();
 
   void push(Value v) { _current_frame.push(v); }
   Value pop()        { return _current_frame.pop(); }
