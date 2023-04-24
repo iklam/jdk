@@ -201,6 +201,7 @@ void ClassPreinitializer::copy_mirror_if_safe(Klass* k, oop scratch_mirror) {
       BasicType field_type = fd.field_type();
       assert(fs.access_flags().is_final(), "Must be");
       switch (field_type) {
+      case T_ARRAY:
       case T_OBJECT: {
           oop value = orig_mirror->obj_field(fd.offset());
           if (fs.initval_index() != 0) {
@@ -335,8 +336,24 @@ bool SafeMethodChecker::check_safety() {
       new_instance();
       break;
 
+    case Bytecodes::_newarray:
+      pop(); // array size
+      push(Value(T_OBJECT)); // FIXME: do we care if it's array vs object
+      break;
+
     case Bytecodes::_putstatic:
       put_static();
+      break;
+
+    case Bytecodes::_iastore:
+    case Bytecodes::_lastore:
+    case Bytecodes::_fastore:
+    case Bytecodes::_dastore:
+    case Bytecodes::_aastore:
+    case Bytecodes::_bastore:
+    case Bytecodes::_castore:
+    case Bytecodes::_sastore: // FIXME: check if index and value are safe
+      pop(); pop(); pop(); // value, index, array
       break;
 
     case Bytecodes::_invokestatic:
@@ -352,6 +369,8 @@ bool SafeMethodChecker::check_safety() {
       push(_current_frame.stack_top());
       break;
 
+    case Bytecodes::_bipush:
+    case Bytecodes::_sipush:
     case Bytecodes::_iconst_0:
     case Bytecodes::_iconst_1:
     case Bytecodes::_iconst_2:
@@ -586,6 +605,8 @@ void SafeMethodChecker::put_static() {
 }
 
 void SafeMethodChecker::if_branch(int dest_bci) {
+  // TODO: remember actual constant values inside _current_frame. This allows dead code removal.
+  // TODO: add option to disable assert for archived classes.
   pop(); // FIXME -- check if the condition is safe, if not, fail
   maybe_branch_to(dest_bci);
   maybe_branch_to(_next_bci);
