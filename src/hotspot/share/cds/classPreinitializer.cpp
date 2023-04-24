@@ -272,22 +272,36 @@ void ClassPreinitializer::serialize_tables(SerializeClosure* soc) {
   soc->do_ptr((void**)&_runtime_classes);
 }
 
-SafeMethodChecker::SafeMethodChecker(InstanceKlass* ik, Method* method) 
-  : _init_klass(ik), _method(method), _current_frame(method->max_locals()), _bc(nullptr),
+int SafeMethodChecker::_nest_level = 0;
+
+SafeMethodChecker::SafeMethodChecker(InstanceKlass* init_klass, Method* method)
+  : _init_klass(init_klass), _method(method), _current_frame(method->max_locals()), _bc(nullptr),
     _ended(false), _branch_targets(nullptr), _pending_branches(nullptr) {
-  assert(ik->is_linked(), "bytecodes must have been rewritten");
+  assert(init_klass->is_linked(), "bytecodes must have been rewritten");
   _failed = false;
 }
 
-bool SafeMethodChecker::check_safety() {
-#if 0
-  // FIXME
-  for (int i = _method->size_of_parameters() - 1; i >= 0; i--) {
-    _locals[i] = caller_stack->pop();
+SafeMethodChecker::~SafeMethodChecker() {
+  if (_branch_targets == nullptr) {
+    delete _branch_targets;
   }
-#endif
+  if (_pending_branches == nullptr) {
+    delete _pending_branches;
+  }
+}
 
-  log_debug(cds, heap, init)("==================== Checking %s", _method->external_name());
+const char* SafeMethodChecker::indent() {
+  static char s[20];
+  int n = MIN2(int(sizeof(s) - 1), _nest_level);
+  for (int i = 0; i <= n; i++) {
+    s[i] = ' ';
+  }
+  s[n] = 0;
+  return s;
+}
+
+bool SafeMethodChecker::check_safety() {
+  log_debug(cds, heap, init)("%s==================== Checking %s", indent(), _method->external_name());
 
   LogTarget(Trace, cds, heap, init) lt;
   methodHandle mh(Thread::current(), _method);
@@ -319,7 +333,7 @@ bool SafeMethodChecker::check_safety() {
       if (len > 0 && s[len-1] == '\n') {
         s[len-1] = 0;
       }
-      lt.print("[%2d] %s", _current_frame.stack_length(), s);
+      lt.print("%s[%2d] %s", indent(), _current_frame.stack_length(), s);
     }
 
     Bytecode bc = s.bytecode();
@@ -378,6 +392,16 @@ bool SafeMethodChecker::check_safety() {
     case Bytecodes::_iconst_4:
     case Bytecodes::_iconst_5:
       push(Value(T_INT)); // FIXME: remember specific const value so we can eliminate branches.
+      break;
+
+    case Bytecodes::_aload_0: // TEMP
+      push(local_at(0));
+      break;
+    case Bytecodes::_iload_1: // TEMP
+      push(local_at(1));
+      break;
+    case Bytecodes::_putfield: // FIXME -- check that the target object is not reachable from outside of _init_klass
+      pop(); pop(); // FIXME -- field size could be double word
       break;
 
     case Bytecodes::_ifeq:
@@ -523,7 +547,7 @@ void SafeMethodChecker::new_instance() {
   push(Value(T_OBJECT)); // TODO: remember type
 }
 
-void SafeMethodChecker::simple_invoke(bool is_static) {
+void SafeMethodChecker::simple_invoke(bool is_static) { // simple = not invokedynamic
   assert(Bytecodes::uses_cp_cache(raw_code()), "must be");
   ConstantPool* constants = method()->constants();
   int i = cpc_to_cp_index(get_index_u2_cpcache());
@@ -537,7 +561,7 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
 
   // Some built-in methods ....
   if (is_static &&
-      klass_name->equals("java/lang/Class") && 
+      klass_name->equals("java/lang/Class") &&
       method_name->equals("getPrimitiveClass") &&
       signature->equals("(Ljava/lang/String;)Ljava/lang/Class;")) {
     pop();
@@ -546,7 +570,7 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
   }
 
   if (!is_static &&
-      klass_name->equals("java/lang/Class") && 
+      klass_name->equals("java/lang/Class") &&
       method_name->equals("desiredAssertionStatus") &&
       signature->equals("()Z")) {
     // FIXME -- mark this class to be reinitialized with desiredAssertionStatus
@@ -556,7 +580,7 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
   }
 
   if (!is_static &&
-      klass_name->equals("java/lang/Object") && 
+      klass_name->equals("java/lang/Object") &&
       method_name->equals("<init>") &&
       signature->equals("()V")) {
     pop();
@@ -564,18 +588,49 @@ void SafeMethodChecker::simple_invoke(bool is_static) {
   }
 
   Method* m = resolve_method(klass_name, method_name, signature, is_static);
-  if (m != nullptr && !m->is_native()
-      && klass_name->equals("java/lang/Boolean") && 
-      method_name->equals("<init>") &&
-      signature->equals("(Z)V")) {
-    pop();
-    pop();
+  if (m != nullptr && !m->is_native() && (code() == Bytecodes::_invokestatic || code() == Bytecodes::_invokespecial)
+      // TEMP
+      && klass_name->equals("java/lang/Boolean")
+      && method_name->equals("<init>")
+      && signature->equals("(Z)V")
+      ) {
+    // FIXME: need to remember the type of object in order to handle invokevirtual
+    if (!invoke_method(m)) {
+      fail("Method call is not safe %s.%s:%s",
+           klass_name->as_C_string(),
+           method_name->as_C_string(), signature->as_C_string());
+    }
   } else {
     ResourceMark rm;
     fail("Cannot handle %s method %s.%s:%s", is_static ? "static" : "instance",
          klass_name->as_C_string(),
          method_name->as_C_string(), signature->as_C_string());
   }
+}
+
+bool SafeMethodChecker::invoke_method(Method* m) {
+  _nest_level ++;
+  SafeMethodChecker checker(init_klass(), m);
+  for (int i = m->size_of_parameters() - 1; i >= 0; i--) {
+    checker.local_at_put(i, pop());
+  }
+  bool ok = checker.check_safety();
+  _nest_level --;
+
+  if (ok) {
+    BasicType bt = m->result_type();
+    if (bt != T_VOID) {
+      if (is_double_word_type(bt)) {
+        Value w2 = checker.pop();
+        Value w1 = checker.pop();
+        push(w1);
+        push(w2);
+      } else {
+        push(checker.pop());
+      }
+    }
+  }
+  return ok;
 }
 
 void SafeMethodChecker::put_static() {
@@ -632,7 +687,7 @@ void SafeMethodChecker::maybe_branch_to(int dest_bci) {
   if (!bt->is_pending()) {
     bt->set_is_pending(true);
     _pending_branches->push(dest_bci);
-    log_trace(cds, heap, init)("New pending block at bci = %d", dest_bci);
+    log_trace(cds, heap, init)("%sNew pending block at bci = %d", indent(), dest_bci);
   }
 }
 
@@ -650,7 +705,7 @@ void SafeMethodChecker::end_basic_block() {
     bt->clone_to(_current_frame);
     _next_bci = next_bci;
     _bytecode_stream->set_next_bci(next_bci);
-    log_trace(cds, heap, init)("Start new block at bci = %d", next_bci);
+    log_trace(cds, heap, init)("%sStart new block at bci = %d", indent(), next_bci);
   }
 }
 
@@ -660,7 +715,7 @@ void SafeMethodChecker::fail(const char* format, ...) {
   if (msg.is_debug()) {
     va_list ap;
     va_start(ap, format);
-    msg.debug("Failed at bci %i %s", _bci, Bytecodes::name(_code));
+    msg.debug("%sFailed at bci %i %s", indent(), _bci, Bytecodes::name(_code));
     msg.vwrite(LogLevel::Debug, format, ap);
     va_end(ap);
   }
@@ -681,6 +736,7 @@ SafeMethodChecker::Frame::Frame(int max_locals) : _max_locals(max_locals) {
 void SafeMethodChecker::Frame::merge_from(Frame& other) {
   States* other_states = other._states;
   if (_max_locals == -1) { // not initialized
+    assert(_states == nullptr, "must be");
     _max_locals = other._max_locals;
     _states = new States();
     for (int i = 0; i < other_states->length(); i++) {

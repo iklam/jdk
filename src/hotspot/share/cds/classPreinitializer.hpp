@@ -93,6 +93,7 @@ class SafeMethodChecker: StackObj {
     int _max_locals;
     States* _states;
     bool is_stack_empty() { return  _states->length() <= _max_locals; }
+    bool is_local(int i) { return 0 <= i && i < _max_locals; }
 
   public:
     Frame(int max_locals);
@@ -110,6 +111,9 @@ class SafeMethodChecker: StackObj {
       return _states->top();
     }
 
+    void local_at_put(int i, Value v) { assert(is_local(i), "must be"); _states->at_put(i, v); }
+    Value local_at(int i) { assert(is_local(i), "must be"); return _states->at(i); }
+
     void merge_from(Frame& frame);
     void clone_to(Frame& frame);
   };
@@ -126,6 +130,7 @@ class SafeMethodChecker: StackObj {
     void clone_to(Frame& other) { _frame.clone_to(other); }
   };
 
+  static int _nest_level;
   InstanceKlass* _init_klass;   // The class is being analyzed.
   Method* _method;              // Is this method "safe" when it's executed during
                                 // the initialization of _init_klass?
@@ -142,7 +147,7 @@ class SafeMethodChecker: StackObj {
   bool _ended;
 
   using BranchTargetsTable = ResourceHashtable<int, BranchTarget, 347, AnyObj::C_HEAP, mtClassShared>;
-  BranchTargetsTable* _branch_targets; 
+  BranchTargetsTable* _branch_targets;
   GrowableArrayCHeap<int, mtClassShared>* _pending_branches;
 
   InstanceKlass* init_klass() const { return _init_klass; }
@@ -169,7 +174,8 @@ class SafeMethodChecker: StackObj {
   void load_constant();
   void put_static();
   void new_instance();
-  void simple_invoke(bool is_static); // Hmmm, how to invoke interface??
+  void simple_invoke(bool is_static); // Hmmm, how to invoke interface, or virtual??
+  bool invoke_method(Method* m);
   void if_branch(int dest_bci);
   void goto_branch(int dest_bci);
 
@@ -179,9 +185,14 @@ class SafeMethodChecker: StackObj {
   void push(Value v) { _current_frame.push(v); }
   Value pop()        { return _current_frame.pop(); }
 
+  void local_at_put(int i, Value v) { _current_frame.local_at_put(i, v); }
+  Value local_at(int i) { return _current_frame.local_at(i); }
+
+  static const char* indent();
   void fail(const char* format, ...) ATTRIBUTE_PRINTF(2, 3);
 public:
-  SafeMethodChecker(InstanceKlass* ik, Method* method);
+  SafeMethodChecker(InstanceKlass* init_klass, Method* method);
+  ~SafeMethodChecker();
 
   // Perform abstract execution on the method's bytecode. Incoming parameters
   // are popped from the caller's stack. Return value, if any, is pushed onto
