@@ -1,0 +1,1668 @@
+Dumped using
+
+java -Xshare:dump -Xlog:cds+heap+init=trace::none | tee trace.txt
+
+
+Notes:
+
+look at Boolean.<clinit> for method invocation
+look at Float.<clinit> for branches
+look at Integer.<clinit> for primitive array initialization
+
+===============================================================================
+vm early init jdk.internal.misc.VM
+vm early init java.lang.String$CaseInsensitiveComparator
+vm early init java.util.Comparator
+vm early init java.lang.ThreadGroup
+vm early init java.lang.Thread$FieldHolder
+vm early init java.lang.Thread
+vm early init java.security.AccessController
+vm early init java.security.AccessControlContext
+vm early init java.lang.System
+vm early init java.lang.Class
+vm early init java.lang.reflect.Type
+vm early init java.lang.reflect.AnnotatedElement
+vm early init java.lang.String
+vm early init java.lang.CharSequence
+vm early init java.lang.Object
+safe jdk.internal.vm.FillerObject (mirror = 112 bytes)
+safe jdk.internal.vm.vector.VectorSupport$VectorPayload (mirror = 112 bytes)
+safe jdk.internal.vm.vector.VectorSupport$VectorShuffle (mirror = 112 bytes)
+safe jdk.internal.vm.vector.VectorSupport$VectorMask (mirror = 112 bytes)
+safe jdk.internal.vm.vector.VectorSupport$Vector (mirror = 112 bytes)
+==================== Checking void jdk.internal.vm.vector.VectorSupport.<clinit>()
+[ 0]    0 ldc <unresolved klass at 1>
+[ 1]    2 invokevirtual 169 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 9 <jdk/internal/vm/vector/VectorSupport.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 172 <jdk/internal/vm/vector/VectorSupport.registerNatives()I> 
+Failed at bci 16 invokestatic
+Cannot handle static method jdk/internal/vm/vector/VectorSupport.registerNatives:()I
+unsafe jdk.internal.vm.vector.VectorSupport, has unsafe <clinit>
+safe java.lang.reflect.RecordComponent (mirror = 112 bytes)
+safe java.util.Iterator (mirror = 112 bytes)
+safe java.io.Serializable (mirror = 112 bytes)
+safe java.lang.Number (mirror = 120 bytes)
+safe java.lang.Comparable (mirror = 112 bytes)
+safe java.lang.constant.Constable (mirror = 112 bytes)
+safe java.lang.constant.ConstantDesc (mirror = 112 bytes)
+==================== Checking void java.lang.Long.<clinit>()
+[ 0]    0 fast_aldc_w "long"
+[ 1]    3 invokestatic 353 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]    6 putstatic 359 <java/lang/Long.TYPE/Ljava/lang/Class;> 
+[ 0]    9 return
+safe java.lang.Long (mirror = 152 bytes)
+==================== Checking void java.lang.Integer.<clinit>()
+[ 0]    0 fast_aldc_w "int"
+[ 1]    3 invokestatic 294 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]    6 putstatic 300 <java/lang/Integer.TYPE/Ljava/lang/Class;> 
+[ 0]    9 bipush 36
+[ 1]   11 newarray char
+[ 1]   13 dup
+[ 2]   14 iconst_0
+[ 3]   15 bipush 48
+[ 4]   17 castore
+[ 1]   18 dup
+[ 2]   19 iconst_1
+[ 3]   20 bipush 49
+[ 4]   22 castore
+[ 1]   23 dup
+[ 2]   24 iconst_2
+[ 3]   25 bipush 50
+[ 4]   27 castore
+[ 1]   28 dup
+[ 2]   29 iconst_3
+[ 3]   30 bipush 51
+[ 4]   32 castore
+[ 1]   33 dup
+[ 2]   34 iconst_4
+[ 3]   35 bipush 52
+[ 4]   37 castore
+[ 1]   38 dup
+[ 2]   39 iconst_5
+[ 3]   40 bipush 53
+[ 4]   42 castore
+[ 1]   43 dup
+[ 2]   44 bipush 6
+[ 3]   46 bipush 54
+[ 4]   48 castore
+[ 1]   49 dup
+[ 2]   50 bipush 7
+[ 3]   52 bipush 55
+[ 4]   54 castore
+[ 1]   55 dup
+[ 2]   56 bipush 8
+[ 3]   58 bipush 56
+[ 4]   60 castore
+[ 1]   61 dup
+[ 2]   62 bipush 9
+[ 3]   64 bipush 57
+[ 4]   66 castore
+[ 1]   67 dup
+[ 2]   68 bipush 10
+[ 3]   70 bipush 97
+[ 4]   72 castore
+[ 1]   73 dup
+[ 2]   74 bipush 11
+[ 3]   76 bipush 98
+[ 4]   78 castore
+[ 1]   79 dup
+[ 2]   80 bipush 12
+[ 3]   82 bipush 99
+[ 4]   84 castore
+[ 1]   85 dup
+[ 2]   86 bipush 13
+[ 3]   88 bipush 100
+[ 4]   90 castore
+[ 1]   91 dup
+[ 2]   92 bipush 14
+[ 3]   94 bipush 101
+[ 4]   96 castore
+[ 1]   97 dup
+[ 2]   98 bipush 15
+[ 3]  100 bipush 102
+[ 4]  102 castore
+[ 1]  103 dup
+[ 2]  104 bipush 16
+[ 3]  106 bipush 103
+[ 4]  108 castore
+[ 1]  109 dup
+[ 2]  110 bipush 17
+[ 3]  112 bipush 104
+[ 4]  114 castore
+[ 1]  115 dup
+[ 2]  116 bipush 18
+[ 3]  118 bipush 105
+[ 4]  120 castore
+[ 1]  121 dup
+[ 2]  122 bipush 19
+[ 3]  124 bipush 106
+[ 4]  126 castore
+[ 1]  127 dup
+[ 2]  128 bipush 20
+[ 3]  130 bipush 107
+[ 4]  132 castore
+[ 1]  133 dup
+[ 2]  134 bipush 21
+[ 3]  136 bipush 108
+[ 4]  138 castore
+[ 1]  139 dup
+[ 2]  140 bipush 22
+[ 3]  142 bipush 109
+[ 4]  144 castore
+[ 1]  145 dup
+[ 2]  146 bipush 23
+[ 3]  148 bipush 110
+[ 4]  150 castore
+[ 1]  151 dup
+[ 2]  152 bipush 24
+[ 3]  154 bipush 111
+[ 4]  156 castore
+[ 1]  157 dup
+[ 2]  158 bipush 25
+[ 3]  160 bipush 112
+[ 4]  162 castore
+[ 1]  163 dup
+[ 2]  164 bipush 26
+[ 3]  166 bipush 113
+[ 4]  168 castore
+[ 1]  169 dup
+[ 2]  170 bipush 27
+[ 3]  172 bipush 114
+[ 4]  174 castore
+[ 1]  175 dup
+[ 2]  176 bipush 28
+[ 3]  178 bipush 115
+[ 4]  180 castore
+[ 1]  181 dup
+[ 2]  182 bipush 29
+[ 3]  184 bipush 116
+[ 4]  186 castore
+[ 1]  187 dup
+[ 2]  188 bipush 30
+[ 3]  190 bipush 117
+[ 4]  192 castore
+[ 1]  193 dup
+[ 2]  194 bipush 31
+[ 3]  196 bipush 118
+[ 4]  198 castore
+[ 1]  199 dup
+[ 2]  200 bipush 32
+[ 3]  202 bipush 119
+[ 4]  204 castore
+[ 1]  205 dup
+[ 2]  206 bipush 33
+[ 3]  208 bipush 120
+[ 4]  210 castore
+[ 1]  211 dup
+[ 2]  212 bipush 34
+[ 3]  214 bipush 121
+[ 4]  216 castore
+[ 1]  217 dup
+[ 2]  218 bipush 35
+[ 3]  220 bipush 122
+[ 4]  222 castore
+[ 1]  223 putstatic 17 <java/lang/Integer.digits/[C> 
+[ 0]  226 bipush 100
+[ 1]  228 newarray byte
+[ 1]  230 dup
+[ 2]  231 iconst_0
+[ 3]  232 bipush 48
+[ 4]  234 bastore
+[ 1]  235 dup
+[ 2]  236 iconst_1
+[ 3]  237 bipush 48
+[ 4]  239 bastore
+[ 1]  240 dup
+[ 2]  241 iconst_2
+[ 3]  242 bipush 48
+[ 4]  244 bastore
+[ 1]  245 dup
+[ 2]  246 iconst_3
+[ 3]  247 bipush 48
+[ 4]  249 bastore
+[ 1]  250 dup
+[ 2]  251 iconst_4
+[ 3]  252 bipush 48
+[ 4]  254 bastore
+[ 1]  255 dup
+[ 2]  256 iconst_5
+[ 3]  257 bipush 48
+[ 4]  259 bastore
+[ 1]  260 dup
+[ 2]  261 bipush 6
+[ 3]  263 bipush 48
+[ 4]  265 bastore
+[ 1]  266 dup
+[ 2]  267 bipush 7
+[ 3]  269 bipush 48
+[ 4]  271 bastore
+[ 1]  272 dup
+[ 2]  273 bipush 8
+[ 3]  275 bipush 48
+[ 4]  277 bastore
+[ 1]  278 dup
+[ 2]  279 bipush 9
+[ 3]  281 bipush 48
+[ 4]  283 bastore
+[ 1]  284 dup
+[ 2]  285 bipush 10
+[ 3]  287 bipush 49
+[ 4]  289 bastore
+[ 1]  290 dup
+[ 2]  291 bipush 11
+[ 3]  293 bipush 49
+[ 4]  295 bastore
+[ 1]  296 dup
+[ 2]  297 bipush 12
+[ 3]  299 bipush 49
+[ 4]  301 bastore
+[ 1]  302 dup
+[ 2]  303 bipush 13
+[ 3]  305 bipush 49
+[ 4]  307 bastore
+[ 1]  308 dup
+[ 2]  309 bipush 14
+[ 3]  311 bipush 49
+[ 4]  313 bastore
+[ 1]  314 dup
+[ 2]  315 bipush 15
+[ 3]  317 bipush 49
+[ 4]  319 bastore
+[ 1]  320 dup
+[ 2]  321 bipush 16
+[ 3]  323 bipush 49
+[ 4]  325 bastore
+[ 1]  326 dup
+[ 2]  327 bipush 17
+[ 3]  329 bipush 49
+[ 4]  331 bastore
+[ 1]  332 dup
+[ 2]  333 bipush 18
+[ 3]  335 bipush 49
+[ 4]  337 bastore
+[ 1]  338 dup
+[ 2]  339 bipush 19
+[ 3]  341 bipush 49
+[ 4]  343 bastore
+[ 1]  344 dup
+[ 2]  345 bipush 20
+[ 3]  347 bipush 50
+[ 4]  349 bastore
+[ 1]  350 dup
+[ 2]  351 bipush 21
+[ 3]  353 bipush 50
+[ 4]  355 bastore
+[ 1]  356 dup
+[ 2]  357 bipush 22
+[ 3]  359 bipush 50
+[ 4]  361 bastore
+[ 1]  362 dup
+[ 2]  363 bipush 23
+[ 3]  365 bipush 50
+[ 4]  367 bastore
+[ 1]  368 dup
+[ 2]  369 bipush 24
+[ 3]  371 bipush 50
+[ 4]  373 bastore
+[ 1]  374 dup
+[ 2]  375 bipush 25
+[ 3]  377 bipush 50
+[ 4]  379 bastore
+[ 1]  380 dup
+[ 2]  381 bipush 26
+[ 3]  383 bipush 50
+[ 4]  385 bastore
+[ 1]  386 dup
+[ 2]  387 bipush 27
+[ 3]  389 bipush 50
+[ 4]  391 bastore
+[ 1]  392 dup
+[ 2]  393 bipush 28
+[ 3]  395 bipush 50
+[ 4]  397 bastore
+[ 1]  398 dup
+[ 2]  399 bipush 29
+[ 3]  401 bipush 50
+[ 4]  403 bastore
+[ 1]  404 dup
+[ 2]  405 bipush 30
+[ 3]  407 bipush 51
+[ 4]  409 bastore
+[ 1]  410 dup
+[ 2]  411 bipush 31
+[ 3]  413 bipush 51
+[ 4]  415 bastore
+[ 1]  416 dup
+[ 2]  417 bipush 32
+[ 3]  419 bipush 51
+[ 4]  421 bastore
+[ 1]  422 dup
+[ 2]  423 bipush 33
+[ 3]  425 bipush 51
+[ 4]  427 bastore
+[ 1]  428 dup
+[ 2]  429 bipush 34
+[ 3]  431 bipush 51
+[ 4]  433 bastore
+[ 1]  434 dup
+[ 2]  435 bipush 35
+[ 3]  437 bipush 51
+[ 4]  439 bastore
+[ 1]  440 dup
+[ 2]  441 bipush 36
+[ 3]  443 bipush 51
+[ 4]  445 bastore
+[ 1]  446 dup
+[ 2]  447 bipush 37
+[ 3]  449 bipush 51
+[ 4]  451 bastore
+[ 1]  452 dup
+[ 2]  453 bipush 38
+[ 3]  455 bipush 51
+[ 4]  457 bastore
+[ 1]  458 dup
+[ 2]  459 bipush 39
+[ 3]  461 bipush 51
+[ 4]  463 bastore
+[ 1]  464 dup
+[ 2]  465 bipush 40
+[ 3]  467 bipush 52
+[ 4]  469 bastore
+[ 1]  470 dup
+[ 2]  471 bipush 41
+[ 3]  473 bipush 52
+[ 4]  475 bastore
+[ 1]  476 dup
+[ 2]  477 bipush 42
+[ 3]  479 bipush 52
+[ 4]  481 bastore
+[ 1]  482 dup
+[ 2]  483 bipush 43
+[ 3]  485 bipush 52
+[ 4]  487 bastore
+[ 1]  488 dup
+[ 2]  489 bipush 44
+[ 3]  491 bipush 52
+[ 4]  493 bastore
+[ 1]  494 dup
+[ 2]  495 bipush 45
+[ 3]  497 bipush 52
+[ 4]  499 bastore
+[ 1]  500 dup
+[ 2]  501 bipush 46
+[ 3]  503 bipush 52
+[ 4]  505 bastore
+[ 1]  506 dup
+[ 2]  507 bipush 47
+[ 3]  509 bipush 52
+[ 4]  511 bastore
+[ 1]  512 dup
+[ 2]  513 bipush 48
+[ 3]  515 bipush 52
+[ 4]  517 bastore
+[ 1]  518 dup
+[ 2]  519 bipush 49
+[ 3]  521 bipush 52
+[ 4]  523 bastore
+[ 1]  524 dup
+[ 2]  525 bipush 50
+[ 3]  527 bipush 53
+[ 4]  529 bastore
+[ 1]  530 dup
+[ 2]  531 bipush 51
+[ 3]  533 bipush 53
+[ 4]  535 bastore
+[ 1]  536 dup
+[ 2]  537 bipush 52
+[ 3]  539 bipush 53
+[ 4]  541 bastore
+[ 1]  542 dup
+[ 2]  543 bipush 53
+[ 3]  545 bipush 53
+[ 4]  547 bastore
+[ 1]  548 dup
+[ 2]  549 bipush 54
+[ 3]  551 bipush 53
+[ 4]  553 bastore
+[ 1]  554 dup
+[ 2]  555 bipush 55
+[ 3]  557 bipush 53
+[ 4]  559 bastore
+[ 1]  560 dup
+[ 2]  561 bipush 56
+[ 3]  563 bipush 53
+[ 4]  565 bastore
+[ 1]  566 dup
+[ 2]  567 bipush 57
+[ 3]  569 bipush 53
+[ 4]  571 bastore
+[ 1]  572 dup
+[ 2]  573 bipush 58
+[ 3]  575 bipush 53
+[ 4]  577 bastore
+[ 1]  578 dup
+[ 2]  579 bipush 59
+[ 3]  581 bipush 53
+[ 4]  583 bastore
+[ 1]  584 dup
+[ 2]  585 bipush 60
+[ 3]  587 bipush 54
+[ 4]  589 bastore
+[ 1]  590 dup
+[ 2]  591 bipush 61
+[ 3]  593 bipush 54
+[ 4]  595 bastore
+[ 1]  596 dup
+[ 2]  597 bipush 62
+[ 3]  599 bipush 54
+[ 4]  601 bastore
+[ 1]  602 dup
+[ 2]  603 bipush 63
+[ 3]  605 bipush 54
+[ 4]  607 bastore
+[ 1]  608 dup
+[ 2]  609 bipush 64
+[ 3]  611 bipush 54
+[ 4]  613 bastore
+[ 1]  614 dup
+[ 2]  615 bipush 65
+[ 3]  617 bipush 54
+[ 4]  619 bastore
+[ 1]  620 dup
+[ 2]  621 bipush 66
+[ 3]  623 bipush 54
+[ 4]  625 bastore
+[ 1]  626 dup
+[ 2]  627 bipush 67
+[ 3]  629 bipush 54
+[ 4]  631 bastore
+[ 1]  632 dup
+[ 2]  633 bipush 68
+[ 3]  635 bipush 54
+[ 4]  637 bastore
+[ 1]  638 dup
+[ 2]  639 bipush 69
+[ 3]  641 bipush 54
+[ 4]  643 bastore
+[ 1]  644 dup
+[ 2]  645 bipush 70
+[ 3]  647 bipush 55
+[ 4]  649 bastore
+[ 1]  650 dup
+[ 2]  651 bipush 71
+[ 3]  653 bipush 55
+[ 4]  655 bastore
+[ 1]  656 dup
+[ 2]  657 bipush 72
+[ 3]  659 bipush 55
+[ 4]  661 bastore
+[ 1]  662 dup
+[ 2]  663 bipush 73
+[ 3]  665 bipush 55
+[ 4]  667 bastore
+[ 1]  668 dup
+[ 2]  669 bipush 74
+[ 3]  671 bipush 55
+[ 4]  673 bastore
+[ 1]  674 dup
+[ 2]  675 bipush 75
+[ 3]  677 bipush 55
+[ 4]  679 bastore
+[ 1]  680 dup
+[ 2]  681 bipush 76
+[ 3]  683 bipush 55
+[ 4]  685 bastore
+[ 1]  686 dup
+[ 2]  687 bipush 77
+[ 3]  689 bipush 55
+[ 4]  691 bastore
+[ 1]  692 dup
+[ 2]  693 bipush 78
+[ 3]  695 bipush 55
+[ 4]  697 bastore
+[ 1]  698 dup
+[ 2]  699 bipush 79
+[ 3]  701 bipush 55
+[ 4]  703 bastore
+[ 1]  704 dup
+[ 2]  705 bipush 80
+[ 3]  707 bipush 56
+[ 4]  709 bastore
+[ 1]  710 dup
+[ 2]  711 bipush 81
+[ 3]  713 bipush 56
+[ 4]  715 bastore
+[ 1]  716 dup
+[ 2]  717 bipush 82
+[ 3]  719 bipush 56
+[ 4]  721 bastore
+[ 1]  722 dup
+[ 2]  723 bipush 83
+[ 3]  725 bipush 56
+[ 4]  727 bastore
+[ 1]  728 dup
+[ 2]  729 bipush 84
+[ 3]  731 bipush 56
+[ 4]  733 bastore
+[ 1]  734 dup
+[ 2]  735 bipush 85
+[ 3]  737 bipush 56
+[ 4]  739 bastore
+[ 1]  740 dup
+[ 2]  741 bipush 86
+[ 3]  743 bipush 56
+[ 4]  745 bastore
+[ 1]  746 dup
+[ 2]  747 bipush 87
+[ 3]  749 bipush 56
+[ 4]  751 bastore
+[ 1]  752 dup
+[ 2]  753 bipush 88
+[ 3]  755 bipush 56
+[ 4]  757 bastore
+[ 1]  758 dup
+[ 2]  759 bipush 89
+[ 3]  761 bipush 56
+[ 4]  763 bastore
+[ 1]  764 dup
+[ 2]  765 bipush 90
+[ 3]  767 bipush 57
+[ 4]  769 bastore
+[ 1]  770 dup
+[ 2]  771 bipush 91
+[ 3]  773 bipush 57
+[ 4]  775 bastore
+[ 1]  776 dup
+[ 2]  777 bipush 92
+[ 3]  779 bipush 57
+[ 4]  781 bastore
+[ 1]  782 dup
+[ 2]  783 bipush 93
+[ 3]  785 bipush 57
+[ 4]  787 bastore
+[ 1]  788 dup
+[ 2]  789 bipush 94
+[ 3]  791 bipush 57
+[ 4]  793 bastore
+[ 1]  794 dup
+[ 2]  795 bipush 95
+[ 3]  797 bipush 57
+[ 4]  799 bastore
+[ 1]  800 dup
+[ 2]  801 bipush 96
+[ 3]  803 bipush 57
+[ 4]  805 bastore
+[ 1]  806 dup
+[ 2]  807 bipush 97
+[ 3]  809 bipush 57
+[ 4]  811 bastore
+[ 1]  812 dup
+[ 2]  813 bipush 98
+[ 3]  815 bipush 57
+[ 4]  817 bastore
+[ 1]  818 dup
+[ 2]  819 bipush 99
+[ 3]  821 bipush 57
+[ 4]  823 bastore
+[ 1]  824 putstatic 87 <java/lang/Integer.DigitTens/[B> 
+[ 0]  827 bipush 100
+[ 1]  829 newarray byte
+[ 1]  831 dup
+[ 2]  832 iconst_0
+[ 3]  833 bipush 48
+[ 4]  835 bastore
+[ 1]  836 dup
+[ 2]  837 iconst_1
+[ 3]  838 bipush 49
+[ 4]  840 bastore
+[ 1]  841 dup
+[ 2]  842 iconst_2
+[ 3]  843 bipush 50
+[ 4]  845 bastore
+[ 1]  846 dup
+[ 2]  847 iconst_3
+[ 3]  848 bipush 51
+[ 4]  850 bastore
+[ 1]  851 dup
+[ 2]  852 iconst_4
+[ 3]  853 bipush 52
+[ 4]  855 bastore
+[ 1]  856 dup
+[ 2]  857 iconst_5
+[ 3]  858 bipush 53
+[ 4]  860 bastore
+[ 1]  861 dup
+[ 2]  862 bipush 6
+[ 3]  864 bipush 54
+[ 4]  866 bastore
+[ 1]  867 dup
+[ 2]  868 bipush 7
+[ 3]  870 bipush 55
+[ 4]  872 bastore
+[ 1]  873 dup
+[ 2]  874 bipush 8
+[ 3]  876 bipush 56
+[ 4]  878 bastore
+[ 1]  879 dup
+[ 2]  880 bipush 9
+[ 3]  882 bipush 57
+[ 4]  884 bastore
+[ 1]  885 dup
+[ 2]  886 bipush 10
+[ 3]  888 bipush 48
+[ 4]  890 bastore
+[ 1]  891 dup
+[ 2]  892 bipush 11
+[ 3]  894 bipush 49
+[ 4]  896 bastore
+[ 1]  897 dup
+[ 2]  898 bipush 12
+[ 3]  900 bipush 50
+[ 4]  902 bastore
+[ 1]  903 dup
+[ 2]  904 bipush 13
+[ 3]  906 bipush 51
+[ 4]  908 bastore
+[ 1]  909 dup
+[ 2]  910 bipush 14
+[ 3]  912 bipush 52
+[ 4]  914 bastore
+[ 1]  915 dup
+[ 2]  916 bipush 15
+[ 3]  918 bipush 53
+[ 4]  920 bastore
+[ 1]  921 dup
+[ 2]  922 bipush 16
+[ 3]  924 bipush 54
+[ 4]  926 bastore
+[ 1]  927 dup
+[ 2]  928 bipush 17
+[ 3]  930 bipush 55
+[ 4]  932 bastore
+[ 1]  933 dup
+[ 2]  934 bipush 18
+[ 3]  936 bipush 56
+[ 4]  938 bastore
+[ 1]  939 dup
+[ 2]  940 bipush 19
+[ 3]  942 bipush 57
+[ 4]  944 bastore
+[ 1]  945 dup
+[ 2]  946 bipush 20
+[ 3]  948 bipush 48
+[ 4]  950 bastore
+[ 1]  951 dup
+[ 2]  952 bipush 21
+[ 3]  954 bipush 49
+[ 4]  956 bastore
+[ 1]  957 dup
+[ 2]  958 bipush 22
+[ 3]  960 bipush 50
+[ 4]  962 bastore
+[ 1]  963 dup
+[ 2]  964 bipush 23
+[ 3]  966 bipush 51
+[ 4]  968 bastore
+[ 1]  969 dup
+[ 2]  970 bipush 24
+[ 3]  972 bipush 52
+[ 4]  974 bastore
+[ 1]  975 dup
+[ 2]  976 bipush 25
+[ 3]  978 bipush 53
+[ 4]  980 bastore
+[ 1]  981 dup
+[ 2]  982 bipush 26
+[ 3]  984 bipush 54
+[ 4]  986 bastore
+[ 1]  987 dup
+[ 2]  988 bipush 27
+[ 3]  990 bipush 55
+[ 4]  992 bastore
+[ 1]  993 dup
+[ 2]  994 bipush 28
+[ 3]  996 bipush 56
+[ 4]  998 bastore
+[ 1]  999 dup
+[ 2] 1000 bipush 29
+[ 3] 1002 bipush 57
+[ 4] 1004 bastore
+[ 1] 1005 dup
+[ 2] 1006 bipush 30
+[ 3] 1008 bipush 48
+[ 4] 1010 bastore
+[ 1] 1011 dup
+[ 2] 1012 bipush 31
+[ 3] 1014 bipush 49
+[ 4] 1016 bastore
+[ 1] 1017 dup
+[ 2] 1018 bipush 32
+[ 3] 1020 bipush 50
+[ 4] 1022 bastore
+[ 1] 1023 dup
+[ 2] 1024 bipush 33
+[ 3] 1026 bipush 51
+[ 4] 1028 bastore
+[ 1] 1029 dup
+[ 2] 1030 bipush 34
+[ 3] 1032 bipush 52
+[ 4] 1034 bastore
+[ 1] 1035 dup
+[ 2] 1036 bipush 35
+[ 3] 1038 bipush 53
+[ 4] 1040 bastore
+[ 1] 1041 dup
+[ 2] 1042 bipush 36
+[ 3] 1044 bipush 54
+[ 4] 1046 bastore
+[ 1] 1047 dup
+[ 2] 1048 bipush 37
+[ 3] 1050 bipush 55
+[ 4] 1052 bastore
+[ 1] 1053 dup
+[ 2] 1054 bipush 38
+[ 3] 1056 bipush 56
+[ 4] 1058 bastore
+[ 1] 1059 dup
+[ 2] 1060 bipush 39
+[ 3] 1062 bipush 57
+[ 4] 1064 bastore
+[ 1] 1065 dup
+[ 2] 1066 bipush 40
+[ 3] 1068 bipush 48
+[ 4] 1070 bastore
+[ 1] 1071 dup
+[ 2] 1072 bipush 41
+[ 3] 1074 bipush 49
+[ 4] 1076 bastore
+[ 1] 1077 dup
+[ 2] 1078 bipush 42
+[ 3] 1080 bipush 50
+[ 4] 1082 bastore
+[ 1] 1083 dup
+[ 2] 1084 bipush 43
+[ 3] 1086 bipush 51
+[ 4] 1088 bastore
+[ 1] 1089 dup
+[ 2] 1090 bipush 44
+[ 3] 1092 bipush 52
+[ 4] 1094 bastore
+[ 1] 1095 dup
+[ 2] 1096 bipush 45
+[ 3] 1098 bipush 53
+[ 4] 1100 bastore
+[ 1] 1101 dup
+[ 2] 1102 bipush 46
+[ 3] 1104 bipush 54
+[ 4] 1106 bastore
+[ 1] 1107 dup
+[ 2] 1108 bipush 47
+[ 3] 1110 bipush 55
+[ 4] 1112 bastore
+[ 1] 1113 dup
+[ 2] 1114 bipush 48
+[ 3] 1116 bipush 56
+[ 4] 1118 bastore
+[ 1] 1119 dup
+[ 2] 1120 bipush 49
+[ 3] 1122 bipush 57
+[ 4] 1124 bastore
+[ 1] 1125 dup
+[ 2] 1126 bipush 50
+[ 3] 1128 bipush 48
+[ 4] 1130 bastore
+[ 1] 1131 dup
+[ 2] 1132 bipush 51
+[ 3] 1134 bipush 49
+[ 4] 1136 bastore
+[ 1] 1137 dup
+[ 2] 1138 bipush 52
+[ 3] 1140 bipush 50
+[ 4] 1142 bastore
+[ 1] 1143 dup
+[ 2] 1144 bipush 53
+[ 3] 1146 bipush 51
+[ 4] 1148 bastore
+[ 1] 1149 dup
+[ 2] 1150 bipush 54
+[ 3] 1152 bipush 52
+[ 4] 1154 bastore
+[ 1] 1155 dup
+[ 2] 1156 bipush 55
+[ 3] 1158 bipush 53
+[ 4] 1160 bastore
+[ 1] 1161 dup
+[ 2] 1162 bipush 56
+[ 3] 1164 bipush 54
+[ 4] 1166 bastore
+[ 1] 1167 dup
+[ 2] 1168 bipush 57
+[ 3] 1170 bipush 55
+[ 4] 1172 bastore
+[ 1] 1173 dup
+[ 2] 1174 bipush 58
+[ 3] 1176 bipush 56
+[ 4] 1178 bastore
+[ 1] 1179 dup
+[ 2] 1180 bipush 59
+[ 3] 1182 bipush 57
+[ 4] 1184 bastore
+[ 1] 1185 dup
+[ 2] 1186 bipush 60
+[ 3] 1188 bipush 48
+[ 4] 1190 bastore
+[ 1] 1191 dup
+[ 2] 1192 bipush 61
+[ 3] 1194 bipush 49
+[ 4] 1196 bastore
+[ 1] 1197 dup
+[ 2] 1198 bipush 62
+[ 3] 1200 bipush 50
+[ 4] 1202 bastore
+[ 1] 1203 dup
+[ 2] 1204 bipush 63
+[ 3] 1206 bipush 51
+[ 4] 1208 bastore
+[ 1] 1209 dup
+[ 2] 1210 bipush 64
+[ 3] 1212 bipush 52
+[ 4] 1214 bastore
+[ 1] 1215 dup
+[ 2] 1216 bipush 65
+[ 3] 1218 bipush 53
+[ 4] 1220 bastore
+[ 1] 1221 dup
+[ 2] 1222 bipush 66
+[ 3] 1224 bipush 54
+[ 4] 1226 bastore
+[ 1] 1227 dup
+[ 2] 1228 bipush 67
+[ 3] 1230 bipush 55
+[ 4] 1232 bastore
+[ 1] 1233 dup
+[ 2] 1234 bipush 68
+[ 3] 1236 bipush 56
+[ 4] 1238 bastore
+[ 1] 1239 dup
+[ 2] 1240 bipush 69
+[ 3] 1242 bipush 57
+[ 4] 1244 bastore
+[ 1] 1245 dup
+[ 2] 1246 bipush 70
+[ 3] 1248 bipush 48
+[ 4] 1250 bastore
+[ 1] 1251 dup
+[ 2] 1252 bipush 71
+[ 3] 1254 bipush 49
+[ 4] 1256 bastore
+[ 1] 1257 dup
+[ 2] 1258 bipush 72
+[ 3] 1260 bipush 50
+[ 4] 1262 bastore
+[ 1] 1263 dup
+[ 2] 1264 bipush 73
+[ 3] 1266 bipush 51
+[ 4] 1268 bastore
+[ 1] 1269 dup
+[ 2] 1270 bipush 74
+[ 3] 1272 bipush 52
+[ 4] 1274 bastore
+[ 1] 1275 dup
+[ 2] 1276 bipush 75
+[ 3] 1278 bipush 53
+[ 4] 1280 bastore
+[ 1] 1281 dup
+[ 2] 1282 bipush 76
+[ 3] 1284 bipush 54
+[ 4] 1286 bastore
+[ 1] 1287 dup
+[ 2] 1288 bipush 77
+[ 3] 1290 bipush 55
+[ 4] 1292 bastore
+[ 1] 1293 dup
+[ 2] 1294 bipush 78
+[ 3] 1296 bipush 56
+[ 4] 1298 bastore
+[ 1] 1299 dup
+[ 2] 1300 bipush 79
+[ 3] 1302 bipush 57
+[ 4] 1304 bastore
+[ 1] 1305 dup
+[ 2] 1306 bipush 80
+[ 3] 1308 bipush 48
+[ 4] 1310 bastore
+[ 1] 1311 dup
+[ 2] 1312 bipush 81
+[ 3] 1314 bipush 49
+[ 4] 1316 bastore
+[ 1] 1317 dup
+[ 2] 1318 bipush 82
+[ 3] 1320 bipush 50
+[ 4] 1322 bastore
+[ 1] 1323 dup
+[ 2] 1324 bipush 83
+[ 3] 1326 bipush 51
+[ 4] 1328 bastore
+[ 1] 1329 dup
+[ 2] 1330 bipush 84
+[ 3] 1332 bipush 52
+[ 4] 1334 bastore
+[ 1] 1335 dup
+[ 2] 1336 bipush 85
+[ 3] 1338 bipush 53
+[ 4] 1340 bastore
+[ 1] 1341 dup
+[ 2] 1342 bipush 86
+[ 3] 1344 bipush 54
+[ 4] 1346 bastore
+[ 1] 1347 dup
+[ 2] 1348 bipush 87
+[ 3] 1350 bipush 55
+[ 4] 1352 bastore
+[ 1] 1353 dup
+[ 2] 1354 bipush 88
+[ 3] 1356 bipush 56
+[ 4] 1358 bastore
+[ 1] 1359 dup
+[ 2] 1360 bipush 89
+[ 3] 1362 bipush 57
+[ 4] 1364 bastore
+[ 1] 1365 dup
+[ 2] 1366 bipush 90
+[ 3] 1368 bipush 48
+[ 4] 1370 bastore
+[ 1] 1371 dup
+[ 2] 1372 bipush 91
+[ 3] 1374 bipush 49
+[ 4] 1376 bastore
+[ 1] 1377 dup
+[ 2] 1378 bipush 92
+[ 3] 1380 bipush 50
+[ 4] 1382 bastore
+[ 1] 1383 dup
+[ 2] 1384 bipush 93
+[ 3] 1386 bipush 51
+[ 4] 1388 bastore
+[ 1] 1389 dup
+[ 2] 1390 bipush 94
+[ 3] 1392 bipush 52
+[ 4] 1394 bastore
+[ 1] 1395 dup
+[ 2] 1396 bipush 95
+[ 3] 1398 bipush 53
+[ 4] 1400 bastore
+[ 1] 1401 dup
+[ 2] 1402 bipush 96
+[ 3] 1404 bipush 54
+[ 4] 1406 bastore
+[ 1] 1407 dup
+[ 2] 1408 bipush 97
+[ 3] 1410 bipush 55
+[ 4] 1412 bastore
+[ 1] 1413 dup
+[ 2] 1414 bipush 98
+[ 3] 1416 bipush 56
+[ 4] 1418 bastore
+[ 1] 1419 dup
+[ 2] 1420 bipush 99
+[ 3] 1422 bipush 57
+[ 4] 1424 bastore
+[ 1] 1425 putstatic 83 <java/lang/Integer.DigitOnes/[B> 
+[ 0] 1428 return
+safe java.lang.Integer (mirror = 152 bytes)
+==================== Checking void java.lang.Short.<clinit>()
+[ 0]    0 fast_aldc "short"
+[ 1]    2 invokestatic 134 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]    5 putstatic 140 <java/lang/Short.TYPE/Ljava/lang/Class;> 
+[ 0]    8 return
+safe java.lang.Short (mirror = 144 bytes)
+==================== Checking void java.lang.Byte.<clinit>()
+[ 0]    0 fast_aldc "byte"
+[ 1]    2 invokestatic 127 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]    5 putstatic 133 <java/lang/Byte.TYPE/Ljava/lang/Class;> 
+[ 0]    8 return
+safe java.lang.Byte (mirror = 144 bytes)
+==================== Checking void java.lang.Double.<clinit>()
+[ 0]    0 fast_aldc "double"
+[ 1]    2 invokestatic 165 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]    5 putstatic 171 <java/lang/Double.TYPE/Ljava/lang/Class;> 
+[ 0]    8 return
+safe java.lang.Double (mirror = 200 bytes)
+==================== Checking void java.lang.Float.<clinit>()
+[ 0]    0 ldc java.lang.Float
+[ 1]    2 invokevirtual 131 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 89 <java/lang/Float.$assertionsDisabled/Z> 
+[ 0]   16 fast_aldc "float"
+[ 1]   18 invokestatic 139 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]   21 putstatic 143 <java/lang/Float.TYPE/Ljava/lang/Class;> 
+[ 0]   24 return
+Start new block at bci = 12
+[ 0]   12 iconst_0
+[ 1]   13 putstatic 89 <java/lang/Float.$assertionsDisabled/Z> 
+[ 0]   16 fast_aldc "float"
+[ 1]   18 invokestatic 139 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]   21 putstatic 143 <java/lang/Float.TYPE/Ljava/lang/Class;> 
+[ 0]   24 return
+safe java.lang.Float (mirror = 176 bytes)
+==================== Checking void java.lang.Character.<clinit>()
+[ 0]    0 ldc java.lang.Character
+[ 1]    2 invokevirtual 369 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 282 <java/lang/Character.$assertionsDisabled/Z> 
+[ 0]   16 fast_aldc_w "char"
+[ 1]   19 invokestatic 377 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]   22 putstatic 381 <java/lang/Character.TYPE/Ljava/lang/Class;> 
+[ 0]   25 return
+Start new block at bci = 12
+[ 0]   12 iconst_0
+[ 1]   13 putstatic 282 <java/lang/Character.$assertionsDisabled/Z> 
+[ 0]   16 fast_aldc_w "char"
+[ 1]   19 invokestatic 377 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]   22 putstatic 381 <java/lang/Character.TYPE/Ljava/lang/Class;> 
+[ 0]   25 return
+safe java.lang.Character (mirror = 232 bytes)
+==================== Checking void java.lang.Boolean.<clinit>()
+[ 0]    0 new 8 <java/lang/Boolean>
+[ 1]    3 dup
+[ 2]    4 iconst_1
+[ 3]    5 invokespecial 17 <java/lang/Boolean.<init>(Z)V> 
+ ==================== Checking void java.lang.Boolean.<init>(boolean)
+ [ 0]    0 fast_aload_0
+ [ 1]    1 invokespecial 1 <java/lang/Object.<init>()V> 
+ [ 0]    4 fast_aload_0
+ [ 1]    5 iload_1
+ [ 2]    6 fast_zputfield 7 <java/lang/Boolean.value/Z> 
+ [ 0]    9 return
+[ 1]    8 putstatic 27 <java/lang/Boolean.TRUE/Ljava/lang/Boolean;> 
+[ 0]   11 new 8 <java/lang/Boolean>
+[ 1]   14 dup
+[ 2]   15 iconst_0
+[ 3]   16 invokespecial 17 <java/lang/Boolean.<init>(Z)V> 
+ ==================== Checking void java.lang.Boolean.<init>(boolean)
+ [ 0]    0 fast_aload_0
+ [ 1]    1 invokespecial 1 <java/lang/Object.<init>()V> 
+ [ 0]    4 fast_aload_0
+ [ 1]    5 iload_1
+ [ 2]    6 fast_zputfield 7 <java/lang/Boolean.value/Z> 
+ [ 0]    9 return
+[ 1]   19 putstatic 31 <java/lang/Boolean.FALSE/Ljava/lang/Boolean;> 
+[ 0]   22 fast_aldc "boolean"
+[ 1]   24 invokestatic 79 <java/lang/Class.getPrimitiveClass(Ljava/lang/String;)Ljava/lang/Class;> 
+[ 1]   27 putstatic 85 <java/lang/Boolean.TYPE/Ljava/lang/Class;> 
+[ 0]   30 return
+safe java.lang.Boolean (mirror = 136 bytes)
+safe java.util.concurrent.locks.AbstractOwnableSynchronizer (mirror = 120 bytes)
+safe java.lang.StackWalker$StackFrame (mirror = 112 bytes)
+==================== Checking void java.lang.StackFrameInfo.<clinit>()
+[ 0]    0 invokestatic 107 <jdk/internal/access/SharedSecrets.getJavaLangInvokeAccess()Ljdk/internal/access/JavaLangInvokeAccess;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/access/SharedSecrets.getJavaLangInvokeAccess:()Ljdk/internal/access/JavaLangInvokeAccess;
+unsafe java.lang.StackFrameInfo, has unsafe <clinit>
+unsafe java.lang.LiveStackFrameInfo, super is not safe java.lang.StackFrameInfo
+safe java.lang.LiveStackFrame (mirror = 112 bytes)
+safe java.lang.StackStreamFactory$AbstractStackWalker (mirror = 112 bytes)
+==================== Checking void java.lang.StackWalker.<clinit>()
+[ 0]    0 ldc <unresolved klass at 7>
+Failed at bci 0 ldc
+ldc Class not supported java/lang/StackWalker$Option
+unsafe java.lang.StackWalker, has unsafe <clinit>
+==================== Checking void java.nio.Buffer.<clinit>()
+[ 0]    0 ldc java.nio.Buffer
+[ 1]    2 invokevirtual 134 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 66 <java/nio/Buffer.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 140 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 16 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe java.nio.Buffer, has unsafe <clinit>
+safe java.lang.StackTraceElement (mirror = 136 bytes)
+safe java.lang.Iterable (mirror = 112 bytes)
+safe java.util.Collection (mirror = 112 bytes)
+safe java.util.AbstractCollection (mirror = 112 bytes)
+safe java.util.List (mirror = 112 bytes)
+safe java.util.AbstractList (mirror = 112 bytes)
+safe java.util.RandomAccess (mirror = 112 bytes)
+safe java.lang.Cloneable (mirror = 112 bytes)
+==================== Checking void java.util.ArrayList.<clinit>()
+[ 0]    0 iconst_0
+[ 1]    1 anewarray java/lang/Object 
+Failed at bci 1 anewarray
+Unsupported bytecode: anewarray
+unsafe java.util.ArrayList, has unsafe <clinit>
+safe java.util.Map (mirror = 112 bytes)
+safe java.util.AbstractMap (mirror = 112 bytes)
+safe java.util.concurrent.ConcurrentMap (mirror = 112 bytes)
+==================== Checking void java.util.concurrent.ConcurrentHashMap.<clinit>()
+[ 0]    0 invokestatic 705 <java/lang/Runtime.getRuntime()Ljava/lang/Runtime;> 
+Failed at bci 0 invokestatic
+Cannot handle static method java/lang/Runtime.getRuntime:()Ljava/lang/Runtime;
+unsafe java.util.concurrent.ConcurrentHashMap, has unsafe <clinit>
+safe java.security.CodeSource (mirror = 120 bytes)
+==================== Checking void java.lang.ClassLoader.<clinit>()
+[ 0]    0 ldc java.lang.ClassLoader
+[ 1]    2 invokevirtual 841 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 33 <java/lang/ClassLoader.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 844 <java/lang/ClassLoader.registerNatives()V> 
+Failed at bci 16 invokestatic
+Cannot handle static method java/lang/ClassLoader.registerNatives:()V
+unsafe java.lang.ClassLoader, has unsafe <clinit>
+unsafe java.security.SecureClassLoader, super is not safe java.lang.ClassLoader
+unsafe jdk.internal.loader.BuiltinClassLoader, super is not safe java.security.SecureClassLoader
+unsafe jdk.internal.loader.ClassLoaders$PlatformClassLoader, super is not safe jdk.internal.loader.BuiltinClassLoader
+unsafe jdk.internal.loader.ClassLoaders$AppClassLoader, super is not safe jdk.internal.loader.BuiltinClassLoader
+==================== Checking void jdk.internal.loader.ClassLoaders.<clinit>()
+[ 0]    0 invokestatic 71 <jdk/internal/access/SharedSecrets.getJavaLangAccess()Ljdk/internal/access/JavaLangAccess;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/access/SharedSecrets.getJavaLangAccess:()Ljdk/internal/access/JavaLangAccess;
+unsafe jdk.internal.loader.ClassLoaders, has unsafe <clinit>
+safe java.util.jar.Manifest (mirror = 112 bytes)
+safe java.lang.Enum (mirror = 112 bytes)
+unsafe java.net.URLClassLoader, super is not safe java.security.SecureClassLoader
+==================== Checking void java.net.URL.<clinit>()
+[ 0]    0 new 611 <java/net/URL$DefaultFactory>
+Failed at bci 0 new
+Cannot new java/net/URL$DefaultFactory
+unsafe java.net.URL, has unsafe <clinit>
+safe java.lang.AutoCloseable (mirror = 112 bytes)
+safe java.io.Closeable (mirror = 112 bytes)
+safe java.io.InputStream (mirror = 128 bytes)
+safe java.io.ByteArrayInputStream (mirror = 112 bytes)
+==================== Checking void jdk.internal.module.Modules.<clinit>()
+[ 0]    0 ldc jdk.internal.module.Modules
+[ 1]    2 invokevirtual 335 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 249 <jdk/internal/module/Modules.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 340 <jdk/internal/access/SharedSecrets.getJavaLangAccess()Ljdk/internal/access/JavaLangAccess;> 
+Failed at bci 16 invokestatic
+Cannot handle static method jdk/internal/access/SharedSecrets.getJavaLangAccess:()Ljdk/internal/access/JavaLangAccess;
+unsafe jdk.internal.module.Modules, has unsafe <clinit>
+==================== Checking void jdk.internal.misc.Unsafe.<clinit>()
+[ 0]    0 invokestatic 881 <jdk/internal/misc/Unsafe.registerNatives()V> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.registerNatives:()V
+unsafe jdk.internal.misc.Unsafe, has unsafe <clinit>
+unsafe jdk.internal.misc.UnsafeConstants, static fields are initialized by HotSpot
+safe java.lang.Appendable (mirror = 112 bytes)
+==================== Checking void java.lang.AbstractStringBuilder.<clinit>()
+[ 0]    0 iconst_0
+[ 1]    1 newarray byte
+[ 1]    3 putstatic 9 <java/lang/AbstractStringBuilder.EMPTYVALUE/[B> 
+[ 0]    6 return
+safe java.lang.AbstractStringBuilder (mirror = 120 bytes)
+safe java.lang.StringBuilder (mirror = 120 bytes)
+==================== Checking void java.lang.StringBuffer.<clinit>()
+[ 0]    0 iconst_3
+[ 1]    1 anewarray java/io/ObjectStreamField 
+Failed at bci 1 anewarray
+Unsupported bytecode: anewarray
+unsafe java.lang.StringBuffer, has unsafe <clinit>
+safe java.lang.AssertionStatusDirectives (mirror = 112 bytes)
+==================== Checking void java.lang.invoke.CallSite.<clinit>()
+[ 0]    0 ldc java.lang.invoke.CallSite
+[ 1]    2 invokevirtual 242 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 187 <java/lang/invoke/CallSite.$assertionsDisabled/Z> 
+[ 0]   16 return
+Start new block at bci = 12
+[ 0]   12 iconst_0
+[ 1]   13 putstatic 187 <java/lang/invoke/CallSite.$assertionsDisabled/Z> 
+[ 0]   16 return
+unsafe java.lang.invoke.CallSite, has non-final static field GET_TARGET:Ljava/lang/invoke/MethodHandle;
+unsafe java.lang.invoke.VolatileCallSite, super is not safe java.lang.invoke.CallSite
+unsafe java.lang.invoke.MutableCallSite, super is not safe java.lang.invoke.CallSite
+unsafe java.lang.invoke.ConstantCallSite, super is not safe java.lang.invoke.CallSite
+safe java.lang.Runnable (mirror = 112 bytes)
+safe java.lang.invoke.MethodHandleNatives$CallSiteContext (mirror = 112 bytes)
+safe java.lang.Record (mirror = 112 bytes)
+safe jdk.internal.foreign.abi.UpcallLinker$CallRegs (mirror = 112 bytes)
+safe jdk.internal.foreign.abi.VMStorage (mirror = 112 bytes)
+safe jdk.internal.foreign.abi.ABIDescriptor (mirror = 112 bytes)
+==================== Checking void jdk.internal.foreign.abi.NativeEntryPoint.<clinit>()
+[ 0]    0 invokestatic 119 <jdk/internal/foreign/abi/NativeEntryPoint.registerNatives()V> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/foreign/abi/NativeEntryPoint.registerNatives:()V
+unsafe jdk.internal.foreign.abi.NativeEntryPoint, has unsafe <clinit>
+==================== Checking void java.lang.Throwable.<clinit>()
+[ 0]    0 ldc java.lang.Throwable
+[ 1]    2 invokevirtual 311 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 163 <java/lang/Throwable.$assertionsDisabled/Z> 
+[ 0]   16 iconst_0
+[ 1]   17 anewarray java/lang/StackTraceElement 
+Failed at bci 17 anewarray
+Unsupported bytecode: anewarray
+unsafe java.lang.Throwable, has unsafe <clinit>
+unsafe java.lang.Error, super is not safe java.lang.Throwable
+unsafe java.lang.LinkageError, super is not safe java.lang.Error
+unsafe java.lang.BootstrapMethodError, super is not safe java.lang.LinkageError
+safe java.lang.invoke.TypeDescriptor (mirror = 112 bytes)
+safe java.lang.invoke.TypeDescriptor$OfMethod (mirror = 112 bytes)
+==================== Checking void java.lang.invoke.MethodType.<clinit>()
+[ 0]    0 ldc java.lang.invoke.MethodType
+[ 1]    2 invokevirtual 540 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 198 <java/lang/invoke/MethodType.$assertionsDisabled/Z> 
+[ 0]   16 new 130 <java/lang/invoke/MethodType$ConcurrentWeakInternSet>
+Failed at bci 16 new
+Cannot new java/lang/invoke/MethodType$ConcurrentWeakInternSet
+unsafe java.lang.invoke.MethodType, has unsafe <clinit>
+==================== Checking void java.lang.invoke.LambdaForm.<clinit>()
+[ 0]    0 ldc java.lang.invoke.LambdaForm
+[ 1]    2 invokevirtual 827 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 49 <java/lang/invoke/LambdaForm.$assertionsDisabled/Z> 
+[ 0]   16 aconst_null
+Failed at bci 16 aconst_null
+Unsupported bytecode: aconst_null
+unsafe java.lang.invoke.LambdaForm, has unsafe <clinit>
+==================== Checking void java.lang.invoke.MethodHandleNatives.<clinit>()
+[ 0]    0 ldc java.lang.invoke.MethodHandleNatives
+[ 1]    2 invokevirtual 524 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 9 <java/lang/invoke/MethodHandleNatives.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 527 <java/lang/invoke/MethodHandleNatives.registerNatives()V> 
+Failed at bci 16 invokestatic
+Cannot handle static method java/lang/invoke/MethodHandleNatives.registerNatives:()V
+unsafe java.lang.invoke.MethodHandleNatives, has unsafe <clinit>
+safe java.lang.invoke.ResolvedMethodName (mirror = 112 bytes)
+safe java.lang.reflect.Member (mirror = 120 bytes)
+==================== Checking void java.lang.invoke.MemberName.<clinit>()
+[ 0]    0 ldc java.lang.invoke.MemberName
+[ 1]    2 invokevirtual 209 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 106 <java/lang/invoke/MemberName.$assertionsDisabled/Z> 
+[ 0]   16 return
+Start new block at bci = 12
+[ 0]   12 iconst_0
+[ 1]   13 putstatic 106 <java/lang/invoke/MemberName.$assertionsDisabled/Z> 
+[ 0]   16 return
+safe java.lang.invoke.MemberName (mirror = 184 bytes)
+==================== Checking void java.lang.invoke.VarHandle.<clinit>()
+[ 0]    0 ldc java.lang.invoke.VarHandle
+[ 1]    2 invokevirtual 249 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 201 <java/lang/invoke/VarHandle.$assertionsDisabled/Z> 
+[ 0]   16 getstatic 218 <java/lang/invoke/MethodHandleStatics.UNSAFE/Ljdk/internal/misc/Unsafe;> 
+Failed at bci 16 getstatic
+Unsupported bytecode: getstatic
+unsafe java.lang.invoke.VarHandle, has unsafe <clinit>
+==================== Checking void java.lang.invoke.MethodHandle.<clinit>()
+[ 0]    0 ldc java.lang.invoke.MethodHandle
+[ 1]    2 invokevirtual 582 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 263 <java/lang/invoke/MethodHandle.$assertionsDisabled/Z> 
+[ 0]   16 getstatic 550 <java/lang/invoke/MethodHandleStatics.UNSAFE/Ljdk/internal/misc/Unsafe;> 
+Failed at bci 16 getstatic
+Unsupported bytecode: getstatic
+unsafe java.lang.invoke.MethodHandle, has unsafe <clinit>
+unsafe java.lang.invoke.DirectMethodHandle, super is not safe java.lang.invoke.MethodHandle
+safe jdk.internal.reflect.MagicAccessorImpl (mirror = 112 bytes)
+safe jdk.internal.reflect.ConstructorAccessor (mirror = 112 bytes)
+safe jdk.internal.reflect.ConstructorAccessorImpl (mirror = 112 bytes)
+==================== Checking void jdk.internal.reflect.NativeConstructorAccessorImpl.<clinit>()
+[ 0]    0 invokestatic 84 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe jdk.internal.reflect.NativeConstructorAccessorImpl, has unsafe <clinit>
+safe java.lang.annotation.Annotation (mirror = 112 bytes)
+safe jdk.internal.reflect.CallerSensitive (mirror = 112 bytes)
+safe jdk.internal.reflect.FieldAccessor (mirror = 112 bytes)
+safe jdk.internal.reflect.FieldAccessorImpl (mirror = 112 bytes)
+==================== Checking void jdk.internal.reflect.UnsafeFieldAccessorImpl.<clinit>()
+[ 0]    0 invokestatic 44 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe jdk.internal.reflect.UnsafeFieldAccessorImpl, has unsafe <clinit>
+unsafe jdk.internal.reflect.UnsafeStaticFieldAccessorImpl, super is not safe jdk.internal.reflect.UnsafeFieldAccessorImpl
+==================== Checking void jdk.internal.reflect.ConstantPool.<clinit>()
+[ 0]    0 ldc jdk.internal.reflect.ConstantPool
+[ 1]    2 fast_aldc "constantPoolOop"
+[ 2]    4 invokestatic 85 <java/util/Set.of(Ljava/lang/Object;)Ljava/util/Set;> 
+Failed at bci 4 invokestatic
+Cannot handle static method java/util/Set.of:(Ljava/lang/Object;)Ljava/util/Set;
+unsafe jdk.internal.reflect.ConstantPool, has unsafe <clinit>
+unsafe jdk.internal.reflect.DelegatingClassLoader, super is not safe java.lang.ClassLoader
+safe jdk.internal.reflect.MethodAccessor (mirror = 112 bytes)
+safe jdk.internal.reflect.MethodAccessorImpl (mirror = 112 bytes)
+safe jdk.internal.vm.StackChunk (mirror = 112 bytes)
+==================== Checking void jdk.internal.vm.Continuation.<clinit>()
+[ 0]    0 ldc jdk.internal.vm.Continuation
+[ 1]    2 invokevirtual 394 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 179 <jdk/internal/vm/Continuation.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 399 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 16 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe jdk.internal.vm.Continuation, has unsafe <clinit>
+safe jdk.internal.vm.ContinuationScope (mirror = 112 bytes)
+==================== Checking void java.lang.reflect.AccessibleObject.<clinit>()
+[ 0]    0 new 294 <java/lang/reflect/ReflectAccess>
+Failed at bci 0 new
+Cannot new java/lang/reflect/ReflectAccess
+unsafe java.lang.reflect.AccessibleObject, has unsafe <clinit>
+unsafe java.lang.reflect.Executable, super is not safe java.lang.reflect.AccessibleObject
+unsafe java.lang.reflect.Constructor, super is not safe java.lang.reflect.Executable
+unsafe java.lang.reflect.Method, super is not safe java.lang.reflect.Executable
+safe java.lang.reflect.Parameter (mirror = 112 bytes)
+unsafe java.lang.reflect.Field, super is not safe java.lang.reflect.AccessibleObject
+==================== Checking void java.lang.Module.<clinit>()
+[ 0]    0 ldc java.lang.Module
+[ 1]    2 invokevirtual 782 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 477 <java/lang/Module.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 785 <java/lang/Module$ArchivedData.get()Ljava/lang/Module$ArchivedData;> 
+Failed at bci 16 invokestatic
+Cannot handle static method java/lang/Module$ArchivedData.get:()Ljava/lang/Module$ArchivedData;
+unsafe java.lang.Module, has unsafe <clinit>
+safe java.util.Dictionary (mirror = 112 bytes)
+safe java.util.Hashtable (mirror = 136 bytes)
+==================== Checking void java.util.Properties.<clinit>()
+[ 0]    0 invokestatic 507 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe java.util.Properties, has unsafe <clinit>
+safe java.lang.BaseVirtualThread (mirror = 112 bytes)
+==================== Checking void java.lang.ThreadBuilders$BoundVirtualThread.<clinit>()
+[ 0]    0 invokestatic 95 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 0 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe java.lang.ThreadBuilders$BoundVirtualThread, has unsafe <clinit>
+==================== Checking void java.lang.VirtualThread.<clinit>()
+[ 0]    0 ldc java.lang.VirtualThread
+[ 1]    2 invokevirtual 653 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 140 <java/lang/VirtualThread.$assertionsDisabled/Z> 
+[ 0]   16 invokestatic 658 <jdk/internal/misc/Unsafe.getUnsafe()Ljdk/internal/misc/Unsafe;> 
+Failed at bci 16 invokestatic
+Cannot handle static method jdk/internal/misc/Unsafe.getUnsafe:()Ljdk/internal/misc/Unsafe;
+unsafe java.lang.VirtualThread, has unsafe <clinit>
+safe java.lang.Thread$UncaughtExceptionHandler (mirror = 112 bytes)
+==================== Checking void java.lang.Thread$Constants.<clinit>()
+[ 0]    0 new 9 <java/lang/Thread$Constants$1>
+Failed at bci 0 new
+Cannot new java/lang/Thread$Constants$1
+unsafe java.lang.Thread$Constants, has unsafe <clinit>
+==================== Checking void java.lang.ref.Reference.<clinit>()
+[ 0]    0 ldc java.lang.ref.Reference
+[ 1]    2 invokevirtual 112 <java/lang/Class.desiredAssertionStatus()Z> 
+[ 1]    5 ifne 12
+New pending block at bci = 12
+New pending block at bci = 8
+Start new block at bci = 8
+[ 0]    8 iconst_1
+[ 1]    9 goto 13
+New pending block at bci = 13
+Start new block at bci = 13
+[ 1]   13 putstatic 90 <java/lang/ref/Reference.$assertionsDisabled/Z> 
+[ 0]   16 new 42 <java/lang/Object>
+Failed at bci 16 new
+Cannot new java/lang/Object
+unsafe java.lang.ref.Reference, has unsafe <clinit>
+unsafe java.lang.ref.FinalReference, super is not safe java.lang.ref.Reference
+unsafe java.lang.ref.Finalizer, super is not safe java.lang.ref.FinalReference
+unsafe java.lang.ref.PhantomReference, super is not safe java.lang.ref.Reference
+unsafe java.lang.ref.WeakReference, super is not safe java.lang.ref.Reference
+unsafe java.lang.ref.SoftReference, super is not safe java.lang.ref.Reference
+unsafe java.lang.Exception, super is not safe java.lang.Throwable
+unsafe java.lang.RuntimeException, super is not safe java.lang.Exception
+unsafe java.lang.IllegalMonitorStateException, super is not safe java.lang.RuntimeException
+unsafe java.lang.VirtualMachineError, super is not safe java.lang.Error
+unsafe java.lang.StackOverflowError, super is not safe java.lang.VirtualMachineError
+unsafe java.lang.OutOfMemoryError, super is not safe java.lang.VirtualMachineError
+unsafe java.lang.InternalError, super is not safe java.lang.VirtualMachineError
+unsafe java.lang.ArrayStoreException, super is not safe java.lang.RuntimeException
+unsafe java.lang.ClassCastException, super is not safe java.lang.RuntimeException
+unsafe java.lang.NoClassDefFoundError, super is not safe java.lang.LinkageError
+unsafe java.lang.ReflectiveOperationException, super is not safe java.lang.Exception
+unsafe java.lang.ClassNotFoundException, super is not safe java.lang.ReflectiveOperationException
+==================== Checking void java.security.ProtectionDomain.<clinit>()
+[ 0]    0 fast_aldc "true"
+[ 1]    2 fast_aldc "jdk.security.filePermCompat"
+[ 2]    4 invokestatic 247 <sun/security/action/GetPropertyAction.privilegedGetProperty(Ljava/lang/String;)Ljava/lang/String;> 
+Failed at bci 4 invokestatic
+Cannot handle static method sun/security/action/GetPropertyAction.privilegedGetProperty:(Ljava/lang/String;)Ljava/lang/String;
+unsafe java.security.ProtectionDomain, has unsafe <clinit>
+==================== Checking void java.lang.SecurityManager.<clinit>()
+[ 0]    0 invokestatic 377 <java/lang/SecurityManager.getRootGroup()Ljava/lang/ThreadGroup;> 
+Failed at bci 0 invokestatic
+Cannot handle static method java/lang/SecurityManager.getRootGroup:()Ljava/lang/ThreadGroup;
+unsafe java.lang.SecurityManager, has unsafe <clinit>
+safe java.lang.invoke.TypeDescriptor$OfField (mirror = 112 bytes)
+safe java.lang.reflect.GenericDeclaration (mirror = 112 bytes)
+force init of safe class jdk.internal.vm.FillerObject
+force init of safe class jdk.internal.vm.vector.VectorSupport$VectorPayload
+force init of safe class jdk.internal.vm.vector.VectorSupport$VectorShuffle
+force init of safe class jdk.internal.vm.vector.VectorSupport$VectorMask
+force init of safe class jdk.internal.vm.vector.VectorSupport$Vector
+force init of safe class java.lang.reflect.RecordComponent
+force init of safe class java.io.Serializable
+force init of safe class java.lang.Comparable
+force init of safe class java.lang.constant.Constable
+force init of safe class java.lang.constant.ConstantDesc
+force init of safe class java.lang.StackWalker$StackFrame
+force init of safe class java.lang.LiveStackFrame
+force init of safe class java.lang.StackStreamFactory$AbstractStackWalker
+force init of safe class java.lang.StackTraceElement
+force init of safe class java.util.RandomAccess
+force init of safe class java.lang.Cloneable
+force init of safe class java.lang.AutoCloseable
+force init of safe class java.io.Closeable
+force init of safe class java.lang.Appendable
+force init of safe class java.lang.AssertionStatusDirectives
+force init of safe class java.lang.Runnable
+force init of safe class jdk.internal.foreign.abi.UpcallLinker$CallRegs
+force init of safe class jdk.internal.foreign.abi.VMStorage
+force init of safe class jdk.internal.foreign.abi.ABIDescriptor
+force init of safe class java.lang.invoke.TypeDescriptor
+force init of safe class java.lang.invoke.TypeDescriptor$OfMethod
+force init of safe class jdk.internal.reflect.ConstructorAccessor
+force init of safe class jdk.internal.reflect.ConstructorAccessorImpl
+force init of safe class java.lang.annotation.Annotation
+force init of safe class jdk.internal.reflect.CallerSensitive
+force init of safe class jdk.internal.reflect.FieldAccessor
+force init of safe class jdk.internal.reflect.FieldAccessorImpl
+force init of safe class jdk.internal.reflect.MethodAccessor
+force init of safe class jdk.internal.vm.StackChunk
+force init of safe class jdk.internal.vm.ContinuationScope
+force init of safe class java.lang.reflect.Parameter
+force init of safe class java.lang.BaseVirtualThread
+force init of safe class java.lang.Thread$UncaughtExceptionHandler
+force init of safe class java.lang.invoke.TypeDescriptor$OfField
+force init of safe class java.lang.reflect.GenericDeclaration
+Copying initialized mirror for java.lang.BaseVirtualThread
+Copying initialized mirror for java.lang.Cloneable
+Copying initialized mirror for java.lang.Runnable
+Copying initialized mirror for jdk.internal.vm.ContinuationScope
+Copying initialized mirror for jdk.internal.vm.StackChunk
+Copying initialized mirror for java.lang.Boolean
+Copying initialized mirror for java.lang.Character
+Copying initialized mirror for java.lang.Float
+Copying initialized mirror for java.lang.Double
+Copying initialized mirror for java.lang.Byte
+Copying initialized mirror for java.lang.Short
+Copying initialized mirror for java.lang.Integer
+Copying initialized mirror for java.lang.Long
+Copying initialized mirror for jdk.internal.vm.vector.VectorSupport$VectorPayload
+Copying initialized mirror for jdk.internal.vm.vector.VectorSupport$Vector
+Copying initialized mirror for jdk.internal.vm.vector.VectorSupport$VectorMask
+Copying initialized mirror for jdk.internal.vm.vector.VectorSupport$VectorShuffle
+Copying initialized mirror for jdk.internal.vm.FillerObject
+Copying initialized mirror for java.lang.reflect.Parameter
+Copying initialized mirror for java.lang.reflect.RecordComponent
+Copying initialized mirror for java.lang.StringBuilder
+Copying initialized mirror for java.security.CodeSource
+Copying initialized mirror for java.util.jar.Manifest
+Copying initialized mirror for java.io.ByteArrayInputStream
+Copying initialized mirror for java.io.Serializable
+Copying initialized mirror for java.util.AbstractList
+Copying initialized mirror for java.util.Hashtable
+Copying initialized mirror for java.lang.AssertionStatusDirectives
+Copying initialized mirror for java.util.Iterator
+Copying initialized mirror for java.lang.Record
+Copying initialized mirror for java.lang.StackTraceElement
+Copying initialized mirror for java.util.concurrent.locks.AbstractOwnableSynchronizer
+Copying initialized mirror for jdk.internal.reflect.MagicAccessorImpl
+Copying initialized mirror for jdk.internal.reflect.MethodAccessorImpl
+Copying initialized mirror for jdk.internal.reflect.ConstructorAccessorImpl
+Copying initialized mirror for jdk.internal.reflect.CallerSensitive
+Copying initialized mirror for java.lang.invoke.MemberName
+Copying initialized mirror for java.lang.invoke.ResolvedMethodName
+Copying initialized mirror for java.lang.invoke.MethodHandleNatives$CallSiteContext
+Copying initialized mirror for jdk.internal.foreign.abi.ABIDescriptor
+Copying initialized mirror for jdk.internal.foreign.abi.VMStorage
+Copying initialized mirror for jdk.internal.foreign.abi.UpcallLinker$CallRegs
+Copying initialized mirror for java.lang.StackStreamFactory$AbstractStackWalker
+Copying initialized mirror for java.lang.Enum
+Copying initialized mirror for java.lang.AbstractStringBuilder
+Copying initialized mirror for java.util.List
+Copying initialized mirror for java.lang.Iterable
+Copying initialized mirror for java.lang.Comparable
+Copying initialized mirror for java.lang.constant.Constable
+Copying initialized mirror for java.lang.constant.ConstantDesc
+Copying initialized mirror for java.lang.reflect.Member
+Copying initialized mirror for java.util.Collection
+Copying initialized mirror for java.util.Map
+Copying initialized mirror for java.lang.annotation.Annotation
+Copying initialized mirror for java.lang.reflect.GenericDeclaration
+Copying initialized mirror for java.lang.invoke.TypeDescriptor$OfField
+Copying initialized mirror for java.io.InputStream
+Copying initialized mirror for java.lang.invoke.TypeDescriptor
+Copying initialized mirror for java.lang.invoke.TypeDescriptor$OfMethod
+Copying initialized mirror for java.lang.Thread$UncaughtExceptionHandler
+Copying initialized mirror for java.util.Dictionary
+Copying initialized mirror for jdk.internal.reflect.FieldAccessor
+Copying initialized mirror for jdk.internal.reflect.MethodAccessor
+Copying initialized mirror for jdk.internal.reflect.ConstructorAccessor
+Copying initialized mirror for java.lang.StackWalker$StackFrame
+Copying initialized mirror for jdk.internal.reflect.FieldAccessorImpl
+Copying initialized mirror for java.lang.Appendable
+Copying initialized mirror for java.io.Closeable
+Copying initialized mirror for java.lang.AutoCloseable
+Copying initialized mirror for java.util.AbstractMap
+Copying initialized mirror for java.util.concurrent.ConcurrentMap
+Copying initialized mirror for java.util.RandomAccess
+Copying initialized mirror for java.util.AbstractCollection
+Copying initialized mirror for java.lang.LiveStackFrame
+Copying initialized mirror for java.lang.Number
