@@ -129,6 +129,10 @@ char* Arguments::_ext_dirs = nullptr;
 // True if -Xshare:auto option was specified.
 static bool xshare_auto_cmd_line = false;
 
+#if INCLUDE_JVMCI
+static bool module_options_specified = false;
+#endif
+
 bool PathString::set_value(const char *value, AllocFailType alloc_failmode) {
   char* new_value = AllocateHeap(strlen(value)+1, mtArguments, alloc_failmode);
   if (new_value == nullptr) {
@@ -1264,6 +1268,14 @@ bool Arguments::add_property(const char* prop, PropertyWriteable writeable, Prop
   }
 #endif
 
+#if INCLUDE_JVMCI
+  if (is_internal_module_property(key) ||
+      strcmp(key, "jdk.module.main") == 0 ||
+      strcmp(key, "java.system.class.loader") == 0) {
+    module_options_specified = true;
+  }
+#endif
+
   if (strcmp(key, "java.compiler") == 0) {
     // we no longer support java.compiler system property, log a warning and let it get
     // passed to Java, like any other system property
@@ -1879,7 +1891,7 @@ bool Arguments::check_vm_args_consistency() {
   if (status && EnableJVMCI) {
     PropertyList_unique_add(&_system_properties, "jdk.internal.vm.ci.enabled", "true",
         AddProperty, UnwriteableProperty, InternalProperty);
-    if (ClassLoader::is_module_observable("jdk.internal.vm.ci")) {
+    if (module_options_specified && ClassLoader::is_module_observable("jdk.internal.vm.ci")) {
       if (!create_numbered_module_property("jdk.module.addmods", "jdk.internal.vm.ci", addmods_count++)) {
         return false;
       }
