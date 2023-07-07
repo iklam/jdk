@@ -28,8 +28,9 @@
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderDataShared.hpp"
 #include "classfile/systemDictionaryShared.hpp"
-#include "gc/shared/collectedHeap.hpp"
+#include "gc/shared/collectedHeap.inline.hpp"
 #include "logging/log.hpp"
+#include "runtime/java.hpp"
 #include "memory/iterator.inline.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
@@ -83,6 +84,18 @@ void ArchiveHeapLoader::fixup_region() {
   FileMapInfo* mapinfo = FileMapInfo::current_info();
   if (is_mapped()) {
     mapinfo->fixup_mapped_heap_region();
+  } else if (NewArchiveHeapLoading) {
+    JavaThread* THREAD = JavaThread::current();
+    new_fixup_region(THREAD);
+    if (HAS_PENDING_EXCEPTION) {
+      vm_exit_during_initialization("Cannot load archived heap. "
+                                    "Initial heap size too small.");
+
+    }
+    if (!_is_loaded) {
+      log_info(cds)("CDS archive heap loading failed");
+      MetaspaceShared::disable_full_module_graph();
+    }
   } else if (_loading_failed) {
     fill_failed_loaded_heap();
   }
@@ -228,6 +241,9 @@ bool ArchiveHeapLoader::can_load() {
     // Pointer relocation for uncompressed oops is unimplemented.
     return false;
   }
+  if (NewArchiveHeapLoading) {
+    return true;
+  }
   return Universe::heap()->can_load_archived_objects();
 }
 
@@ -321,6 +337,9 @@ bool ArchiveHeapLoader::load_heap_region_impl(FileMapInfo* mapinfo, LoadedArchiv
 }
 
 bool ArchiveHeapLoader::load_heap_region(FileMapInfo* mapinfo) {
+  if (NewArchiveHeapLoading) {
+    return new_load_heap_region(mapinfo);
+  }
   assert(UseCompressedOops, "loaded heap for !UseCompressedOops is unimplemented");
   init_narrow_oop_decoding(mapinfo->narrow_oop_base(), mapinfo->narrow_oop_shift());
 
@@ -376,9 +395,11 @@ void ArchiveHeapLoader::finish_initialization() {
   }
   if (is_in_use()) {
     patch_native_pointers();
-    intptr_t bottom = is_loaded() ? _loaded_heap_bottom : _mapped_heap_bottom;
-    intptr_t roots_oop = bottom + FileMapInfo::current_info()->heap_roots_offset();
-    HeapShared::init_roots(cast_to_oop(roots_oop));
+    if (!NewArchiveHeapLoading) {
+      intptr_t bottom = is_loaded() ? _loaded_heap_bottom : _mapped_heap_bottom;
+      intptr_t roots_oop = bottom + FileMapInfo::current_info()->heap_roots_offset();
+      HeapShared::init_roots(cast_to_oop(roots_oop));
+    }
   }
 }
 
@@ -452,4 +473,171 @@ void ArchiveHeapLoader::patch_native_pointers() {
     bm.iterate(&patcher);
   }
 }
+
+static size_t new_load_heap_size; // total size of heap region, in number of HeapWords
+static char* new_load_heap_buff;
+
+bool ArchiveHeapLoader::new_load_heap_region(FileMapInfo* mapinfo) {
+  assert(UseCompressedOops, "loaded heap for !UseCompressedOops is unimplemented");
+  //init_narrow_oop_decoding(mapinfo->narrow_oop_base(), mapinfo->narrow_oop_shift());
+
+  new_load_heap_buff = FileMapInfo::current_info()->new_map_heap(new_load_heap_size);
+  // FIXME -- do crc check here
+  return (new_load_heap_buff != nullptr);
+}
+
+static oop last_o = nullptr;
+static oop last_m = nullptr;
+
+void ArchiveHeapLoader::new_fixup_region(TRAPS) {
+  log_info(cds)("new heap loading: start");
+
+  ResourceMark rm;
+  NewLoadingTable table;
+  NewLoadingTableNarrowOop ntable;
+  HeapWord* stream_bottom = (HeapWord*)new_load_heap_buff;
+  HeapWord* stream_top    = stream_bottom + new_load_heap_size;
+
+  newcode_runtime_allocate_objects(&table, &ntable, stream_bottom, stream_top, CHECK);
+  newcode_runtime_init_objects(&table, &ntable, stream_bottom, stream_top);
+
+  _is_loaded = true;
+
+  {
+    address bot = (address)stream_bottom;
+    address stream_roots = bot + FileMapInfo::current_info()->heap_roots_offset();
+    oop* loaded_roots_p = table.get(cast_to_oop(stream_roots));
+    assert(loaded_roots_p != nullptr, "must have roots");
+    assert(*loaded_roots_p != nullptr, "must have roots");
+    HeapShared::init_roots(*loaded_roots_p);
+
+    log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(*loaded_roots_p));
+  }
+}
+
+void ArchiveHeapLoader::newcode_runtime_allocate_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
+                                                         HeapWord* stream_bottom, HeapWord* stream_top, TRAPS) {
+  address requested_addr = FileMapInfo::current_info()->heap_region_requested_address();
+
+  for (HeapWord* p = stream_bottom; p < stream_top; ) {
+    oop o = cast_to_oop(p);
+    size_t s = o->size();
+    oop m; // materalized
+
+    assert(!o->is_instanceRef(), "no such objects are archived");
+    assert(!o->is_stackChunk(), "no such objects are archived");
+
+    if (p - stream_bottom == 64986 ||
+        p - stream_bottom == 64965) {
+      last_o = o;
+    }
+
+    if (o->is_instance()) {
+      m =  Universe::heap()->obj_allocate(o->klass(), s, CHECK);
+      // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
+      // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
+    } else if (o->is_typeArray()) {
+      int len = static_cast<typeArrayOop>(o)->length();
+      m = TypeArrayKlass::cast(o->klass())->allocate(len, CHECK);
+    } else {
+      assert(o->is_objArray(), "must be");
+      int len = static_cast<objArrayOop>(o)->length();
+      m = ObjArrayKlass::cast(o->klass())->allocate(len, CHECK);
+    }
+
+    {
+      // Need to copy the archived hashcode as well, but keep the rest of the object in zeros.
+      HeapWord* src = cast_from_oop<HeapWord*>(o);
+      HeapWord* dst = cast_from_oop<HeapWord*>(m);
+      memcpy(dst, src, o->header_size() * HeapWordSize);
+    }
+
+    table->put(o, m);
+    if (UseCompressedOops) {
+      size_t offset = p - stream_bottom;
+      oop requested_oop_addr = cast_to_oop(requested_addr + offset * HeapWordSize);
+      narrowOop no = CompressedOops::encode_not_null(requested_oop_addr);
+#if 0
+      narrowOop nm = CompressedOops::encode_not_null(m);
+      tty->print_cr("%6d: %p 0x%08x -> %p = 0x%08x",
+                    (int)offset * HeapWordSize, requested_oop_addr, (int)no, cast_from_oop<char*>(m), (int)nm);
+#endif
+      ntable->put(no, m);
+    }
+
+    p += s;
+  }
+}
+
+class ArchiveHeapLoader::NewCodeRuntimeRelocator: public BasicOopIterateClosure {
+  NewLoadingTable* _table;
+  NewLoadingTableNarrowOop* _ntable;
+  oop _src_obj;
+  oop _dst_obj;
+public:
+  NewCodeRuntimeRelocator(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
+                          oop src_obj, oop dst_obj) :
+    _table(table), _ntable(ntable),
+    _src_obj(src_obj), _dst_obj(dst_obj) {}
+
+  void do_oop(narrowOop* src_p) {
+    size_t field_offset = pointer_delta(address(src_p), cast_from_oop<address>(_src_obj), sizeof(char));
+    narrowOop* dst_p = cast_from_oop<narrowOop*>(_dst_obj) + field_offset / sizeof(narrowOop);
+    narrowOop old = *dst_p;
+    if (old != narrowOop::null) {
+      *dst_p = narrowOop::null; // set it to 0 to avoid confusing GC
+
+      oop* relocated_pointee_p = _ntable->get(old);
+#if 0
+      tty->print_cr("Relocating 0x%08x", (int)old);
+#endif
+      assert(relocated_pointee_p != nullptr, "must have pointee for 0x%08x", (int)old);
+      _dst_obj->obj_field_put((int)field_offset, *relocated_pointee_p);
+    }
+  }
+  void do_oop(oop *p) {
+    Unimplemented();
+  }
+};
+
+void ArchiveHeapLoader::newcode_runtime_init_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
+                                                     HeapWord* stream_bottom, HeapWord* stream_top) {
+  for (HeapWord* p = stream_bottom; p < stream_top; ) {
+    oop o = cast_to_oop(p);
+    oop* mptr = table->get(o);
+    assert(mptr != nullptr, "must be");
+    oop m = *mptr;
+
+    size_t s = o->size();
+    size_t cp_size = s - o->header_size();
+
+    if (p - stream_bottom == 64986) {
+      last_o = o;
+    }
+
+    if (cp_size > 0) {
+      HeapWord* src = cast_from_oop<HeapWord*>(o) + o->header_size();
+      HeapWord* dst = cast_from_oop<HeapWord*>(m) + o->header_size();
+      memcpy(dst, src, cp_size * HeapWordSize);
+    }
+
+    NewCodeRuntimeRelocator relocator(table, ntable, o, m);
+    o->oop_iterate(&relocator);
+    p += s;
+  }
+
+  for (HeapWord* p = stream_bottom; p < stream_top; ) {
+    oop o = cast_to_oop(p);
+    oop* mptr = table->get(o);
+    assert(mptr != nullptr, "must be");
+    oop m = *mptr;
+    size_t s1 = o->size();
+    size_t s2 = m->size();
+    assert(s1 == s2, "must be");
+    last_o = o;
+    last_m = m;
+    p += s1;
+  }
+}
+
 #endif // INCLUDE_CDS_JAVA_HEAP

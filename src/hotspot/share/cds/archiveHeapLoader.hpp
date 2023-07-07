@@ -26,6 +26,8 @@
 #define SHARE_CDS_ARCHIVEHEAPLOADER_HPP
 
 #include "cds/filemap.hpp"
+#include "cds/cds_globals.hpp"
+#include "cds/heapShared.hpp"
 #include "gc/shared/gc_globals.hpp"
 #include "memory/allocation.hpp"
 #include "memory/allStatic.hpp"
@@ -34,6 +36,7 @@
 #include "runtime/globals.hpp"
 #include "utilities/bitMap.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/resourceHash.hpp"
 
 class  FileMapInfo;
 struct LoadedArchiveHeapRegion;
@@ -50,6 +53,9 @@ public:
 
   // Can this VM map archived heap region? Currently only G1+compressed{oops,cp}
   static bool can_map() {
+    if (NewArchiveHeapLoading) {
+      return false;
+    }
     CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedClassPointers);)
     NOT_CDS_JAVA_HEAP(return false;)
   }
@@ -147,9 +153,29 @@ private:
 
   class PatchLoadedRegionPointers;
 
+  typedef ResourceHashtable<oop, oop,
+      36137, // prime number
+      AnyObj::C_HEAP,
+      mtClassShared,
+      HeapShared::oop_hash> NewLoadingTable;
+
+  typedef ResourceHashtable<narrowOop, oop,
+      36137, // prime number
+      AnyObj::C_HEAP,
+      mtClassShared> NewLoadingTableNarrowOop;
+
+  static void new_fixup_region(TRAPS);
+  static void newcode_runtime_allocate_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
+                                               HeapWord* stream_bottom, HeapWord* stream_top, TRAPS);
+  static void newcode_runtime_init_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
+                                           HeapWord* stream_bottom, HeapWord* stream_top);
+
+  class NewCodeRuntimeRelocator;
 public:
 
   static bool load_heap_region(FileMapInfo* mapinfo);
+  static bool new_load_heap_region(FileMapInfo* mapinfo);
+  static void newcode_set_roots(narrowOop n);
   static void assert_in_loaded_heap(uintptr_t o) {
     assert(is_in_loaded_heap(o), "must be");
   }
