@@ -67,6 +67,18 @@
   product(bool, AllowArchivingWithJavaAgent, false, DIAGNOSTIC,             \
           "Allow Java agent to be run with CDS dumping")                    \
                                                                             \
+  product(bool, NewArchiveHeapLoading, false,                               \
+          "(Investigation) Load each object in the archived heap individually")             \
+                                                                            \
+  product(bool, NahlUseHashTable, false,                                    \
+          "Use a hashtable for relocation (slowest)")                       \
+                                                                            \
+  product(bool, NahlRawAlloc, true,                                         \
+          "Use CollectedHeap::mem_allocate() to allocate uninited heap mem")\
+                                                                            \
+  product(bool, NahlUseAccessAPI, true,                                     \
+          "Use Access API to update oop fields (dangerous if false?)")      \
+                                                                            \
   develop(ccstr, ArchiveHeapTestClass, nullptr,                                \
           "For JVM internal testing only. The static field named "          \
           "\"archivedObjects\" of the specified class is stored in the "    \
