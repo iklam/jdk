@@ -153,16 +153,15 @@ private:
 
   class PatchLoadedRegionPointers;
 
-  typedef ResourceHashtable<oop, oop,
+  class NewLoadingTable : public ResourceHashtable<intptr_t, intptr_t,
       36137, // prime number
-      AnyObj::C_HEAP,
-      mtClassShared,
-      HeapShared::oop_hash> NewLoadingTable;
+      AnyObj::RESOURCE_AREA,
+      mtClassShared> {};
 
-  typedef ResourceHashtable<narrowOop, oop,
+  class NewLoadingTableNarrowOop : public ResourceHashtable<narrowOop, intptr_t,
       36137, // prime number
-      AnyObj::C_HEAP,
-      mtClassShared> NewLoadingTableNarrowOop;
+      AnyObj::RESOURCE_AREA,
+      mtClassShared> {};
 
   static void new_fixup_region(TRAPS);
   static void newcode_runtime_allocate_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,

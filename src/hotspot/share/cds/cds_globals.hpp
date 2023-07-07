@@ -70,6 +70,9 @@
   product(bool, NewArchiveHeapLoading, false,                               \
           "(Investigation) Load each object in the archived heap individually")             \
                                                                             \
+  product(int, NewArchiveHeapNumAllocs, 1,                               \
+          "(Investigation) how many copies of to allocate for each archived oop")             \
+                                                                            \
   develop(ccstr, ArchiveHeapTestClass, nullptr,                                \
           "For JVM internal testing only. The static field named "          \
           "\"archivedObjects\" of the specified class is stored in the "    \
