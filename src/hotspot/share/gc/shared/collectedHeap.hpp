@@ -99,6 +99,7 @@ class CollectedHeap : public CHeapObj<mtGC> {
   friend class MemAllocator;
   friend class ParallelObjectIterator;
   friend class NewQuickLoader;
+  friend class NewQuickLoaderAccesss;
  private:
   GCHeapLog* _gc_heap_log;
 

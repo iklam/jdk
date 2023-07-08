@@ -494,7 +494,17 @@ static int _num_delay_relocs = 0;
 
 const bool AVOID_ACCESS_API = false;
 
-class NewQuickLoader : public StackObj {
+class NewQuickLoader {
+public:
+  static HeapWord* mem_allocate_raw(size_t size) {
+    bool gc_overhead_limit_was_exceeded;
+    HeapWord* hw = Universe::heap()->mem_allocate(size, &gc_overhead_limit_was_exceeded);
+    assert(hw != nullptr, "must not fail");
+    return hw;
+  }
+};
+
+class NewQuickLoaderImpl : public StackObj {
   struct Dst {
     Dst* _next;
     union {
@@ -510,11 +520,11 @@ class NewQuickLoader : public StackObj {
   };
 
   class Relocator : public BasicOopIterateClosure {
-    NewQuickLoader* _loader;
+    NewQuickLoaderImpl* _loader;
     intptr_t _base;
     size_t _current_index;
   public:
-    Relocator(NewQuickLoader *loader, intptr_t base, size_t current_index)
+    Relocator(NewQuickLoaderImpl *loader, intptr_t base, size_t current_index)
       : _loader(loader), _base(base), _current_index(current_index) {}
 
     void do_oop(narrowOop* p) {
@@ -552,130 +562,127 @@ class NewQuickLoader : public StackObj {
   Dst* _freed_dsts;
   size_t _max_num_dsts;
 public:
-  inline NewQuickLoader();
-  inline oop doit(TRAPS);
-  inline oop allocate(HeapWord* stream, size_t& size, TRAPS);
-  inline void add_relocation(size_t index, narrowOop* ptr_location);
-  inline void update(Dst* dst_list, oop m);
-};
+  inline NewQuickLoaderImpl() {
+    _stream_bottom = (HeapWord*)new_load_heap_buff;
+    _stream_top    = _stream_bottom + new_load_heap_size;
+    size_t reloc_table_len = pointer_delta(_stream_top, _stream_bottom, MinObjAlignmentInBytes);
+    _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
+    memset((void*)_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
 
-inline NewQuickLoader::NewQuickLoader() {
-  _stream_bottom = (HeapWord*)new_load_heap_buff;
-  _stream_top    = _stream_bottom + new_load_heap_size;
-  size_t reloc_table_len = pointer_delta(_stream_top, _stream_bottom, MinObjAlignmentInBytes);
-  _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
-  memset(_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
-
-  _max_num_dsts = reloc_table_len; // FIXME: this can be precalculated during dump time
-  _unused_dsts = NEW_RESOURCE_ARRAY(Dst, _max_num_dsts);
-  memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
-  _num_unused_dsts = 0;
-  _freed_dsts = nullptr;
-}
-
-inline oop NewQuickLoader::doit(TRAPS) {
-  HeapWord* stream_bottom = _stream_bottom;
-  HeapWord* stream_top = _stream_top;
-  Reloc* reloc_table = _reloc_table;
-
-  intptr_t base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
-  if (UseCompressedOops) {
-    base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
+    _max_num_dsts = reloc_table_len; // FIXME: this can be precalculated during dump time
+    _unused_dsts = NEW_RESOURCE_ARRAY(Dst, _max_num_dsts);
+    memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
+    _num_unused_dsts = 0;
+    _freed_dsts = nullptr;
   }
 
-  for (HeapWord* stream = stream_bottom; stream < stream_top; ) {
-    size_t size; // size of object being copied
-    oop m = allocate(stream, size, CHECK_NULL);
-    memcpy(cast_from_oop<HeapWord*>(m), stream, size * HeapWordSize);
+  inline oop doit(TRAPS) {
+    HeapWord* stream_bottom = _stream_bottom;
+    HeapWord* stream_top = _stream_top;
+    Reloc* reloc_table = _reloc_table;
 
-    size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
-    Dst* dst_list = reloc_table[index]._dst;
+    intptr_t base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
+    size_t first_quick_reloc_index = FileMapInfo::current_info()->heap_first_quick_reloc() / MinObjAlignmentInBytes;
+    size_t first_slow_reloc_index = FileMapInfo::current_info()->heap_first_slow_reloc() / MinObjAlignmentInBytes;
+
+    if (UseCompressedOops) {
+      base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
+    }
+
+    for (HeapWord* stream = stream_bottom; stream < stream_top; ) {
+      size_t size; // size of object being copied
+      oop m = allocate(stream, size, CHECK_NULL);
+      memcpy(cast_from_oop<HeapWord*>(m), stream, size * HeapWordSize);
+
+      size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
+      Dst* dst_list = reloc_table[index]._dst;
+      if (UseCompressedOops && AVOID_ACCESS_API) {
+        reloc_table[index]._narrowOop = CompressedOops::encode_not_null(m);
+      } else {
+        reloc_table[index]._oop = m;
+      }
+
+      if (index >= first_quick_reloc_index) {
+        Relocator relocator(this, base, index);
+        m->oop_iterate(&relocator);
+
+        if (index >= first_slow_reloc_index) {
+          if (dst_list != nullptr) {
+            update(dst_list, m);
+          }
+        }
+      }
+
+      stream += size;
+    }
+
+    size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
     if (UseCompressedOops && AVOID_ACCESS_API) {
-      reloc_table[index]._narrowOop = CompressedOops::encode_not_null(m);
+      return CompressedOops::decode_not_null(reloc_table[roots_index]._narrowOop);
     } else {
-      reloc_table[index]._oop = m;
+      return reloc_table[roots_index]._oop;
     }
+  }
 
-    Relocator relocator(this, base, index);
-    m->oop_iterate(&relocator);
+  inline oop allocate(HeapWord* stream, size_t& size, TRAPS) {
+    oop o = cast_to_oop(stream); // "original" from the stream
+    size = o->size();
 
-    if (dst_list != nullptr) {
-      update(dst_list, m);
+    if (1) {
+      return cast_to_oop(NewQuickLoader::mem_allocate_raw(size));
     }
+    assert(!o->is_instanceRef(), "no such objects are archived");
+    assert(!o->is_stackChunk(), "no such objects are archived");
 
-    stream += size;
+    if (o->is_instance()) {
+      return Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
+      // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
+      // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
+    } else if (o->is_typeArray()) {
+      int len = static_cast<typeArrayOop>(o)->length();
+      return TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+    } else {
+      assert(o->is_objArray(), "must be");
+      int len = static_cast<objArrayOop>(o)->length();
+      return ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+    }
   }
 
-  size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
-  if (UseCompressedOops && AVOID_ACCESS_API) {
-    return CompressedOops::decode_not_null(reloc_table[roots_index]._narrowOop);
-  } else {
-    return reloc_table[roots_index]._oop;
+  inline void add_relocation(size_t index, narrowOop* ptr_location) {
+    assert(_num_unused_dsts < _max_num_dsts, "now we allocate more than enough"); // FIXME: reduce usage
+    Dst* dst = &_unused_dsts[_num_unused_dsts++];
+    dst->_narrowOop_addr = ptr_location;
+    dst->_next = _reloc_table[index]._dst;
+    _reloc_table[index]._dst = dst;
   }
-}
 
-inline oop NewQuickLoader::allocate(HeapWord* stream, size_t& size, TRAPS) {
-  oop o = cast_to_oop(stream); // "original" from the stream
-  size = o->size();
-
-  if (1) {
-    bool gc_overhead_limit_was_exceeded;
-    HeapWord* hw = Universe::heap()->mem_allocate(size, &gc_overhead_limit_was_exceeded);
-    assert(hw != nullptr, "must not fail");
-    return cast_to_oop(hw);
-  }
-  assert(!o->is_instanceRef(), "no such objects are archived");
-  assert(!o->is_stackChunk(), "no such objects are archived");
-
-  if (o->is_instance()) {
-    return Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
-    // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
-    // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
-  } else if (o->is_typeArray()) {
-    int len = static_cast<typeArrayOop>(o)->length();
-    return TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-  } else {
-    assert(o->is_objArray(), "must be");
-    int len = static_cast<objArrayOop>(o)->length();
-    return ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-  }
-}
-
-inline void NewQuickLoader::add_relocation(size_t index, narrowOop* ptr_location) {
-  assert(_num_unused_dsts < _max_num_dsts, "now we allocate more than enough"); // FIXME: reduce usage
-  Dst* dst = &_unused_dsts[_num_unused_dsts++];
-  dst->_narrowOop_addr = ptr_location;
-  dst->_next = _reloc_table[index]._dst;
-  _reloc_table[index]._dst = dst;
-}
-
-
-inline void NewQuickLoader::update(Dst* dst_list, oop m) {
-  if (UseCompressedOops) {
-    if (AVOID_ACCESS_API) {
-      narrowOop n = CompressedOops::encode_not_null(m);
-      for (Dst* dst = dst_list; dst != nullptr; ) {
-        _num_delay_relocs ++;
-        *dst->_narrowOop_addr = n;
-        Dst* next = dst->_next;
-        dst->_next = _freed_dsts;
-        _freed_dsts = dst;
-        dst = next;
+  inline void update(Dst* dst_list, oop m) {
+    if (UseCompressedOops) {
+      if (AVOID_ACCESS_API) {
+        narrowOop n = CompressedOops::encode_not_null(m);
+        for (Dst* dst = dst_list; dst != nullptr; ) {
+          _num_delay_relocs ++;
+          *dst->_narrowOop_addr = n;
+          Dst* next = dst->_next;
+          dst->_next = _freed_dsts;
+          _freed_dsts = dst;
+          dst = next;
+        }
+      } else {
+        for (Dst* dst = dst_list; dst != nullptr; ) {
+          _num_delay_relocs ++;
+          RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
+          Dst* next = dst->_next;
+          dst->_next = _freed_dsts;
+          _freed_dsts = dst;
+          dst = next;
+        }
       }
     } else {
-      for (Dst* dst = dst_list; dst != nullptr; ) {
-        _num_delay_relocs ++;
-        RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
-        Dst* next = dst->_next;
-        dst->_next = _freed_dsts;
-        _freed_dsts = dst;
-        dst = next;
-      }
+      Unimplemented();
     }
-  } else {
-    Unimplemented();
   }
-}
+};
 
 void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   log_info(cds)("new heap loading: start");
@@ -687,7 +694,7 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   jlong time_disposed;
 
   if (NewArchiveHeapLoading == 2) {
-    NewQuickLoader loader;
+    NewQuickLoaderImpl loader;
     oop roots = loader.doit(CHECK);
     _is_loaded = true;
     HeapShared::init_roots(roots);
