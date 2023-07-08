@@ -484,12 +484,198 @@ bool ArchiveHeapLoader::new_load_heap_region(FileMapInfo* mapinfo) {
   return (new_load_heap_buff != nullptr);
 }
 
-static oop last_o = nullptr;
-static oop last_m = nullptr;
 static int _num_objs;
 static int _num_bytes;
 static int _num_refs = 0;
 static int _num_refs_relocated = 0;
+
+static int _num_quick_relocs = 0;
+static int _num_delay_relocs = 0;
+
+const bool AVOID_ACCESS_API = false;
+
+class NewQuickLoader : public StackObj {
+  struct Dst {
+    Dst* _next;
+    union {
+      oop* _oop_addr;
+      narrowOop* _narrowOop_addr;
+    };
+  };
+
+  union Reloc {
+    Dst* _dst;
+    oop _oop;
+    narrowOop _narrowOop;
+  };
+
+  class Relocator : public BasicOopIterateClosure {
+    NewQuickLoader* _loader;
+    intptr_t _base;
+    size_t _current_index;
+  public:
+    Relocator(NewQuickLoader *loader, intptr_t base, size_t current_index)
+      : _loader(loader), _base(base), _current_index(current_index) {}
+
+    void do_oop(narrowOop* p) {
+      narrowOop narrow = *p;
+      if (narrow != narrowOop::null) {
+        size_t index = (size_t)narrow - (size_t)_base; // FIXME: assume shift is 3
+        if (!AVOID_ACCESS_API) {
+          *p = narrowOop::null; // not to confuse GC
+        }
+        if (index <= _current_index) {
+          _num_quick_relocs ++;
+          if (AVOID_ACCESS_API) {
+            *p = _loader->_reloc_table[index]._narrowOop;
+          } else {
+            HeapAccess<IS_NOT_NULL>::oop_store(p, _loader->_reloc_table[index]._oop);
+          }
+        } else {
+          if (AVOID_ACCESS_API) {
+            *p = narrowOop::null; // not to confuse GC
+          }
+          _loader->add_relocation(index, p);
+        }
+      }
+    }
+    void do_oop(oop *src_p) {
+      Unimplemented();
+    }
+  };
+
+  HeapWord* _stream_bottom;
+  HeapWord* _stream_top;
+  Reloc* _reloc_table;
+  Dst* _unused_dsts;
+  size_t _num_unused_dsts;
+  Dst* _freed_dsts;
+  size_t _max_num_dsts;
+public:
+  inline NewQuickLoader();
+  inline oop doit(TRAPS);
+  inline oop allocate(HeapWord* stream, size_t& size, TRAPS);
+  inline void add_relocation(size_t index, narrowOop* ptr_location);
+  inline void update(Dst* dst_list, oop m);
+};
+
+inline NewQuickLoader::NewQuickLoader() {
+  _stream_bottom = (HeapWord*)new_load_heap_buff;
+  _stream_top    = _stream_bottom + new_load_heap_size;
+  size_t reloc_table_len = pointer_delta(_stream_top, _stream_bottom, MinObjAlignmentInBytes);
+  _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
+  memset(_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
+
+  _max_num_dsts = reloc_table_len; // FIXME: this can be precalculated during dump time
+  _unused_dsts = NEW_RESOURCE_ARRAY(Dst, _max_num_dsts);
+  memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
+  _num_unused_dsts = 0;
+  _freed_dsts = nullptr;
+}
+
+inline oop NewQuickLoader::doit(TRAPS) {
+  HeapWord* stream_bottom = _stream_bottom;
+  HeapWord* stream_top = _stream_top;
+  Reloc* reloc_table = _reloc_table;
+
+  intptr_t base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
+  if (UseCompressedOops) {
+    base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
+  }
+
+  for (HeapWord* stream = stream_bottom; stream < stream_top; ) {
+    size_t size; // size of object being copied
+    oop m = allocate(stream, size, CHECK_NULL);
+    memcpy(cast_from_oop<HeapWord*>(m), stream, size * HeapWordSize);
+
+    size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
+    Dst* dst_list = reloc_table[index]._dst;
+    if (UseCompressedOops && AVOID_ACCESS_API) {
+      reloc_table[index]._narrowOop = CompressedOops::encode_not_null(m);
+    } else {
+      reloc_table[index]._oop = m;
+    }
+
+    Relocator relocator(this, base, index);
+    m->oop_iterate(&relocator);
+
+    if (dst_list != nullptr) {
+      update(dst_list, m);
+    }
+
+    stream += size;
+  }
+
+  size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
+  if (UseCompressedOops && AVOID_ACCESS_API) {
+    return CompressedOops::decode_not_null(reloc_table[roots_index]._narrowOop);
+  } else {
+    return reloc_table[roots_index]._oop;
+  }
+}
+
+inline oop NewQuickLoader::allocate(HeapWord* stream, size_t& size, TRAPS) {
+  oop o = cast_to_oop(stream); // "original" from the stream
+  size = o->size();
+
+  if (1) {
+    bool gc_overhead_limit_was_exceeded;
+    HeapWord* hw = Universe::heap()->mem_allocate(size, &gc_overhead_limit_was_exceeded);
+    assert(hw != nullptr, "must not fail");
+    return cast_to_oop(hw);
+  }
+  assert(!o->is_instanceRef(), "no such objects are archived");
+  assert(!o->is_stackChunk(), "no such objects are archived");
+
+  if (o->is_instance()) {
+    return Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
+    // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
+    // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
+  } else if (o->is_typeArray()) {
+    int len = static_cast<typeArrayOop>(o)->length();
+    return TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+  } else {
+    assert(o->is_objArray(), "must be");
+    int len = static_cast<objArrayOop>(o)->length();
+    return ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+  }
+}
+
+inline void NewQuickLoader::add_relocation(size_t index, narrowOop* ptr_location) {
+  assert(_num_unused_dsts < _max_num_dsts, "now we allocate more than enough"); // FIXME: reduce usage
+  Dst* dst = &_unused_dsts[_num_unused_dsts++];
+  dst->_narrowOop_addr = ptr_location;
+  dst->_next = _reloc_table[index]._dst;
+  _reloc_table[index]._dst = dst;
+}
+
+
+inline void NewQuickLoader::update(Dst* dst_list, oop m) {
+  if (UseCompressedOops) {
+    if (AVOID_ACCESS_API) {
+      narrowOop n = CompressedOops::encode_not_null(m);
+      for (Dst* dst = dst_list; dst != nullptr; ) {
+        _num_delay_relocs ++;
+        *dst->_narrowOop_addr = n;
+        Dst* next = dst->_next;
+        dst->_next = _freed_dsts;
+        _freed_dsts = dst;
+        dst = next;
+      }
+    } else {
+      for (Dst* dst = dst_list; dst != nullptr; ) {
+        _num_delay_relocs ++;
+        RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
+        Dst* next = dst->_next;
+        dst->_next = _freed_dsts;
+        _freed_dsts = dst;
+        dst = next;
+      }
+    }
+  } else {
+    Unimplemented();
+  }
+}
 
 void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   log_info(cds)("new heap loading: start");
@@ -500,7 +686,17 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   jlong time_done;
   jlong time_disposed;
 
-  {
+  if (NewArchiveHeapLoading == 2) {
+    NewQuickLoader loader;
+    oop roots = loader.doit(CHECK);
+    _is_loaded = true;
+    HeapShared::init_roots(roots);
+    log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
+
+    log_info(cds, gc)("Quick reloc %8d", _num_quick_relocs);
+    log_info(cds, gc)("Delay reloc %8d", _num_delay_relocs);
+    return;
+  } else {
     NewLoadingTable table;
     NewLoadingTableNarrowOop ntable;
     HeapWord* stream_bottom = (HeapWord*)new_load_heap_buff;
@@ -513,19 +709,16 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
     newcode_runtime_init_objects(&table, &ntable, stream_bottom, stream_top);
     time_done = os::thread_cpu_time(THREAD);
 
+    _is_loaded = true;
 
-    if (NewArchiveHeapNumAllocs >= 1) {
-      _is_loaded = true;
+    address bot = (address)stream_bottom;
+    address stream_roots = bot + FileMapInfo::current_info()->heap_roots_offset();
+    oop* loaded_roots_p = (oop*)table.get((intptr_t)stream_roots);
+    assert(loaded_roots_p != nullptr, "must have roots");
+    assert(*loaded_roots_p != nullptr, "must have roots");
+    HeapShared::init_roots(*loaded_roots_p);
 
-      address bot = (address)stream_bottom;
-      address stream_roots = bot + FileMapInfo::current_info()->heap_roots_offset();
-      oop* loaded_roots_p = (oop*)table.get((intptr_t)stream_roots);
-      assert(loaded_roots_p != nullptr, "must have roots");
-      assert(*loaded_roots_p != nullptr, "must have roots");
-      HeapShared::init_roots(*loaded_roots_p);
-
-      log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(*loaded_roots_p));
-    }
+    log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(*loaded_roots_p));
   }
 
   time_disposed = os::thread_cpu_time(THREAD);
@@ -546,53 +739,15 @@ void ArchiveHeapLoader::newcode_runtime_allocate_objects(NewLoadingTable* table,
 
   int n = 0, b = 0;
   for (HeapWord* p = stream_bottom; p < stream_top; ) {
-    oop o = cast_to_oop(p);
-    size_t s = o->size();
-    oop m = nullptr; // materalized
+    size_t s;
+    oop m = newcode_allocate_one_object(p, s, CHECK);
 
-    assert(!o->is_instanceRef(), "no such objects are archived");
-    assert(!o->is_stackChunk(), "no such objects are archived");
-
-    if (p - stream_bottom == 64986 ||
-        p - stream_bottom == 64965) {
-      last_o = o;
-    }
-
-    for (int x = NewArchiveHeapNumAllocs; x > 0; x--) {
-      if (o->is_instance()) {
-        m =  Universe::heap()->obj_allocate(o->klass(), s, CHECK);
-        // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
-        // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
-      } else if (o->is_typeArray()) {
-        int len = static_cast<typeArrayOop>(o)->length();
-        m = TypeArrayKlass::cast(o->klass())->allocate(len, CHECK);
-      } else {
-        assert(o->is_objArray(), "must be");
-        int len = static_cast<objArrayOop>(o)->length();
-        m = ObjArrayKlass::cast(o->klass())->allocate(len, CHECK);
-      }
-
-      {
-        // Need to copy the archived hashcode as well, but keep the rest of the object in zeros.
-        HeapWord* src = cast_from_oop<HeapWord*>(o);
-        HeapWord* dst = cast_from_oop<HeapWord*>(m);
-        memcpy(dst, src, o->header_size() * HeapWordSize);
-      }
-    }
-
-    if (NewArchiveHeapNumAllocs >= 0) {
-      table->put(cast_from_oop<intptr_t>(o), cast_from_oop<intptr_t>(m), THREAD);
-      if (UseCompressedOops) {
-        size_t offset = p - stream_bottom;
-        oop requested_oop_addr = cast_to_oop(requested_addr + offset * HeapWordSize);
-        narrowOop no = CompressedOops::encode_not_null(requested_oop_addr);
-#if 0
-        narrowOop nm = CompressedOops::encode_not_null(m);
-        tty->print_cr("%6d: %p 0x%08x -> %p = 0x%08x",
-                      (int)offset * HeapWordSize, requested_oop_addr, (int)no, cast_from_oop<char*>(m), (int)nm);
-#endif
-        ntable->put(no, cast_from_oop<intptr_t>(m), THREAD);
-      }
+    table->put((intptr_t)(p), cast_from_oop<intptr_t>(m), THREAD);
+    if (UseCompressedOops) {
+      size_t offset = p - stream_bottom;
+      oop requested_oop_addr = cast_to_oop(requested_addr + offset * HeapWordSize);
+      narrowOop no = CompressedOops::encode_not_null(requested_oop_addr);
+      ntable->put(no, cast_from_oop<intptr_t>(m), THREAD);
     }
 
     p += s;
@@ -602,6 +757,37 @@ void ArchiveHeapLoader::newcode_runtime_allocate_objects(NewLoadingTable* table,
 
   _num_objs = n;
   _num_bytes = b;
+}
+
+inline oop ArchiveHeapLoader::newcode_allocate_one_object(HeapWord* stream, size_t& size, TRAPS) {
+  oop o = cast_to_oop(stream); // "original" from the stream
+  size = o->size();
+  oop m; // "materalized" in the heap
+
+  assert(!o->is_instanceRef(), "no such objects are archived");
+  assert(!o->is_stackChunk(), "no such objects are archived");
+
+  if (o->is_instance()) {
+    m =  Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
+    // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
+    // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
+  } else if (o->is_typeArray()) {
+    int len = static_cast<typeArrayOop>(o)->length();
+    m = TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+  } else {
+    assert(o->is_objArray(), "must be");
+    int len = static_cast<objArrayOop>(o)->length();
+    m = ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+  }
+
+  {
+    // Need to copy the archived hashcode as well, but keep the rest of the object in zeros.
+    HeapWord* src = cast_from_oop<HeapWord*>(o);
+    HeapWord* dst = cast_from_oop<HeapWord*>(m);
+    memcpy(dst, src, o->header_size() * HeapWordSize);
+  }
+
+  return m;
 }
 
 class ArchiveHeapLoader::NewCodeRuntimeRelocator: public BasicOopIterateClosure {
@@ -654,10 +840,6 @@ public:
 
 void ArchiveHeapLoader::newcode_runtime_init_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
                                                      HeapWord* stream_bottom, HeapWord* stream_top) {
-  if (NewArchiveHeapNumAllocs < 1) {
-    return;
-  }
-
   for (HeapWord* p = stream_bottom; p < stream_top; ) {
     oop o = cast_to_oop(p);
     oop* mptr = (oop*)table->get(cast_from_oop<intptr_t>(o));
@@ -666,10 +848,6 @@ void ArchiveHeapLoader::newcode_runtime_init_objects(NewLoadingTable* table, New
 
     size_t s = o->size();
     size_t cp_size = s - o->header_size();
-
-    if (p - stream_bottom == 64986) {
-      last_o = o;
-    }
 
     if (cp_size > 0) {
       HeapWord* src = cast_from_oop<HeapWord*>(o) + o->header_size();
@@ -690,8 +868,6 @@ void ArchiveHeapLoader::newcode_runtime_init_objects(NewLoadingTable* table, New
     size_t s1 = o->size();
     size_t s2 = m->size();
     assert(s1 == s2, "must be");
-    last_o = o;
-    last_m = m;
     p += s1;
   }
 }

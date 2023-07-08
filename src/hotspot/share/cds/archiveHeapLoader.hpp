@@ -168,7 +168,7 @@ private:
                                                HeapWord* stream_bottom, HeapWord* stream_top, TRAPS);
   static void newcode_runtime_init_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
                                            HeapWord* stream_bottom, HeapWord* stream_top);
-
+  static inline oop newcode_allocate_one_object(HeapWord* stream, size_t& size, TRAPS);
   class NewCodeRuntimeRelocator;
 public:
 

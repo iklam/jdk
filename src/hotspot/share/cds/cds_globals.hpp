@@ -67,7 +67,7 @@
   product(bool, AllowArchivingWithJavaAgent, false, DIAGNOSTIC,             \
           "Allow Java agent to be run with CDS dumping")                    \
                                                                             \
-  product(bool, NewArchiveHeapLoading, false,                               \
+  product(int, NewArchiveHeapLoading, 0,                                    \
           "(Investigation) Load each object in the archived heap individually")             \
                                                                             \
   product(int, NewArchiveHeapNumAllocs, 1,                               \
