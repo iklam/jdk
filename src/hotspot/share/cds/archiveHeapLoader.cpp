@@ -575,29 +575,40 @@ public:
     _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
     memset((void*)_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
 
-    _max_num_dsts = reloc_table_len; // FIXME: this can be precalculated during dump time
+    _max_num_dsts = 5000;
     _unused_dsts = NEW_RESOURCE_ARRAY(Dst, _max_num_dsts);
-    memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
+    //memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
     _num_unused_dsts = 0;
     _freed_dsts = nullptr;
   }
 
   inline oop doit(TRAPS) {
-    HeapWord* stream_bottom = _stream_bottom;
-    HeapWord* stream_top = _stream_top;
+    HeapWord* first_quick_reloc = _stream_bottom + FileMapInfo::current_info()->heap_first_quick_reloc() / HeapWordSize;
+    HeapWord* first_slow_reloc  = _stream_bottom + FileMapInfo::current_info()->heap_first_slow_reloc()  / HeapWordSize;
+
+    doit_inner<false, false>(_stream_bottom, _stream_bottom,    first_quick_reloc, CHECK_NULL);
+    doit_inner<true,  false>(_stream_bottom, first_quick_reloc, first_slow_reloc,  CHECK_NULL);
+    doit_inner<false, true >(_stream_bottom, first_slow_reloc, _stream_top,        CHECK_NULL);
+
+    size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
+    if (COOPS && AVOID_ACCESS_API) {
+      return CompressedOops::decode_not_null(_reloc_table[roots_index]._narrowOop);
+    } else {
+      return _reloc_table[roots_index]._oop;
+    }
+  }
+
+  template <bool QUICK_RELOC, bool SLOW_RELOC>
+  void doit_inner(HeapWord* stream_bottom, HeapWord* stream, HeapWord* stream_top, TRAPS) {
     Reloc* reloc_table = _reloc_table;
-
     intptr_t base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
-    size_t first_quick_reloc_index = FileMapInfo::current_info()->heap_first_quick_reloc() / MinObjAlignmentInBytes;
-    size_t first_slow_reloc_index = FileMapInfo::current_info()->heap_first_slow_reloc() / MinObjAlignmentInBytes;
-
     if (COOPS) {
       base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
     }
 
-    for (HeapWord* stream = stream_bottom; stream < stream_top; ) {
+    while (stream < stream_top) {
       size_t size; // size of object being copied
-      oop m = allocate(stream, size, CHECK_NULL);
+      oop m = allocate(stream, size, CHECK);
       memcpy(cast_from_oop<HeapWord*>(m), stream, size * HeapWordSize);
 
       size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
@@ -608,27 +619,18 @@ public:
         reloc_table[index]._oop = m;
       }
 
-      if (index >= first_quick_reloc_index) {
-        if (index < first_slow_reloc_index) {
-          Relocator<true> relocator(this, base, index);
-          m->oop_iterate(&relocator);
-        } else {
-          Relocator<false> relocator(this, base, index);
-          m->oop_iterate(&relocator);
-          if (dst_list != nullptr) {
-            update(dst_list, m);
-          }
+      if (SLOW_RELOC) {
+        Relocator<false> relocator(this, base, index);
+        m->oop_iterate(&relocator);
+        if (dst_list != nullptr) {
+          update(dst_list, m);
         }
+      } else if (QUICK_RELOC) {
+        Relocator<true> relocator(this, base, index);
+        m->oop_iterate(&relocator);
       }
 
       stream += size;
-    }
-
-    size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
-    if (COOPS && AVOID_ACCESS_API) {
-      return CompressedOops::decode_not_null(reloc_table[roots_index]._narrowOop);
-    } else {
-      return reloc_table[roots_index]._oop;
     }
   }
 
@@ -636,7 +638,7 @@ public:
     oop o = cast_to_oop(stream); // "original" from the stream
     size = o->size();
 
-    if (1) {
+    if (0) {
       return cast_to_oop(NewQuickLoader::mem_allocate_raw(size));
     }
     assert(!o->is_instanceRef(), "no such objects are archived");
