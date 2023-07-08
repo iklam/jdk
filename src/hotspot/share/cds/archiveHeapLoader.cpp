@@ -504,6 +504,7 @@ public:
   }
 };
 
+template <bool COOPS>
 class NewQuickLoaderImpl : public StackObj {
   struct Dst {
     Dst* _next;
@@ -519,6 +520,7 @@ class NewQuickLoaderImpl : public StackObj {
     narrowOop _narrowOop;
   };
 
+  template <bool QUICK>
   class Relocator : public BasicOopIterateClosure {
     NewQuickLoaderImpl* _loader;
     intptr_t _base;
@@ -534,8 +536,11 @@ class NewQuickLoaderImpl : public StackObj {
         if (!AVOID_ACCESS_API) {
           *p = narrowOop::null; // not to confuse GC
         }
-        if (index <= _current_index) {
-          _num_quick_relocs ++;
+        if (QUICK) {
+          assert(index <= _current_index, "must be");
+        }
+
+        if (QUICK || index <= _current_index) {
           if (AVOID_ACCESS_API) {
             *p = _loader->_reloc_table[index]._narrowOop;
           } else {
@@ -563,6 +568,7 @@ class NewQuickLoaderImpl : public StackObj {
   size_t _max_num_dsts;
 public:
   inline NewQuickLoaderImpl() {
+    assert(COOPS == UseCompressedOops, "sanity");
     _stream_bottom = (HeapWord*)new_load_heap_buff;
     _stream_top    = _stream_bottom + new_load_heap_size;
     size_t reloc_table_len = pointer_delta(_stream_top, _stream_bottom, MinObjAlignmentInBytes);
@@ -585,7 +591,7 @@ public:
     size_t first_quick_reloc_index = FileMapInfo::current_info()->heap_first_quick_reloc() / MinObjAlignmentInBytes;
     size_t first_slow_reloc_index = FileMapInfo::current_info()->heap_first_slow_reloc() / MinObjAlignmentInBytes;
 
-    if (UseCompressedOops) {
+    if (COOPS) {
       base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
     }
 
@@ -596,17 +602,19 @@ public:
 
       size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
       Dst* dst_list = reloc_table[index]._dst;
-      if (UseCompressedOops && AVOID_ACCESS_API) {
+      if (COOPS && AVOID_ACCESS_API) {
         reloc_table[index]._narrowOop = CompressedOops::encode_not_null(m);
       } else {
         reloc_table[index]._oop = m;
       }
 
       if (index >= first_quick_reloc_index) {
-        Relocator relocator(this, base, index);
-        m->oop_iterate(&relocator);
-
-        if (index >= first_slow_reloc_index) {
+        if (index < first_slow_reloc_index) {
+          Relocator<true> relocator(this, base, index);
+          m->oop_iterate(&relocator);
+        } else {
+          Relocator<false> relocator(this, base, index);
+          m->oop_iterate(&relocator);
           if (dst_list != nullptr) {
             update(dst_list, m);
           }
@@ -617,7 +625,7 @@ public:
     }
 
     size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
-    if (UseCompressedOops && AVOID_ACCESS_API) {
+    if (COOPS && AVOID_ACCESS_API) {
       return CompressedOops::decode_not_null(reloc_table[roots_index]._narrowOop);
     } else {
       return reloc_table[roots_index]._oop;
@@ -657,11 +665,10 @@ public:
   }
 
   inline void update(Dst* dst_list, oop m) {
-    if (UseCompressedOops) {
+    if (COOPS) {
       if (AVOID_ACCESS_API) {
         narrowOop n = CompressedOops::encode_not_null(m);
         for (Dst* dst = dst_list; dst != nullptr; ) {
-          _num_delay_relocs ++;
           *dst->_narrowOop_addr = n;
           Dst* next = dst->_next;
           dst->_next = _freed_dsts;
@@ -670,7 +677,6 @@ public:
         }
       } else {
         for (Dst* dst = dst_list; dst != nullptr; ) {
-          _num_delay_relocs ++;
           RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
           Dst* next = dst->_next;
           dst->_next = _freed_dsts;
@@ -694,14 +700,20 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   jlong time_disposed;
 
   if (NewArchiveHeapLoading == 2) {
-    NewQuickLoaderImpl loader;
-    oop roots = loader.doit(CHECK);
+    oop roots;
+    time_started = os::thread_cpu_time(THREAD);
+    if (UseCompressedOops) {
+      NewQuickLoaderImpl<true> loader;
+      roots = loader.doit(CHECK);
+    } else {
+      NewQuickLoaderImpl<false> loader;
+      roots = loader.doit(CHECK);
+    }
     _is_loaded = true;
     HeapShared::init_roots(roots);
     log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
-
-    log_info(cds, gc)("Quick reloc %8d", _num_quick_relocs);
-    log_info(cds, gc)("Delay reloc %8d", _num_delay_relocs);
+    time_done = os::thread_cpu_time(THREAD);
+    log_info(cds, gc)("Load Time : " JLONG_FORMAT, (time_done - time_started));
     return;
   } else {
     NewLoadingTable table;
