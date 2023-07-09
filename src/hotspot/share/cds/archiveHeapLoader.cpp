@@ -493,8 +493,6 @@ static int _num_quick_relocs = 0;
 static int _num_delay_relocs = 0;
 static int _num_dst_alloced = 0;
 
-const bool AVOID_ACCESS_API = false;
-
 class NewQuickLoader {
 public:
   static HeapWord* mem_allocate_raw(size_t size) {
@@ -505,7 +503,7 @@ public:
   }
 };
 
-template <bool COOPS>
+template <bool COOPS, bool RAW_ALLOC, bool USE_ACCESS_API>
 class NewQuickLoaderImpl : public StackObj {
   struct Dst {
     Dst* _next;
@@ -533,8 +531,9 @@ class NewQuickLoaderImpl : public StackObj {
     void do_oop(narrowOop* p) {
       narrowOop narrow = *p;
       if (narrow != narrowOop::null) {
+        assert(CompressedOops::shift() == 3, "FIXME");
         size_t index = (size_t)narrow - (size_t)_base; // FIXME: assume shift is 3
-        if (!AVOID_ACCESS_API) {
+        if (USE_ACCESS_API) {
           *p = narrowOop::null; // not to confuse GC
         }
         if (QUICK) {
@@ -542,13 +541,13 @@ class NewQuickLoaderImpl : public StackObj {
         }
 
         if (QUICK || index <= _current_index) {
-          if (AVOID_ACCESS_API) {
+          if (!USE_ACCESS_API) {
             *p = _loader->_reloc_table[index]._narrowOop;
           } else {
             HeapAccess<IS_NOT_NULL>::oop_store(p, _loader->_reloc_table[index]._oop);
           }
         } else {
-          if (AVOID_ACCESS_API) {
+          if (!USE_ACCESS_API) {
             *p = narrowOop::null; // not to confuse GC
           }
           _loader->add_relocation(index, p);
@@ -590,7 +589,7 @@ public:
     doit_inner<false, true >(_stream_bottom, first_slow_reloc, _stream_top,        CHECK_NULL);
 
     size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
-    if (COOPS && AVOID_ACCESS_API) {
+    if (COOPS && !USE_ACCESS_API) {
       return CompressedOops::decode_not_null(_reloc_table[roots_index]._narrowOop);
     } else {
       return _reloc_table[roots_index]._oop;
@@ -612,7 +611,7 @@ public:
 
       size_t index = pointer_delta(stream, stream_bottom, MinObjAlignmentInBytes);
       Dst* dst_list = reloc_table[index]._dst;
-      if (COOPS && AVOID_ACCESS_API) {
+      if (COOPS && !USE_ACCESS_API) {
         reloc_table[index]._narrowOop = CompressedOops::encode_not_null(m);
       } else {
         reloc_table[index]._oop = m;
@@ -637,7 +636,7 @@ public:
     oop o = cast_to_oop(stream); // "original" from the stream
     size = o->size();
 
-    if (1) {
+    if (RAW_ALLOC) {
       return cast_to_oop(NewQuickLoader::mem_allocate_raw(size));
     }
     assert(!o->is_instanceRef(), "no such objects are archived");
@@ -679,18 +678,18 @@ public:
 
   inline void update(Dst* dst_list, oop m) {
     if (COOPS) {
-      if (AVOID_ACCESS_API) {
-        narrowOop n = CompressedOops::encode_not_null(m);
+      if (USE_ACCESS_API) {
         for (Dst* dst = dst_list; dst != nullptr; ) {
-          *dst->_narrowOop_addr = n;
+          RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
           Dst* next = dst->_next;
           dst->_next = _freed_dsts;
           _freed_dsts = dst;
           dst = next;
         }
       } else {
+        narrowOop n = CompressedOops::encode_not_null(m);
         for (Dst* dst = dst_list; dst != nullptr; ) {
-          RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
+          *dst->_narrowOop_addr = n;
           Dst* next = dst->_next;
           dst->_next = _freed_dsts;
           _freed_dsts = dst;
@@ -703,6 +702,10 @@ public:
   }
 };
 
+#define TEMPLATE_CASE(a, b, c) \
+   NewQuickLoaderImpl<a, b, c> loader; \
+   roots = loader.doit(CHECK);
+
 void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   log_info(cds)("new heap loading: start");
 
@@ -712,15 +715,39 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   jlong time_done;
   jlong time_disposed;
 
-  if (NewArchiveHeapLoading == 2) {
+  if (!NahlUseHashTable) {
     oop roots;
     time_started = os::thread_cpu_time(THREAD);
+
+    // The parameters are <UseCompressedOops, NahlRawAlloc, NahlNoAccessAPI>
     if (UseCompressedOops) {
-      NewQuickLoaderImpl<true> loader;
-      roots = loader.doit(CHECK);
+      if (NahlRawAlloc) {
+        if (NahlUseAccessAPI) {
+          TEMPLATE_CASE(true, true, true);
+        } else {
+          TEMPLATE_CASE(true, true, false);
+        }
+      } else {
+        if (NahlUseAccessAPI) {
+          TEMPLATE_CASE(true, false, true);
+        } else {
+          TEMPLATE_CASE(true, false, false);
+        }
+      }
     } else {
-      NewQuickLoaderImpl<false> loader;
-      roots = loader.doit(CHECK);
+      if (NahlRawAlloc) {
+        if (NahlUseAccessAPI) {
+          TEMPLATE_CASE(false, true, true);
+        } else {
+          TEMPLATE_CASE(false, true, false);
+        }
+      } else {
+        if (NahlUseAccessAPI) {
+          TEMPLATE_CASE(false, false, true);
+        } else {
+          TEMPLATE_CASE(false, false, false);
+        }
+      }
     }
     _is_loaded = true;
     HeapShared::init_roots(roots);

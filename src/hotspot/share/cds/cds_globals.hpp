@@ -67,11 +67,17 @@
   product(bool, AllowArchivingWithJavaAgent, false, DIAGNOSTIC,             \
           "Allow Java agent to be run with CDS dumping")                    \
                                                                             \
-  product(int, NewArchiveHeapLoading, 0,                                    \
+  product(bool, NewArchiveHeapLoading, false,                               \
           "(Investigation) Load each object in the archived heap individually")             \
                                                                             \
-  product(int, NewArchiveHeapNumAllocs, 1,                               \
-          "(Investigation) how many copies of to allocate for each archived oop")             \
+  product(bool, NahlUseHashTable, false,                                    \
+          "Use a hashtable for relocation (slowest)")                       \
+                                                                            \
+  product(bool, NahlRawAlloc, true,                                         \
+          "Use CollectedHeap::mem_allocate() to allocate uninited heap mem")\
+                                                                            \
+  product(bool, NahlUseAccessAPI, true,                                     \
+          "Use Access API to update oop fields (dangerous if false?)")      \
                                                                             \
   develop(ccstr, ArchiveHeapTestClass, nullptr,                                \
           "For JVM internal testing only. The static field named "          \
