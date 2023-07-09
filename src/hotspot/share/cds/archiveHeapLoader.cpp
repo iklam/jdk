@@ -491,6 +491,7 @@ static int _num_refs_relocated = 0;
 
 static int _num_quick_relocs = 0;
 static int _num_delay_relocs = 0;
+static int _num_dst_alloced = 0;
 
 const bool AVOID_ACCESS_API = false;
 
@@ -563,9 +564,9 @@ class NewQuickLoaderImpl : public StackObj {
   HeapWord* _stream_top;
   Reloc* _reloc_table;
   Dst* _unused_dsts;
-  size_t _num_unused_dsts;
+  Dst* _unused_dsts_top;
   Dst* _freed_dsts;
-  size_t _max_num_dsts;
+  constexpr static int UNUSED_DST_BLOCK_SIZE = 128;
 public:
   inline NewQuickLoaderImpl() {
     assert(COOPS == UseCompressedOops, "sanity");
@@ -575,10 +576,8 @@ public:
     _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
     memset((void*)_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
 
-    _max_num_dsts = 5000;
-    _unused_dsts = NEW_RESOURCE_ARRAY(Dst, _max_num_dsts);
-    //memset(_unused_dsts, 0, sizeof(Dst) * _max_num_dsts);
-    _num_unused_dsts = 0;
+    _unused_dsts = nullptr;
+    _unused_dsts_top = nullptr;
     _freed_dsts = nullptr;
   }
 
@@ -638,7 +637,7 @@ public:
     oop o = cast_to_oop(stream); // "original" from the stream
     size = o->size();
 
-    if (0) {
+    if (1) {
       return cast_to_oop(NewQuickLoader::mem_allocate_raw(size));
     }
     assert(!o->is_instanceRef(), "no such objects are archived");
@@ -659,8 +658,20 @@ public:
   }
 
   inline void add_relocation(size_t index, narrowOop* ptr_location) {
-    assert(_num_unused_dsts < _max_num_dsts, "now we allocate more than enough"); // FIXME: reduce usage
-    Dst* dst = &_unused_dsts[_num_unused_dsts++];
+    Dst* dst;
+    if (_freed_dsts != nullptr) { // take from free list
+      dst = _freed_dsts;
+      _freed_dsts = dst->_next;
+    } else {
+      if (_unused_dsts >= _unused_dsts_top) {
+        int blksize = UNUSED_DST_BLOCK_SIZE;
+        _unused_dsts = NEW_RESOURCE_ARRAY(Dst, blksize);
+        _unused_dsts_top = _unused_dsts + blksize;
+        _num_dst_alloced += blksize;
+      }
+      dst = _unused_dsts;
+      _unused_dsts ++;
+    }
     dst->_narrowOop_addr = ptr_location;
     dst->_next = _reloc_table[index]._dst;
     _reloc_table[index]._dst = dst;
@@ -715,7 +726,8 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
     HeapShared::init_roots(roots);
     log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
     time_done = os::thread_cpu_time(THREAD);
-    log_info(cds, gc)("Load Time : " JLONG_FORMAT, (time_done - time_started));
+    log_info(cds, gc)("Dst alloced : " JLONG_FORMAT_W(20), jlong(_num_dst_alloced));
+    log_info(cds, gc)("Load Time   : " JLONG_FORMAT_W(20), (time_done - time_started));
     return;
   } else {
     NewLoadingTable table;
