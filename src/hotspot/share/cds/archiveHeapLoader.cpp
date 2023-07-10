@@ -519,43 +519,69 @@ class NewQuickLoaderImpl : public StackObj {
     narrowOop _narrowOop;
   };
 
-  template <bool QUICK>
+  template <bool QUICK, int INDEX_SHIFT>
   class Relocator : public BasicOopIterateClosure {
     NewQuickLoaderImpl* _loader;
+    Reloc* _reloc_table;
     intptr_t _base;
     size_t _current_index;
   public:
     Relocator(NewQuickLoaderImpl *loader, intptr_t base, size_t current_index)
-      : _loader(loader), _base(base), _current_index(current_index) {}
+      : _loader(loader), _reloc_table(loader->_reloc_table), _base(base), _current_index(current_index) {}
 
     void do_oop(narrowOop* p) {
-      narrowOop narrow = *p;
-      if (narrow != narrowOop::null) {
-        assert(CompressedOops::shift() == 3, "FIXME");
-        size_t index = (size_t)narrow - (size_t)_base; // FIXME: assume shift is 3
-        if (USE_ACCESS_API) {
-          *p = narrowOop::null; // not to confuse GC
-        }
-        if (QUICK) {
-          assert(index <= _current_index, "must be");
-        }
-
-        if (QUICK || index <= _current_index) {
-          if (!USE_ACCESS_API) {
-            *p = _loader->_reloc_table[index]._narrowOop;
-          } else {
-            HeapAccess<IS_NOT_NULL>::oop_store(p, _loader->_reloc_table[index]._oop);
-          }
-        } else {
-          if (!USE_ACCESS_API) {
+      if (COOPS) {
+        narrowOop narrow = *p;
+        if (narrow != narrowOop::null) {
+          size_t index = ((size_t)narrow - (size_t)_base) >> INDEX_SHIFT;
+          if (USE_ACCESS_API) {
             *p = narrowOop::null; // not to confuse GC
           }
-          _loader->add_relocation(index, p);
+          if (QUICK) {
+            assert(index <= _current_index, "must be");
+          }
+
+          if (QUICK || index <= _current_index) {
+            if (!USE_ACCESS_API) {
+              *p = _reloc_table[index]._narrowOop;
+            } else {
+              HeapAccess<IS_NOT_NULL>::oop_store(p, _reloc_table[index]._oop);
+            }
+          } else {
+            if (!USE_ACCESS_API) {
+              *p = narrowOop::null; // not to confuse GC
+            }
+            _loader->add_relocation(index, p);
+          }
         }
       }
     }
-    void do_oop(oop *src_p) {
-      Unimplemented();
+    void do_oop(oop *p) {
+      if (!COOPS) {
+        oop o = *p;
+        if (o != nullptr) {
+          size_t index = pointer_delta((void*)o, (void*)_base, MinObjAlignmentInBytes);
+          if (USE_ACCESS_API) {
+            *p = nullptr; // not to confuse GC
+          }
+          if (QUICK) {
+            assert(index <= _current_index, "must be");
+          }
+
+          if (QUICK || index <= _current_index) {
+            if (!USE_ACCESS_API) {
+              *p = _reloc_table[index]._oop;
+            } else {
+              HeapAccess<IS_NOT_NULL>::oop_store(p, _reloc_table[index]._oop);
+            }
+          } else {
+            if (!USE_ACCESS_API) {
+              *p = nullptr; // not to confuse GC
+            }
+            _loader->add_relocation(index, p);
+          }
+        }
+      }
     }
   };
 
@@ -580,13 +606,19 @@ public:
     _freed_dsts = nullptr;
   }
 
-  inline oop doit(TRAPS) {
+  inline oop load_archive_heap(TRAPS) {
     HeapWord* first_quick_reloc = _stream_bottom + FileMapInfo::current_info()->heap_first_quick_reloc() / HeapWordSize;
     HeapWord* first_slow_reloc  = _stream_bottom + FileMapInfo::current_info()->heap_first_slow_reloc()  / HeapWordSize;
 
-    doit_inner<false, false>(_stream_bottom, _stream_bottom,    first_quick_reloc, CHECK_NULL);
-    doit_inner<true,  false>(_stream_bottom, first_quick_reloc, first_slow_reloc,  CHECK_NULL);
-    doit_inner<false, true >(_stream_bottom, first_slow_reloc, _stream_top,        CHECK_NULL);
+    if (COOPS && FileMapInfo::current_info()->narrow_oop_shift() == 0) {
+      load_archive_heap_inner<false, false, 3>(_stream_bottom, _stream_bottom,    first_quick_reloc, CHECK_NULL);
+      load_archive_heap_inner<true,  false, 3>(_stream_bottom, first_quick_reloc, first_slow_reloc,  CHECK_NULL);
+      load_archive_heap_inner<false, true , 3>(_stream_bottom, first_slow_reloc, _stream_top,        CHECK_NULL);
+    } else {
+      load_archive_heap_inner<false, false, 0>(_stream_bottom, _stream_bottom,    first_quick_reloc, CHECK_NULL);
+      load_archive_heap_inner<true,  false, 0>(_stream_bottom, first_quick_reloc, first_slow_reloc,  CHECK_NULL);
+      load_archive_heap_inner<false, true,  0>(_stream_bottom, first_slow_reloc, _stream_top,        CHECK_NULL);
+    }
 
     size_t roots_index = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
     if (COOPS && !USE_ACCESS_API) {
@@ -596,12 +628,18 @@ public:
     }
   }
 
-  template <bool QUICK_RELOC, bool SLOW_RELOC>
-  void doit_inner(HeapWord* stream_bottom, HeapWord* stream, HeapWord* stream_top, TRAPS) {
+  template <bool QUICK_RELOC, bool SLOW_RELOC, int INDEX_SHIFT>
+  void load_archive_heap_inner(HeapWord* stream_bottom, HeapWord* stream, HeapWord* stream_top, TRAPS) {
     Reloc* reloc_table = _reloc_table;
-    intptr_t base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
+    intptr_t base;
     if (COOPS) {
-      base = (intptr_t)CompressedOops::encode_not_null(cast_to_oop(base));
+      int dumptime_oop_shift = FileMapInfo::current_info()->narrow_oop_shift();
+      assert(dumptime_oop_shift == 0 || dumptime_oop_shift == 3,
+             "other values are not supproted by the C++ templates");
+      base = (intptr_t)(FileMapInfo::current_info()->region_at(MetaspaceShared::hp)->mapping_offset() >>
+                        dumptime_oop_shift;
+    } else {
+      base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
     }
 
     while (stream < stream_top) {
@@ -618,13 +656,13 @@ public:
       }
 
       if (SLOW_RELOC) {
-        Relocator<false> relocator(this, base, index);
+        Relocator<false, INDEX_SHIFT> relocator(this, base, index);
         m->oop_iterate(&relocator);
         if (dst_list != nullptr) {
           update(dst_list, m);
         }
       } else if (QUICK_RELOC) {
-        Relocator<true> relocator(this, base, index);
+        Relocator<true, INDEX_SHIFT> relocator(this, base, index);
         m->oop_iterate(&relocator);
       }
 
@@ -656,7 +694,7 @@ public:
     }
   }
 
-  inline void add_relocation(size_t index, narrowOop* ptr_location) {
+  inline Dst* get_relocation() {
     Dst* dst;
     if (_freed_dsts != nullptr) { // take from free list
       dst = _freed_dsts;
@@ -671,9 +709,28 @@ public:
       dst = _unused_dsts;
       _unused_dsts ++;
     }
+    return dst;
+  }
+
+  inline void add_relocation(size_t index, narrowOop* ptr_location) {
+    Dst* dst = get_relocation();
     dst->_narrowOop_addr = ptr_location;
     dst->_next = _reloc_table[index]._dst;
     _reloc_table[index]._dst = dst;
+  }
+
+  inline void add_relocation(size_t index, oop* ptr_location) {
+    Dst* dst = get_relocation();
+    dst->_oop_addr = ptr_location;
+    dst->_next = _reloc_table[index]._dst;
+    _reloc_table[index]._dst = dst;
+  }
+
+  inline Dst* return_to_pool(Dst* dst) {
+    Dst* next = dst->_next;
+    dst->_next = _freed_dsts;
+    _freed_dsts = dst;
+    return next;
   }
 
   inline void update(Dst* dst_list, oop m) {
@@ -681,30 +738,34 @@ public:
       if (USE_ACCESS_API) {
         for (Dst* dst = dst_list; dst != nullptr; ) {
           RawAccess<IS_NOT_NULL>::oop_store(dst->_narrowOop_addr, m);
-          Dst* next = dst->_next;
-          dst->_next = _freed_dsts;
-          _freed_dsts = dst;
-          dst = next;
+          dst = return_to_pool(dst);
         }
       } else {
         narrowOop n = CompressedOops::encode_not_null(m);
         for (Dst* dst = dst_list; dst != nullptr; ) {
           *dst->_narrowOop_addr = n;
-          Dst* next = dst->_next;
-          dst->_next = _freed_dsts;
-          _freed_dsts = dst;
-          dst = next;
+          dst = return_to_pool(dst);
         }
       }
     } else {
-      Unimplemented();
+      if (USE_ACCESS_API) {
+        for (Dst* dst = dst_list; dst != nullptr; ) {
+          RawAccess<IS_NOT_NULL>::oop_store(dst->_oop_addr, m);
+          dst = return_to_pool(dst);
+        }
+      } else {
+        for (Dst* dst = dst_list; dst != nullptr; ) {
+          *dst->_oop_addr = m;
+          dst = return_to_pool(dst);
+        }
+      }
     }
   }
 };
 
-#define TEMPLATE_CASE(a, b, c) \
+#define LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(a, b, c) \
    NewQuickLoaderImpl<a, b, c> loader; \
-   roots = loader.doit(CHECK);
+   roots = loader.load_archive_heap(CHECK);
 
 void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   log_info(cds)("new heap loading: start");
@@ -723,29 +784,29 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
     if (UseCompressedOops) {
       if (NahlRawAlloc) {
         if (NahlUseAccessAPI) {
-          TEMPLATE_CASE(true, true, true);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, true);
         } else {
-          TEMPLATE_CASE(true, true, false);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, false);
         }
       } else {
         if (NahlUseAccessAPI) {
-          TEMPLATE_CASE(true, false, true);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, true);
         } else {
-          TEMPLATE_CASE(true, false, false);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, false);
         }
       }
     } else {
       if (NahlRawAlloc) {
         if (NahlUseAccessAPI) {
-          TEMPLATE_CASE(false, true, true);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, true);
         } else {
-          TEMPLATE_CASE(false, true, false);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, false);
         }
       } else {
         if (NahlUseAccessAPI) {
-          TEMPLATE_CASE(false, false, true);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, true);
         } else {
-          TEMPLATE_CASE(false, false, false);
+          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, false);
         }
       }
     }
