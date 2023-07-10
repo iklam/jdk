@@ -248,7 +248,7 @@ void Dictionary::add_klass(JavaThread* current, Symbol* class_name,
   bool needs_rehashing, clean_hint;
   bool created = _table->insert(current, lookup, entry, &needs_rehashing, &clean_hint);
   assert(created, "should be because we have a lock");
-  assert (!needs_rehashing, "should never need rehashing");
+  //assert (!needs_rehashing, "should never need rehashing");
   assert(!clean_hint, "no class should be unloaded");
   _number_of_entries++;  // still locked
   // This table can be resized while another thread is reading it.

@@ -85,6 +85,7 @@ static jboolean _is_java_args = JNI_FALSE;
 static jboolean _have_classpath = JNI_FALSE;
 static const char *_fVersion;
 static jboolean _wc_enabled = JNI_FALSE;
+static jboolean dumpSharedSpaces = JNI_FALSE; /* -Xshare:dump */
 
 /*
  * Entries for splash screen environment variables.
@@ -453,6 +454,13 @@ JavaMain(void* _args)
     // modules have been validated at startup so exit
     if (validateModules) {
         LEAVE();
+    }
+
+    /*
+     * -Xshare:dump does not have a main class so the VM can safely exit now
+     */
+    if (dumpSharedSpaces == JNI_TRUE) {
+      LEAVE();
     }
 
     /* If the user specified neither a class name nor a JAR file */
@@ -1431,6 +1439,13 @@ ParseArguments(int *pargc, char ***pargv,
                 _have_classpath = JNI_TRUE;
             }
             AddOption(arg, NULL);
+        }
+
+/*
+ * Check for CDS option
+ */
+        if (JLI_StrCmp(arg, "-Xshare:dump") == 0) {
+          dumpSharedSpaces = JNI_TRUE;
         }
     }
 

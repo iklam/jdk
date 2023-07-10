@@ -499,7 +499,7 @@ void VM_PopulateDumpSharedSpace::doit() {
   SystemDictionaryShared::check_excluded_classes();
 
   StaticArchiveBuilder builder;
-  builder.gather_source_objs();
+  builder.gather_source_objs(); // THIS ONE
   builder.reserve_buffer();
 
   char* cloned_vtables = CppVtables::dumptime_init(&builder);
@@ -545,7 +545,10 @@ void VM_PopulateDumpSharedSpace::doit() {
             "for testing purposes only and should not be used in a production environment");
   }
 
-  MetaspaceShared::exit_after_static_dump();
+  if (!UseNewCode) {
+    MetaspaceShared::exit_after_static_dump();
+  }
+
 }
 
 class CollectCLDClosure : public CLDClosure {
@@ -665,7 +668,8 @@ void MetaspaceShared::preload_and_dump() {
   } else {
     // On success, the VM_PopulateDumpSharedSpace op should have
     // exited the VM.
-    ShouldNotReachHere();
+    // VM will no longer exit early
+    //ShouldNotReachHere();
   }
 }
 

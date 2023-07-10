@@ -112,6 +112,8 @@
 #include "jfr/jfr.hpp"
 #endif
 
+#include "classfile/symbolTable.hpp"
+
 // Initialization after module runtime initialization
 void universe_post_module_init();  // must happen after call_initPhase2
 
@@ -813,8 +815,15 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   if (DumpSharedSpaces) {
     MetaspaceShared::preload_and_dump();
-    ShouldNotReachHere();
+    // Should no longer exit
+    //ShouldNotReachHere();
+    *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
   }
+  // if (UseNewCode) {
+  //   TempNewSymbol sym = SymbolTable::new_symbol("jdk/internal/misc/TerminatingThreadLocal");
+  //   Klass* k = SystemDictionary::resolve_or_null(sym, THREAD);
+  //   tty->print_cr("Klass: %p", k);
+  // }
 
   return JNI_OK;
 }
