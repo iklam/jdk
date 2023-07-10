@@ -70,9 +70,6 @@
   product(bool, NewArchiveHeapLoading, false,                               \
           "(Investigation) Load each object in the archived heap individually")             \
                                                                             \
-  product(bool, NahlUseHashTable, false,                                    \
-          "Use a hashtable for relocation (slowest)")                       \
-                                                                            \
   product(bool, NahlRawAlloc, true,                                         \
           "Use CollectedHeap::mem_allocate() to allocate uninited heap mem")\
                                                                             \

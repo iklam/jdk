@@ -475,23 +475,15 @@ void ArchiveHeapLoader::patch_native_pointers() {
   }
 }
 
-static size_t new_load_heap_size; // total size of heap region, in number of HeapWords
-static char* new_load_heap_buff;
+static size_t _new_load_heap_size; // total size of heap region, in number of HeapWords
+static char* _new_load_heap_buff;
+static int _num_dst_alloced = 0;
 
 bool ArchiveHeapLoader::new_load_heap_region(FileMapInfo* mapinfo) {
-  new_load_heap_buff = FileMapInfo::current_info()->new_map_heap(new_load_heap_size);
+  _new_load_heap_buff = FileMapInfo::current_info()->new_map_heap(_new_load_heap_size);
   // FIXME -- do crc check here
-  return (new_load_heap_buff != nullptr);
+  return (_new_load_heap_buff != nullptr);
 }
-
-static int _num_objs;
-static int _num_bytes;
-static int _num_refs = 0;
-static int _num_refs_relocated = 0;
-
-static int _num_quick_relocs = 0;
-static int _num_delay_relocs = 0;
-static int _num_dst_alloced = 0;
 
 class NewQuickLoader {
 public:
@@ -595,8 +587,8 @@ class NewQuickLoaderImpl : public StackObj {
 public:
   inline NewQuickLoaderImpl() {
     assert(COOPS == UseCompressedOops, "sanity");
-    _stream_bottom = (HeapWord*)new_load_heap_buff;
-    _stream_top    = _stream_bottom + new_load_heap_size;
+    _stream_bottom = (HeapWord*)_new_load_heap_buff;
+    _stream_top    = _stream_bottom + _new_load_heap_size;
     size_t reloc_table_len = pointer_delta(_stream_top, _stream_bottom, MinObjAlignmentInBytes);
     _reloc_table = NEW_RESOURCE_ARRAY(Reloc, reloc_table_len);
     memset((void*)_reloc_table, 0, sizeof(Reloc) * reloc_table_len);
@@ -637,7 +629,7 @@ public:
       assert(dumptime_oop_shift == 0 || dumptime_oop_shift == 3,
              "other values are not supproted by the C++ templates");
       base = (intptr_t)(FileMapInfo::current_info()->region_at(MetaspaceShared::hp)->mapping_offset() >>
-                        dumptime_oop_shift;
+                        dumptime_oop_shift);
     } else {
       base = (intptr_t)FileMapInfo::current_info()->heap_region_requested_address();
     }
@@ -712,14 +704,14 @@ public:
     return dst;
   }
 
-  inline void add_relocation(size_t index, narrowOop* ptr_location) {
+  inline void add_relocation(size_t index, narrowOop* ptr_location) { // compressed oops
     Dst* dst = get_relocation();
     dst->_narrowOop_addr = ptr_location;
     dst->_next = _reloc_table[index]._dst;
     _reloc_table[index]._dst = dst;
   }
 
-  inline void add_relocation(size_t index, oop* ptr_location) {
+  inline void add_relocation(size_t index, oop* ptr_location) { // uncompressed oops
     Dst* dst = get_relocation();
     dst->_oop_addr = ptr_location;
     dst->_next = _reloc_table[index]._dst;
@@ -771,226 +763,47 @@ void ArchiveHeapLoader::new_fixup_region(TRAPS) {
   log_info(cds)("new heap loading: start");
 
   ResourceMark rm;
-  jlong time_started;
-  jlong time_allocated;
+  jlong time_started = os::thread_cpu_time(THREAD);
   jlong time_done;
-  jlong time_disposed;
+  oop roots;
 
-  if (!NahlUseHashTable) {
-    oop roots;
-    time_started = os::thread_cpu_time(THREAD);
-
-    // The parameters are <UseCompressedOops, NahlRawAlloc, NahlNoAccessAPI>
-    if (UseCompressedOops) {
-      if (NahlRawAlloc) {
-        if (NahlUseAccessAPI) {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, true);
-        } else {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, false);
-        }
+  // The parameters are <UseCompressedOops, NahlRawAlloc, NahlNoAccessAPI>
+  if (UseCompressedOops) {
+    if (NahlRawAlloc) {
+      if (NahlUseAccessAPI) {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, true);
       } else {
-        if (NahlUseAccessAPI) {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, true);
-        } else {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, false);
-        }
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true, false);
       }
     } else {
-      if (NahlRawAlloc) {
-        if (NahlUseAccessAPI) {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, true);
-        } else {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, false);
-        }
+      if (NahlUseAccessAPI) {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, true);
       } else {
-        if (NahlUseAccessAPI) {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, true);
-        } else {
-          LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, false);
-        }
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false, false);
       }
     }
-    _is_loaded = true;
-    HeapShared::init_roots(roots);
-    log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
-    time_done = os::thread_cpu_time(THREAD);
-    log_info(cds, gc)("Dst alloced : " JLONG_FORMAT_W(20), jlong(_num_dst_alloced));
-    log_info(cds, gc)("Load Time   : " JLONG_FORMAT_W(20), (time_done - time_started));
-    return;
   } else {
-    NewLoadingTable table;
-    NewLoadingTableNarrowOop ntable;
-    HeapWord* stream_bottom = (HeapWord*)new_load_heap_buff;
-    HeapWord* stream_top    = stream_bottom + new_load_heap_size;
-
-    time_started = os::thread_cpu_time(THREAD);
-    newcode_runtime_allocate_objects(&table, &ntable, stream_bottom, stream_top, CHECK);
-    time_allocated = os::thread_cpu_time(THREAD);
-    log_info(cds)("new heap loading: relocating");
-    newcode_runtime_init_objects(&table, &ntable, stream_bottom, stream_top);
-    time_done = os::thread_cpu_time(THREAD);
-
-    _is_loaded = true;
-
-    address bot = (address)stream_bottom;
-    address stream_roots = bot + FileMapInfo::current_info()->heap_roots_offset();
-    oop* loaded_roots_p = (oop*)table.get((intptr_t)stream_roots);
-    assert(loaded_roots_p != nullptr, "must have roots");
-    assert(*loaded_roots_p != nullptr, "must have roots");
-    HeapShared::init_roots(*loaded_roots_p);
-
-    log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(*loaded_roots_p));
-  }
-
-  time_disposed = os::thread_cpu_time(THREAD);
-
-  log_info(cds, gc)("Num objs                    : " JLONG_FORMAT_W(20), (jlong)_num_objs);
-  log_info(cds, gc)("Num bytes                   : " JLONG_FORMAT_W(20), (jlong)_num_bytes);
-  log_info(cds, gc)("Per obj bytes               : " JLONG_FORMAT_W(20), (jlong)(_num_bytes / _num_objs));
-  log_info(cds, gc)("Num references (incl nulls) : " JLONG_FORMAT_W(20), (jlong)_num_refs);
-  log_info(cds, gc)("Num references relocated    : " JLONG_FORMAT_W(20), (jlong)_num_refs_relocated);
-  log_info(cds, gc)("Allocation Time             : " JLONG_FORMAT_W(20), (time_allocated - time_started));
-  log_info(cds, gc)("Relocation Time             : " JLONG_FORMAT_W(20), (time_done - time_allocated));
-  log_info(cds, gc)("Table(s) dispose Time       : " JLONG_FORMAT_W(20), (time_disposed - time_done));
-}
-
-void ArchiveHeapLoader::newcode_runtime_allocate_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
-                                                         HeapWord* stream_bottom, HeapWord* stream_top, TRAPS) {
-  address requested_addr = FileMapInfo::current_info()->heap_region_requested_address();
-
-  int n = 0, b = 0;
-  for (HeapWord* p = stream_bottom; p < stream_top; ) {
-    size_t s;
-    oop m = newcode_allocate_one_object(p, s, CHECK);
-
-    table->put((intptr_t)(p), cast_from_oop<intptr_t>(m), THREAD);
-    if (UseCompressedOops) {
-      size_t offset = p - stream_bottom;
-      oop requested_oop_addr = cast_to_oop(requested_addr + offset * HeapWordSize);
-      narrowOop no = CompressedOops::encode_not_null(requested_oop_addr);
-      ntable->put(no, cast_from_oop<intptr_t>(m), THREAD);
-    }
-
-    p += s;
-    n++;
-    b += s * HeapWordSize;
-  }
-
-  _num_objs = n;
-  _num_bytes = b;
-}
-
-inline oop ArchiveHeapLoader::newcode_allocate_one_object(HeapWord* stream, size_t& size, TRAPS) {
-  oop o = cast_to_oop(stream); // "original" from the stream
-  size = o->size();
-  oop m; // "materalized" in the heap
-
-  assert(!o->is_instanceRef(), "no such objects are archived");
-  assert(!o->is_stackChunk(), "no such objects are archived");
-
-  if (o->is_instance()) {
-    m =  Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
-    // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
-    // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
-  } else if (o->is_typeArray()) {
-    int len = static_cast<typeArrayOop>(o)->length();
-    m = TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-  } else {
-    assert(o->is_objArray(), "must be");
-    int len = static_cast<objArrayOop>(o)->length();
-    m = ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-  }
-
-  {
-    // Need to copy the archived hashcode as well, but keep the rest of the object in zeros.
-    HeapWord* src = cast_from_oop<HeapWord*>(o);
-    HeapWord* dst = cast_from_oop<HeapWord*>(m);
-    memcpy(dst, src, o->header_size() * HeapWordSize);
-  }
-
-  return m;
-}
-
-class ArchiveHeapLoader::NewCodeRuntimeRelocator: public BasicOopIterateClosure {
-  NewLoadingTable* _table;
-  NewLoadingTableNarrowOop* _ntable;
-  oop _src_obj;
-  oop _dst_obj;
-public:
-  NewCodeRuntimeRelocator(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
-                          oop src_obj, oop dst_obj) :
-    _table(table), _ntable(ntable),
-    _src_obj(src_obj), _dst_obj(dst_obj) {}
-
-  void do_oop(narrowOop* src_p) {
-    size_t field_offset = pointer_delta(address(src_p), cast_from_oop<address>(_src_obj), sizeof(char)); // FIXME
-    narrowOop* dst_p = cast_from_oop<narrowOop*>(_dst_obj) + field_offset / sizeof(narrowOop);
-    narrowOop old = *dst_p;
-    _num_refs ++;
-    if (old != narrowOop::null) {
-      _num_refs_relocated ++;
-      *dst_p = narrowOop::null; // set it to 0 to avoid confusing GC
-
-      oop* relocated_pointee_p = (oop*)(_ntable->get(old));
-      //tty->print_cr("Relocating 0x%08x", (int)old);
-      assert(relocated_pointee_p != nullptr, "must have pointee for 0x%08x", (int)old);
-      _dst_obj->obj_field_put((int)field_offset, *relocated_pointee_p);
+    if (NahlRawAlloc) {
+      if (NahlUseAccessAPI) {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, true);
+      } else {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true, false);
+      }
+    } else {
+      if (NahlUseAccessAPI) {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, true);
+      } else {
+        LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false, false);
+      }
     }
   }
-  void do_oop(oop *src_p) {
-    size_t field_offset = pointer_delta(address(src_p), cast_from_oop<address>(_src_obj), sizeof(char));
-    oop* dst_p = cast_from_oop<oop*>(_dst_obj) + field_offset / sizeof(oop);
-    oop old = *dst_p;
-    _num_refs ++;
-    if (old != nullptr) {
-      _num_refs_relocated ++;
-      *dst_p = nullptr; // set it to 0 to avoid confusing GC
-
-      size_t offset = cast_from_oop<size_t>(old) - (size_t)ArchiveHeapWriter::NOCOOPS_REQUESTED_BASE;
-      assert(offset < new_load_heap_size * HeapWordSize, "must be");
-      old = cast_to_oop(new_load_heap_buff + offset);
-
-      oop* relocated_pointee_p = (oop*)_table->get(cast_from_oop<intptr_t>(old));
-      //tty->print_cr("Relocating " INTPTR_FORMAT, p2i(old));
-
-      assert(relocated_pointee_p != nullptr, "must have pointee for " INTPTR_FORMAT, p2i(old));
-      _dst_obj->obj_field_put((int)field_offset, *relocated_pointee_p);
-    }
-  }
-};
-
-void ArchiveHeapLoader::newcode_runtime_init_objects(NewLoadingTable* table, NewLoadingTableNarrowOop* ntable,
-                                                     HeapWord* stream_bottom, HeapWord* stream_top) {
-  for (HeapWord* p = stream_bottom; p < stream_top; ) {
-    oop o = cast_to_oop(p);
-    oop* mptr = (oop*)table->get(cast_from_oop<intptr_t>(o));
-    assert(mptr != nullptr, "must be");
-    oop m = *mptr;
-
-    size_t s = o->size();
-    size_t cp_size = s - o->header_size();
-
-    if (cp_size > 0) {
-      HeapWord* src = cast_from_oop<HeapWord*>(o) + o->header_size();
-      HeapWord* dst = cast_from_oop<HeapWord*>(m) + o->header_size();
-      memcpy(dst, src, cp_size * HeapWordSize);
-    }
-
-    NewCodeRuntimeRelocator relocator(table, ntable, o, m);
-    o->oop_iterate(&relocator);
-    p += s;
-  }
-
-  for (HeapWord* p = stream_bottom; p < stream_top; ) {
-    oop o = cast_to_oop(p);
-    oop* mptr = (oop*)table->get(cast_from_oop<intptr_t>(o));
-    assert(mptr != nullptr, "must be");
-    oop m = *mptr;
-    size_t s1 = o->size();
-    size_t s2 = m->size();
-    assert(s1 == s2, "must be");
-    p += s1;
-  }
+  _is_loaded = true;
+  HeapShared::init_roots(roots);
+  log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
+  time_done = os::thread_cpu_time(THREAD);
+  log_info(cds, gc)("Delayed allocation records alloced: %d", _num_dst_alloced);
+  log_info(cds, gc)("Load Time: " JLONG_FORMAT, (time_done - time_started));
+  return;
 }
 
 #endif // INCLUDE_CDS_JAVA_HEAP
