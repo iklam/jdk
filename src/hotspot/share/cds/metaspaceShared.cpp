@@ -668,8 +668,9 @@ void MetaspaceShared::preload_and_dump() {
   } else {
     // On success, the VM_PopulateDumpSharedSpace op should have
     // exited the VM.
-    // VM will no longer exit early
-    //ShouldNotReachHere();
+    if (!UseNewCode) {
+      ShouldNotReachHere();
+    }
   }
 }
 

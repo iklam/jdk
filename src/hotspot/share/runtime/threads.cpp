@@ -815,8 +815,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   if (DumpSharedSpaces) {
     MetaspaceShared::preload_and_dump();
-    // Should no longer exit
-    //ShouldNotReachHere();
+    if (!UseNewCode) {
+      ShouldNotReachHere();
+    }
     *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
   }
   // if (UseNewCode) {

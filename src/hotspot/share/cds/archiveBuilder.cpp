@@ -278,18 +278,14 @@ int ArchiveBuilder::compare_symbols_by_address(Symbol** a, Symbol** b) {
 
 void ArchiveBuilder::sort_symbols_and_fix_hash() {
   log_info(cds)("Sorting symbols and fixing identity hash ... ");
-  //os::init_random(0x12345678);
+  os::init_random(0x12345678);
   _symbols->sort(compare_symbols_by_address);
-  // for (int i = 0; i < _symbols->length(); i++) {
-  //   assert(_symbols->at(i)->is_permanent(), "archived symbols must be permanent");
-  //   if (UseNewCode) {
-  //     //SourceObjInfo* src_info = _src_obj_table.get();
-  //     ((Symbol*)get_buffered_addr((address)_symbols->at(i)))->update_identity_hash();
-  //     //((Symbol*)(src_info->buffered_addr()))->update_identity_hash();
-  //   } else {
-  //     _symbols->at(i)->update_identity_hash();
-  //   }
-  // }
+  for (int i = 0; i < _symbols->length(); i++) {
+     assert(_symbols->at(i)->is_permanent(), "archived symbols must be permanent");
+     if (!UseNewCode) {
+       _symbols->at(i)->update_identity_hash();
+     }
+  }
 }
 
 int ArchiveBuilder::compare_klass_by_name(Klass** a, Klass** b) {
@@ -619,7 +615,7 @@ void ArchiveBuilder::dump_ro_metadata() {
 
 void ArchiveBuilder::make_shallow_copies(DumpRegion *dump_region,
                                          const ArchiveBuilder::SourceObjList* src_objs) {
-  os::init_random(0x12345678);
+  //os::init_random(0x12345678);
   for (int i = 0; i < src_objs->objs()->length(); i++) {
     make_shallow_copy(dump_region, src_objs->objs()->at(i));
   }
