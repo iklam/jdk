@@ -153,6 +153,10 @@ ObjArrayKlass::ObjArrayKlass(int n, Klass* element_klass, Symbol* name) : ArrayK
   set_layout_helper(array_layout_helper(T_OBJECT));
   assert(is_array_klass(), "sanity");
   assert(is_objArray_klass(), "sanity");
+  if (UseNewCode) {
+    ResourceMark rm;
+    tty->print_cr("Allocating " INTPTR_FORMAT " %s", p2i(this), name->as_C_string());
+  }
 }
 
 size_t ObjArrayKlass::oop_size(oop obj) const {
@@ -306,7 +310,32 @@ void ObjArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d,
     do_copy(s, src_offset, d, dst_offset, length, CHECK);
   }
 }
+/* Test case
 
+
+import java.lang.reflect.Array;
+
+public class ArrayTest {
+    public static void main(String args[]) {
+        double array[] = {1, 2, 3};
+        Object x = Array.newInstance(array.getClass(), 10);
+        Array.set(x, 1, array);
+        Object y = Array.get(x, 1);
+        System.out.println(x);
+        System.out.println(x.getClass());
+        System.out.println(Array.getLength(x));
+        System.out.println(y == array);
+
+
+
+        Object a = new int[1][2][3][4];
+        Object b = Array.newInstance(int[][][].class, 4);
+        System.out.println(a.getClass() == b.getClass());
+    }
+}
+
+
+*/
 
 Klass* ObjArrayKlass::array_klass(int n, TRAPS) {
 
@@ -339,7 +368,27 @@ Klass* ObjArrayKlass::array_klass(int n, TRAPS) {
 
   ObjArrayKlass *ak = ObjArrayKlass::cast(higher_dimension());
   THREAD->check_possible_safepoint();
-  return ak->array_klass(n, THREAD);
+  Klass* result = ak->array_klass(n, THREAD);
+  if (name()->ends_with("[I") && UseNewCode) {
+    ResourceMark rm;
+    tty->print_cr("Looking for dimension %d from %s", n, name()->as_C_string());
+    tty->print_cr("  Found: " INTPTR_FORMAT " %s", p2i(result), result->name()->as_C_string());
+    ArrayKlass* ak = ArrayKlass::cast(Universe::typeArrayKlassObj(T_INT));
+    while (ak != nullptr) {
+      tty->print("  dimension = %d " INTPTR_FORMAT, ak->dimension(), p2i(ak));
+      if (ak == result) {
+        tty->print(" **** found");
+      }
+      tty->cr();
+      if (ak->higher_dimension() != nullptr) {
+        ak = ArrayKlass::cast(ak->higher_dimension());
+      } else {
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 Klass* ObjArrayKlass::array_klass_or_null(int n) {
