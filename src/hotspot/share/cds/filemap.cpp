@@ -1942,27 +1942,8 @@ size_t FileMapInfo::readonly_total() {
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
-MemRegion FileMapInfo::_mapped_heap_memregion;
-
 bool FileMapInfo::has_heap_region() {
   return (region_at(MetaspaceShared::hp)->used() > 0);
-}
-
-// Returns the address range of the archived heap region computed using the
-// current oop encoding mode. This range may be different than the one seen at
-// dump time due to encoding mode differences. The result is used in determining
-// if/how these regions should be relocated at run time.
-MemRegion FileMapInfo::get_heap_region_requested_range() {
-  FileMapRegion* r = region_at(MetaspaceShared::hp);
-  size_t size = r->used();
-  assert(size > 0, "must have non-empty heap region");
-
-  address start = heap_region_requested_address();
-  address end = start + size;
-  log_info(cds)("Requested heap region [" INTPTR_FORMAT " - " INTPTR_FORMAT "] = "  SIZE_FORMAT_W(8) " bytes",
-                p2i(start), p2i(end), size);
-
-  return MemRegion((HeapWord*)start, (HeapWord*)end);
 }
 
 void FileMapInfo::map_or_load_heap_region() {
@@ -2083,45 +2064,6 @@ char* FileMapInfo::new_map_heap(size_t& size) {
                               nullptr, byte_size, /*read_only*/false, /*allow_exec*/false);
   size = heap_word_size(byte_size);
   return base;
-}
-
-narrowOop FileMapInfo::encoded_heap_region_dumptime_address() {
-  assert(UseSharedSpaces, "runtime only");
-  assert(UseCompressedOops, "sanity");
-  FileMapRegion* r = region_at(MetaspaceShared::hp);
-  return CompressedOops::narrow_oop_cast(r->mapping_offset() >> narrow_oop_shift());
-}
-
-void FileMapInfo::patch_heap_embedded_pointers() {
-  if (!ArchiveHeapLoader::is_mapped() || !_heap_pointers_need_patching) {
-    return;
-  }
-
-  char* bitmap_base = map_bitmap_region();
-  assert(bitmap_base != nullptr, "must have already been mapped");
-
-  FileMapRegion* r = region_at(MetaspaceShared::hp);
-  ArchiveHeapLoader::patch_embedded_pointers(
-      this, _mapped_heap_memregion,
-      (address)(region_at(MetaspaceShared::bm)->mapped_base()) + r->oopmap_offset(),
-      r->oopmap_size_in_bits());
-}
-
-void FileMapInfo::fixup_mapped_heap_region() {
-  if (ArchiveHeapLoader::is_mapped()) {
-    assert(!_mapped_heap_memregion.is_empty(), "sanity");
-
-    // Populate the archive regions' G1BlockOffsetTableParts. That ensures
-    // fast G1BlockOffsetTablePart::block_start operations for any given address
-    // within the archive regions when trying to find start of an object
-    // (e.g. during card table scanning).
-    G1CollectedHeap::heap()->populate_archive_regions_bot_part(_mapped_heap_memregion);
-  }
-}
-
-// dealloc the archive regions from java heap
-void FileMapInfo::dealloc_heap_region() {
-  G1CollectedHeap::heap()->dealloc_archive_regions(_mapped_heap_memregion);
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 

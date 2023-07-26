@@ -1456,13 +1456,10 @@ void MetaspaceShared::initialize_shared_spaces() {
   // with the archived ones, so it must be done after all encodings are determined.
   static_mapinfo->map_or_load_heap_region();
 
-  //CDS_JAVA_HEAP_ONLY(Universe::update_archived_basic_type_mirrors());
+  CDS_JAVA_HEAP_ONLY(Universe::update_archived_basic_type_mirrors());
 
-  // Close the mapinfo file
-  if (!NewArchiveHeapLoading) {
-    static_mapinfo->close();
-    static_mapinfo->unmap_region(MetaspaceShared::bm);
-  }
+  static_mapinfo->close();
+  static_mapinfo->unmap_region(MetaspaceShared::bm);
 
   FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_info();
   if (dynamic_mapinfo != nullptr) {

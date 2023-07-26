@@ -51,11 +51,7 @@ public:
 
   // Can this VM map archived heap region? Currently only G1+compressed{oops,cp}
   static bool can_map() {
-    if (NewArchiveHeapLoading) {
-      return false;
-    }
-    CDS_JAVA_HEAP_ONLY(return (UseG1GC && UseCompressedClassPointers);)
-    NOT_CDS_JAVA_HEAP(return false;)
+    return false;
   }
 
   // Can this VM load the objects from archived heap region into the heap at start-up?
