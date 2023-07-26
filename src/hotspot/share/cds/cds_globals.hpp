@@ -67,11 +67,11 @@
   product(bool, AllowArchivingWithJavaAgent, false, DIAGNOSTIC,             \
           "Allow Java agent to be run with CDS dumping")                    \
                                                                             \
-  product(bool, NewArchiveHeapLoading, false,                               \
+  product(bool, NewArchiveHeapLoading, true,                                \
           "(Investigation) Load each object in the archived heap "          \
           "individually")                                                   \
                                                                             \
-  product(bool, NahlRawAlloc, true,                                         \
+  product(bool, NahlRawAlloc, false,                                        \
           "Use CollectedHeap::mem_allocate() to allocate uninited heap mem")\
                                                                             \
   develop(ccstr, ArchiveHeapTestClass, nullptr,                             \

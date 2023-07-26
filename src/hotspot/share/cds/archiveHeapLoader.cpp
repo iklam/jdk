@@ -81,23 +81,30 @@ void ArchiveHeapLoader::init_narrow_oop_decoding(address base, int shift) {
   _narrow_oop_shift = shift;
 }
 
+static bool fixed = 0;
 void ArchiveHeapLoader::fixup_region() {
+  if (fixed) {
+    return;
+  }
   FileMapInfo* mapinfo = FileMapInfo::current_info();
   if (is_mapped()) {
     mapinfo->fixup_mapped_heap_region();
   } else if (NewArchiveHeapLoading) {
-    JavaThread* THREAD = JavaThread::current();
-    new_fixup_region(THREAD);
-    if (HAS_PENDING_EXCEPTION) {
-      // We cannot continue, as some of the materialized objects will have unrelocated
-      // oop pointers. There's no point trying to recover. The heap is too small to do
-      // anything anyway.
-      vm_exit_during_initialization("Cannot load archived heap. "
-                                    "Initial heap size too small.");
+    if (!fixed) {
+      JavaThread* THREAD = JavaThread::current();
+      new_fixup_region(THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        // We cannot continue, as some of the materialized objects will have unrelocated
+        // oop pointers. There's no point trying to recover. The heap is too small to do
+        // anything anyway.
+        vm_exit_during_initialization("Cannot load archived heap. "
+                                      "Initial heap size too small.");
 
-    }
-    if (!_is_loaded) {
-      MetaspaceShared::disable_full_module_graph();
+      }
+      if (!_is_loaded) {
+        MetaspaceShared::disable_full_module_graph();
+      }
+      fixed = 1;
     }
   } else if (_loading_failed) {
     fill_failed_loaded_heap();
@@ -483,6 +490,9 @@ static char* _new_load_heap_buff;
 bool ArchiveHeapLoader::new_load_heap_region(FileMapInfo* mapinfo) {
   _new_load_heap_buff = FileMapInfo::current_info()->new_map_heap(_new_load_heap_size);
   // FIXME -- do crc check here
+
+  ArchiveHeapLoader::fixup_region();
+
   return (_new_load_heap_buff != nullptr);
 }
 

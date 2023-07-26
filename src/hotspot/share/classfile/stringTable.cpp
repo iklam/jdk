@@ -237,6 +237,8 @@ void StringTable::create_table() {
 #if INCLUDE_CDS_JAVA_HEAP
   if (ArchiveHeapLoader::is_in_use()) {
     _shared_strings_array = OopHandle(Universe::vm_global(), HeapShared::get_root(_shared_strings_array_root_index));
+  } else {
+    _shared_table.reset();
   }
 #endif
 }
@@ -928,8 +930,6 @@ void StringTable::serialize_shared_table_header(SerializeClosure* soc) {
 
   if (soc->writing()) {
     // Sanity. Make sure we don't use the shared table at dump time
-    _shared_table.reset();
-  } else if (!ArchiveHeapLoader::is_in_use()) {
     _shared_table.reset();
   }
 
