@@ -68,10 +68,6 @@
 #include "utilities/classpathStream.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/ostream.hpp"
-#if INCLUDE_G1GC
-#include "gc/g1/g1CollectedHeap.hpp"
-#include "gc/g1/heapRegion.hpp"
-#endif
 
 # include <sys/stat.h>
 # include <errno.h>
@@ -1946,10 +1942,10 @@ bool FileMapInfo::has_heap_region() {
   return (region_at(MetaspaceShared::hp)->used() > 0);
 }
 
-void FileMapInfo::map_or_load_heap_region() {
+void FileMapInfo::load_heap_region() {
   bool success = false;
 
-  if (can_use_heap_region()) {
+  if (can_load_heap_region()) {
     success = ArchiveHeapLoader::load_heap_region(this);
     if (!success) {
       log_info(cds)("CDS archive heap loading failed");
@@ -1961,7 +1957,7 @@ void FileMapInfo::map_or_load_heap_region() {
   }
 }
 
-bool FileMapInfo::can_use_heap_region() {
+bool FileMapInfo::can_load_heap_region() {
   if (!has_heap_region()) {
     return false;
   }
@@ -1991,17 +1987,11 @@ bool FileMapInfo::can_use_heap_region() {
                 archive_narrow_klass_shift);
   log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
                 narrow_oop_mode(), p2i(narrow_oop_base()), narrow_oop_shift());
-  log_info(cds)("The current max heap size = " SIZE_FORMAT "M, NewSize = " SIZE_FORMAT "K",
-                MaxHeapSize/M, NewSize/K);
+  log_info(cds)("The current max heap size = " SIZE_FORMAT "M", MaxHeapSize/M);
   log_info(cds)("    narrow_klass_base = " PTR_FORMAT ", narrow_klass_shift = %d",
                 p2i(CompressedKlassPointers::base()), CompressedKlassPointers::shift());
   log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
                 CompressedOops::mode(), p2i(CompressedOops::base()), CompressedOops::shift());
-  log_info(cds)("    heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                UseCompressedOops ? p2i(CompressedOops::begin()) :
-                                    UseG1GC ? p2i((address)G1CollectedHeap::heap()->reserved().start()) : 0L,
-                UseCompressedOops ? p2i(CompressedOops::end()) :
-                                    UseG1GC ? p2i((address)G1CollectedHeap::heap()->reserved().end()) : 0L);
 
   assert(archive_narrow_klass_base == CompressedKlassPointers::base(), "Unexpected encoding base encountered "
          "(" PTR_FORMAT ", expected " PTR_FORMAT ")", p2i(CompressedKlassPointers::base()), p2i(archive_narrow_klass_base));
@@ -2009,18 +1999,6 @@ bool FileMapInfo::can_use_heap_region() {
          "(%d, expected %d)", CompressedKlassPointers::shift(), archive_narrow_klass_shift);
 
   return true;
-}
-
-// The actual address of this region during dump time.
-address FileMapInfo::heap_region_dumptime_address() {
-  FileMapRegion* r = region_at(MetaspaceShared::hp);
-  assert(UseSharedSpaces, "runtime only");
-  assert(is_aligned(r->mapping_offset(), sizeof(HeapWord)), "must be");
-  if (UseCompressedOops) {
-    return /*dumptime*/ narrow_oop_base() + r->mapping_offset();
-  } else {
-    return heap_region_requested_address();
-  }
 }
 
 // The address where this region can be mapped into the runtime heap without

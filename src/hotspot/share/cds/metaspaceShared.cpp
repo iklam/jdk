@@ -1451,10 +1451,7 @@ void MetaspaceShared::initialize_shared_spaces() {
   serialize(&rc);
 
   // Heap initialization can be done only after vtables are initialized by ReadClosure.
-
-  // map_or_load_heap_region() compares the current narrow oop and klass encodings
-  // with the archived ones, so it must be done after all encodings are determined.
-  static_mapinfo->map_or_load_heap_region();
+  static_mapinfo->load_heap_region();
 
   CDS_JAVA_HEAP_ONLY(Universe::update_archived_basic_type_mirrors());
 
@@ -1541,7 +1538,7 @@ bool MetaspaceShared::use_full_module_graph() {
   if (DumpSharedSpaces) {
     result &= HeapShared::can_write();
   } else if (UseSharedSpaces) {
-    result &= ArchiveHeapLoader::can_use();
+    result &= ArchiveHeapLoader::can_load();
   } else {
     result = false;
   }

@@ -79,7 +79,7 @@ OopHandle StringTable::_shared_strings_array;
 int StringTable::_shared_strings_array_root_index;
 
 inline oop StringTable::read_string_from_compact_hashtable(address base_address, u4 index) {
-  assert(ArchiveHeapLoader::is_in_use(), "sanity");
+  assert(ArchiveHeapLoader::is_loaded(), "sanity");
   objArrayOop array = (objArrayOop)(_shared_strings_array.resolve());
   oop s;
 
@@ -235,7 +235,7 @@ void StringTable::create_table() {
   _oop_storage->register_num_dead_callback(&gc_notification);
 
 #if INCLUDE_CDS_JAVA_HEAP
-  if (ArchiveHeapLoader::is_in_use()) {
+  if (ArchiveHeapLoader::is_loaded()) {
     _shared_strings_array = OopHandle(Universe::vm_global(), HeapShared::get_root(_shared_strings_array_root_index));
   } else {
     _shared_table.reset();

@@ -40,26 +40,7 @@
 
 #if INCLUDE_CDS_JAVA_HEAP
 
-bool ArchiveHeapLoader::_is_mapped = false;
 bool ArchiveHeapLoader::_is_loaded = false;
-
-bool    ArchiveHeapLoader::_narrow_oop_base_initialized = false;
-address ArchiveHeapLoader::_narrow_oop_base;
-int     ArchiveHeapLoader::_narrow_oop_shift;
-
-// Support for loaded heap.
-uintptr_t ArchiveHeapLoader::_loaded_heap_bottom = 0;
-uintptr_t ArchiveHeapLoader::_loaded_heap_top = 0;
-uintptr_t ArchiveHeapLoader::_dumptime_base = UINTPTR_MAX;
-uintptr_t ArchiveHeapLoader::_dumptime_top = 0;
-intx ArchiveHeapLoader::_runtime_offset = 0;
-bool ArchiveHeapLoader::_loading_failed = false;
-
-// Support for mapped heap.
-uintptr_t ArchiveHeapLoader::_mapped_heap_bottom = 0;
-bool      ArchiveHeapLoader::_mapped_heap_relocation_initialized = false;
-ptrdiff_t ArchiveHeapLoader::_mapped_heap_delta = 0;
-
 
 void ArchiveHeapLoader::fixup_region() {
   JavaThread* THREAD = JavaThread::current();
@@ -76,7 +57,7 @@ void ArchiveHeapLoader::fixup_region() {
     MetaspaceShared::disable_full_module_graph();
   }
 
-  if (is_in_use()) {
+  if (is_loaded()) {
     if (!MetaspaceShared::use_full_module_graph()) {
       // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
       ClassLoaderDataShared::clear_archived_oops();
@@ -85,57 +66,13 @@ void ArchiveHeapLoader::fixup_region() {
 }
 
 bool ArchiveHeapLoader::can_load() {
-  return true;
+  // FIXME -- enable can_load_archived_objects() for ZGC and Shenandoah after testing.
+  // Eventually loading will be supporter on all GCs and this API will be removed.
+  return Universe::heap()->can_load_archived_objects();
 }
 
 bool ArchiveHeapLoader::load_heap_region(FileMapInfo* mapinfo) {
   return new_load_heap_region(mapinfo);
-}
-
-class VerifyLoadedHeapEmbeddedPointers: public BasicOopIterateClosure {
-  ResourceHashtable<uintptr_t, bool>* _table;
-
- public:
-  VerifyLoadedHeapEmbeddedPointers(ResourceHashtable<uintptr_t, bool>* table) : _table(table) {}
-
-  virtual void do_oop(narrowOop* p) {
-    // This should be called before the loaded region is modified, so all the embedded pointers
-    // must be null, or must point to a valid object in the loaded region.
-    narrowOop v = *p;
-    if (!CompressedOops::is_null(v)) {
-      oop o = CompressedOops::decode_not_null(v);
-      uintptr_t u = cast_from_oop<uintptr_t>(o);
-      ArchiveHeapLoader::assert_in_loaded_heap(u);
-      guarantee(_table->contains(u), "must point to beginning of object in loaded archived region");
-    }
-  }
-  virtual void do_oop(oop* p) {
-    // Uncompressed oops are not supported by loaded heaps.
-    Unimplemented();
-  }
-};
-
-// TODO Call me!
-void ArchiveHeapLoader::verify_loaded_heap() {
-  log_info(cds, heap)("Verify all oops and pointers in loaded heap");
-
-  ResourceMark rm;
-  ResourceHashtable<uintptr_t, bool> table;
-  VerifyLoadedHeapEmbeddedPointers verifier(&table);
-  HeapWord* bottom = (HeapWord*)_loaded_heap_bottom;
-  HeapWord* top    = (HeapWord*)_loaded_heap_top;
-
-  for (HeapWord* p = bottom; p < top; ) {
-    oop o = cast_to_oop(p);
-    table.put(cast_from_oop<uintptr_t>(o), true);
-    p += o->size();
-  }
-
-  for (HeapWord* p = bottom; p < top; ) {
-    oop o = cast_to_oop(p);
-    o->oop_iterate(&verifier);
-    p += o->size();
-  }
 }
 
 static size_t _new_load_heap_size; // total size of heap region, in number of HeapWords

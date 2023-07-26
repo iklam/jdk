@@ -30,33 +30,4 @@
 #include "oops/compressedOops.inline.hpp"
 #include "utilities/align.hpp"
 
-#if INCLUDE_CDS_JAVA_HEAP
-
-template<bool IS_MAPPED>
-inline oop ArchiveHeapLoader::decode_from_archive_impl(narrowOop v) {
-  assert(!CompressedOops::is_null(v), "narrow oop value can never be zero");
-  assert(_narrow_oop_base_initialized, "relocation information must have been initialized");
-  uintptr_t p = ((uintptr_t)_narrow_oop_base) + ((uintptr_t)v << _narrow_oop_shift);
-  if (IS_MAPPED) {
-    assert(_dumptime_base == UINTPTR_MAX, "must be");
-  } else if (p >= _dumptime_base) {
-    assert(p < _dumptime_top, "must be");
-    p += _runtime_offset;
-  }
-
-  oop result = cast_to_oop((uintptr_t)p);
-  assert(is_object_aligned(result), "address not aligned: " INTPTR_FORMAT, p2i((void*) result));
-  return result;
-}
-
-inline oop ArchiveHeapLoader::decode_from_archive(narrowOop v) {
-  return decode_from_archive_impl<false>(v);
-}
-
-inline oop ArchiveHeapLoader::decode_from_mapped_archive(narrowOop v) {
-  return decode_from_archive_impl<true>(v);
-}
-
-#endif
-
 #endif // SHARE_CDS_ARCHIVEHEAPLOADER_INLINE_HPP
