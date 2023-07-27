@@ -24,7 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
-#include "cds/archiveHeapLoader.inline.hpp"
+#include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
 #include "cds/filemap.hpp"
 #include "cds/heapShared.hpp"

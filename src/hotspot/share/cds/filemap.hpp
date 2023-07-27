@@ -552,6 +552,7 @@ public:
   bool  can_load_heap_region();
   MapArchiveResult map_region(int i, intx addr_delta, char* mapped_base_address, ReservedSpace rs);
   bool  relocate_pointers_in_core_regions(intx addr_delta);
+  char* map_noncore_region(int region_index, bool read_only);
 
 public:
   address heap_region_requested_address() NOT_CDS_JAVA_HEAP_RETURN_(nullptr);

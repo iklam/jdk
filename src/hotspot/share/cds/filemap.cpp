@@ -24,7 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveBuilder.hpp"
-#include "cds/archiveHeapLoader.inline.hpp"
+#include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.inline.hpp"
 #include "cds/cds_globals.hpp"
@@ -1839,25 +1839,26 @@ MapArchiveResult FileMapInfo::map_region(int i, intx addr_delta, char* mapped_ba
 }
 
 // The return value is the location of the archive relocation bitmap.
-char* FileMapInfo::map_bitmap_region() {
-  FileMapRegion* r = region_at(MetaspaceShared::bm);
+char* FileMapInfo::map_noncore_region(int region_index, bool read_only) {
+  FileMapRegion* r = region_at(region_index);
   if (r->mapped_base() != nullptr) {
     return r->mapped_base();
   }
-  bool read_only = true, allow_exec = false;
+  const char* region_name = shared_region_name[region_index];
+  bool allow_exec = false;
   char* requested_addr = nullptr; // allow OS to pick any location
-  char* bitmap_base = os::map_memory(_fd, _full_path, r->file_offset(),
+  char* mapped_base = os::map_memory(_fd, _full_path, r->file_offset(),
                                      requested_addr, r->used_aligned(), read_only, allow_exec, mtClassShared);
-  if (bitmap_base == nullptr) {
-    log_info(cds)("failed to map relocation bitmap");
+  if (mapped_base == nullptr) {
+    log_info(cds)("failed to map %s region", region_name);
     return nullptr;
   }
 
-  r->set_mapped_base(bitmap_base);
+  r->set_mapped_base(mapped_base);
   if (VerifySharedSpaces && !r->check_region_crc()) {
-    log_error(cds)("relocation bitmap CRC error");
-    if (!os::unmap_memory(bitmap_base, r->used_aligned())) {
-      fatal("os::unmap_memory of relocation bitmap failed");
+    log_error(cds)("%s region CRC error", region_name);
+    if (!os::unmap_memory(mapped_base, r->used_aligned())) {
+      fatal("os::unmap_memory of %s region failed", region_name);
     }
     return nullptr;
   }
@@ -1865,10 +1866,15 @@ char* FileMapInfo::map_bitmap_region() {
   r->set_mapped_from_file(true);
   log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)",
                 is_static() ? "static " : "dynamic",
-                MetaspaceShared::bm, p2i(r->mapped_base()), p2i(r->mapped_end()),
-                shared_region_name[MetaspaceShared::bm]);
-  return bitmap_base;
+                region_index, p2i(r->mapped_base()), p2i(r->mapped_end()),
+                region_name);
+  return mapped_base;
 }
+
+char* FileMapInfo::map_bitmap_region() {
+  return map_noncore_region(MetaspaceShared::bm, true);
+}
+
 
 // This is called when we cannot map the archive at the requested[ base address (usually 0x800000000).
 // We relocate all pointers in the 2 core regions (ro, rw).
@@ -1946,9 +1952,11 @@ void FileMapInfo::load_heap_region() {
   bool success = false;
 
   if (can_load_heap_region()) {
-    success = ArchiveHeapLoader::load_heap_region(this);
-    if (!success) {
-      log_info(cds)("CDS archive heap loading failed");
+    int hp = MetaspaceShared::hp;
+    if (map_noncore_region(hp, /*readonly=*/false) != nullptr) {
+      FileMapRegion* r = region_at(hp);
+      success = ArchiveHeapLoader::load_heap_region(r->mapped_base(), r->used());
+      unmap_region(hp);
     }
   }
 
@@ -1959,6 +1967,9 @@ void FileMapInfo::load_heap_region() {
 
 bool FileMapInfo::can_load_heap_region() {
   if (!has_heap_region()) {
+    return false;
+  }
+  if (!ArchiveHeapLoader::can_load()) {
     return false;
   }
   if (JvmtiExport::should_post_class_file_load_hook() && JvmtiExport::has_early_class_hook_env()) {
@@ -1985,13 +1996,17 @@ bool FileMapInfo::can_load_heap_region() {
                 max_heap_size()/M);
   log_info(cds)("    narrow_klass_base at mapping start address, narrow_klass_shift = %d",
                 archive_narrow_klass_shift);
-  log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
-                narrow_oop_mode(), p2i(narrow_oop_base()), narrow_oop_shift());
+  if (UseCompressedOops) {
+    log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
+                  narrow_oop_mode(), p2i(narrow_oop_base()), narrow_oop_shift());
+  }
   log_info(cds)("The current max heap size = " SIZE_FORMAT "M", MaxHeapSize/M);
   log_info(cds)("    narrow_klass_base = " PTR_FORMAT ", narrow_klass_shift = %d",
                 p2i(CompressedKlassPointers::base()), CompressedKlassPointers::shift());
-  log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
-                CompressedOops::mode(), p2i(CompressedOops::base()), CompressedOops::shift());
+  if (UseCompressedOops) {
+    log_info(cds)("    narrow_oop_mode = %d, narrow_oop_base = " PTR_FORMAT ", narrow_oop_shift = %d",
+                  CompressedOops::mode(), p2i(CompressedOops::base()), CompressedOops::shift());
+  }
 
   assert(archive_narrow_klass_base == CompressedKlassPointers::base(), "Unexpected encoding base encountered "
          "(" PTR_FORMAT ", expected " PTR_FORMAT ")", p2i(CompressedKlassPointers::base()), p2i(archive_narrow_klass_base));
@@ -2031,18 +2046,6 @@ address FileMapInfo::heap_region_requested_address() {
   }
 }
 
-char* FileMapInfo::new_map_heap(size_t& size) {
-  FileMapRegion* r = region_at(MetaspaceShared::hp);
-  size_t byte_size = r->used();
-  if (byte_size == 0) {
-    return nullptr; // no archived java heap data
-  }
-
-  char* base = os::map_memory(_fd, _full_path, r->file_offset(),
-                              nullptr, byte_size, /*read_only*/false, /*allow_exec*/false);
-  size = heap_word_size(byte_size);
-  return base;
-}
 #endif // INCLUDE_CDS_JAVA_HEAP
 
 void FileMapInfo::unmap_regions(int regions[], int num_regions) {

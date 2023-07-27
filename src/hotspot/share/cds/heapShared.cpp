@@ -60,9 +60,6 @@
 #include "runtime/safepointVerifiers.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/copy.hpp"
-#if INCLUDE_G1GC
-#include "gc/g1/g1CollectedHeap.hpp"
-#endif
 
 #if INCLUDE_CDS_JAVA_HEAP
 
@@ -536,11 +533,6 @@ void HeapShared::archive_objects(ArchiveHeapInfo *heap_info) {
     // Cache for recording where the archived objects are copied to
     create_archived_object_cache();
 
-    log_info(cds)("Heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                   UseCompressedOops ? p2i(CompressedOops::begin()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().start()),
-                   UseCompressedOops ? p2i(CompressedOops::end()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().end()));
     copy_objects();
 
     CDSHeapVerifier::verify();

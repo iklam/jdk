@@ -25,19 +25,12 @@
 #ifndef SHARE_CDS_ARCHIVEHEAPLOADER_HPP
 #define SHARE_CDS_ARCHIVEHEAPLOADER_HPP
 
-#include "cds/filemap.hpp"
-#include "cds/cds_globals.hpp"
-#include "gc/shared/gc_globals.hpp"
 #include "memory/allocation.hpp"
 #include "memory/allStatic.hpp"
-#include "memory/memRegion.hpp"
-#include "oops/oopsHierarchy.hpp"
-#include "runtime/globals.hpp"
-#include "utilities/bitMap.hpp"
+#include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
 
-class  FileMapInfo;
-struct LoadedArchiveHeapRegion;
+class FileMapInfo;
 
 class ArchiveHeapLoader : AllStatic {
 public:
@@ -49,17 +42,12 @@ public:
     NOT_CDS_JAVA_HEAP(return false;)
   }
 
-  static void fixup_region() NOT_CDS_JAVA_HEAP_RETURN;
-
 #if INCLUDE_CDS_JAVA_HEAP
+
 private:
   static bool _is_loaded;
-
-  static void new_fixup_region(TRAPS);
 public:
-
-  static bool load_heap_region(FileMapInfo* mapinfo);
-  static bool new_load_heap_region(FileMapInfo* mapinfo);
+  static bool load_heap_region(char* stream, size_t bytesize);
 
 #endif // INCLUDE_CDS_JAVA_HEAP
 

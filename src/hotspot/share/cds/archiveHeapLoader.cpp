@@ -23,89 +23,57 @@
  */
 
 #include "precompiled.hpp"
-#include "cds/archiveHeapLoader.inline.hpp"
-#include "cds/archiveHeapWriter.hpp"
+#include "cds/filemap.hpp"
+#include "cds/archiveHeapLoader.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderDataShared.hpp"
-#include "classfile/systemDictionaryShared.hpp"
 #include "gc/shared/collectedHeap.inline.hpp"
 #include "logging/log.hpp"
 #include "runtime/java.hpp"
 #include "memory/iterator.inline.hpp"
-#include "memory/resourceArea.hpp"
-#include "memory/universe.hpp"
 #include "utilities/bitMap.inline.hpp"
-#include "utilities/copy.hpp"
 
 #if INCLUDE_CDS_JAVA_HEAP
-
 bool ArchiveHeapLoader::_is_loaded = false;
 
-void ArchiveHeapLoader::fixup_region() {
-  JavaThread* THREAD = JavaThread::current();
-  new_fixup_region(THREAD);
-  if (HAS_PENDING_EXCEPTION) {
-    // We cannot continue, as some of the materialized objects will have unrelocated
-    // oop pointers. There's no point trying to recover. The heap is too small to do
-    // anything anyway.
-    vm_exit_during_initialization("Cannot load archived heap. "
-                                  "Initial heap size too small.");
-
-  }
-  if (!_is_loaded) {
-    MetaspaceShared::disable_full_module_graph();
-  }
-
-  if (is_loaded()) {
-    if (!MetaspaceShared::use_full_module_graph()) {
-      // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
-      ClassLoaderDataShared::clear_archived_oops();
-    }
-  }
-}
-
 bool ArchiveHeapLoader::can_load() {
-  // FIXME -- enable can_load_archived_objects() for ZGC and Shenandoah after testing.
+  // TODO -- enable can_load_archived_objects() for ZGC and Shenandoah after testing.
   // Eventually loading will be supporter on all GCs and this API will be removed.
   return Universe::heap()->can_load_archived_objects();
-}
-
-bool ArchiveHeapLoader::load_heap_region(FileMapInfo* mapinfo) {
-  return new_load_heap_region(mapinfo);
 }
 
 static size_t _new_load_heap_size; // total size of heap region, in number of HeapWords
 static char* _new_load_heap_buff;
 
-bool ArchiveHeapLoader::new_load_heap_region(FileMapInfo* mapinfo) {
-  _new_load_heap_buff = FileMapInfo::current_info()->new_map_heap(_new_load_heap_size);
-  // FIXME -- do crc check here
-
-  ArchiveHeapLoader::fixup_region();
-
-  return (_new_load_heap_buff != nullptr);
-}
-
-class NewQuickLoader {
-public:
-  static HeapWord* mem_allocate_raw(size_t size) {
-    bool gc_overhead_limit_was_exceeded;
-    HeapWord* hw = Universe::heap()->mem_allocate(size, &gc_overhead_limit_was_exceeded);
-    assert(hw != nullptr, "must not fail");
-    return hw;
-  }
-};
-
-template <bool COOPS, bool RAW_ALLOC>
-class NewQuickLoaderImpl : public StackObj {
+// Algorithm
+//
+// - Input: objects inside [_stream_bottom ... _stream_top). These objects are laid out
+//   contiguously.
+//
+// - First, copy each input object into its "materialized" address in the heap. The
+//   materialized objects are usually contiguous, but could be divided into a few
+//   disjoint blocks stored in _allocated_blocks.
+// - When each object is copied, any embedded native pointers are relocated.
+// - After the object is copied, its materialized address is written into the first word
+//   of the "stream" copy.
+//
+// - We then iterate over each block in _allocated_block, relocating all oop pointers
+//   that are marked by the oopmap. Relocation is done by first finding the "stream"
+//   copy of the pointee, where we can read the materialized of the pointee.
+//
+// To understand this code, you should trace it in gdb while referencing the CDS map file
+// created with "java -Xshare:dump -Xlog:cds+map*=trace:file=cds.map:none:filesize=0"
+template <bool COOPS>
+class ArchiveHeapLoaderImpl : public StackObj {
+  // Input stream of the archive objects.
   HeapWord* _stream_bottom;
   HeapWord* _stream_top;
 
-  // oop relocation
+  // bitmap for oop relocation
   BitMapView _oopmap;
 
-  // native pointer relocation
+  // bitmap for native pointer relocation
   BitMapView _ptrmap;
   BitMap::idx_t _next_native_ptr_idx;
   HeapWord* _next_native_ptr_in_stream;
@@ -117,18 +85,18 @@ class NewQuickLoaderImpl : public StackObj {
     Block() : _bottom(nullptr), _top(nullptr) {}
   };
 
+  // The archived objects may be materialized in one or more blocks.
   GrowableArray<Block> _allocated_blocks;
-
   HeapWord* _last_block_bottom;
   HeapWord* _last_oop_top;
   DEBUG_ONLY(oop _lowest_materialized_oop;)
   DEBUG_ONLY(oop _highest_materialized_oop;)
 
 public:
-  inline NewQuickLoaderImpl() {
+  inline ArchiveHeapLoaderImpl(char* stream, size_t bytesize) {
     assert(COOPS == UseCompressedOops, "sanity");
-    _stream_bottom = (HeapWord*)_new_load_heap_buff;
-    _stream_top    = _stream_bottom + _new_load_heap_size;
+    _stream_bottom = (HeapWord*)stream;
+    _stream_top    = _stream_bottom + bytesize / HeapWordSize;
 
     _last_block_bottom = nullptr;
     _last_oop_top = nullptr;
@@ -139,26 +107,15 @@ public:
     DEBUG_ONLY(_highest_materialized_oop = nullptr);
   }
 
-  // Algorithm
-  //
-  // - Input: objects inside [_stream_bottom ... _stream_top). These objects are laid out
-  //   contiguously.
-  //
-  // - First, copy each input object into its "materialized" address in the heap. The
-  //   materialized objects are usually contiguous, but could be divided into a few
-  //   disjoint blocks stored in _allocated_blocks.
-  // - When each object is copied, any embedded native pointers are relocated.
-  // - After the object is copied, its materialized address is written into the first word
-  //   of the "stream" copy.
-  //
-  // - We then iterate over each block in _allocated_block, relocating all oop pointers
-  //   that are marked by the oopmap. Relocation is done by first finding the "stream"
-  //   copy of the pointee, where we can read the materialized of the pointee.
   inline oop load_archive_heap(TRAPS) {
     copy_objects(_stream_bottom, _stream_top, CHECK_NULL);
     relocate_oop_pointers();
-    size_t heap_roots_word_offset = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
-    return *(oop*)(_stream_bottom + heap_roots_word_offset);
+
+    // HeapShared::roots() is at this offset in the stream.
+    size_t heap_roots_stream_offset = FileMapInfo::current_info()->heap_roots_offset() / HeapWordSize;
+
+    // The materialized address of the HeapShared::roots()
+    return *(oop*)(_stream_bottom + heap_roots_stream_offset);
   }
 
 private:
@@ -192,6 +149,27 @@ private:
     add_new_block(nullptr); // catch the last block
   }
 
+  inline oop allocate(HeapWord* stream, size_t& size, TRAPS) {
+    oop o = cast_to_oop(stream); // "original" from the stream
+    size = o->size();
+
+    assert(!o->is_instanceRef(), "no such objects are archived");
+    assert(!o->is_stackChunk(), "no such objects are archived");
+
+    if (o->is_instance()) {
+      return Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
+      // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
+      // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
+    } else if (o->is_typeArray()) {
+      int len = static_cast<typeArrayOop>(o)->length();
+      return TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+    } else {
+      assert(o->is_objArray(), "must be");
+      int len = static_cast<objArrayOop>(o)->length();
+      return ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
+    }
+  }
+
   NOINLINE void add_new_block(HeapWord* new_obj) {
     if (_last_block_bottom) {
       _allocated_blocks.append(Block(_last_block_bottom, _last_oop_top));
@@ -199,46 +177,24 @@ private:
     _last_block_bottom = new_obj;
   }
 
-  void init_ptrmap() {
-    _next_native_ptr_in_stream = _stream_top;
-    _next_native_ptr_idx = 0;
-
-    if (MetaspaceShared::relocation_delta() == 0) {
-      return;
-    }
-
-    FileMapRegion* r = FileMapInfo::current_info()->region_at(MetaspaceShared::hp);
-    if (!r->has_ptrmap()) {
-      return;
-    }
-
-    _ptrmap = r->ptrmap_view();
-    update_next_native_ptr_in_stream(0);
-  }
-
-  void init_oopmap() {
-    FileMapInfo::current_info()->map_bitmap_region();
-    FileMapRegion* heap_region = FileMapInfo::current_info()->region_at(MetaspaceShared::hp);
-    FileMapRegion* bitmap_region = FileMapInfo::current_info()->region_at(MetaspaceShared::bm);
-
-    address start = (address)(bitmap_region->mapped_base()) + heap_region->oopmap_offset();
-    _oopmap = BitMapView((BitMap::bm_word_t*)start, heap_region->oopmap_size_in_bits());
-  }
-
   template <typename T>
   class OopPatcherBase : public BitMapClosure {
   protected:
-    NewQuickLoaderImpl<COOPS, RAW_ALLOC>* _loader;
+    ArchiveHeapLoaderImpl<COOPS>* _loader;
     T* _base;
     address _stream_bottom;
   public:
-    OopPatcherBase(NewQuickLoaderImpl<COOPS, RAW_ALLOC>* loader, T* base) : _loader(loader), _base(base) {
+    OopPatcherBase(ArchiveHeapLoaderImpl<COOPS>* loader, T* base) : _loader(loader), _base(base) {
       _stream_bottom = (address)_loader->_stream_bottom;
     }
 
     inline void patch(T* p, size_t pointee_byte_offset) {
+      // This is the adddress of the pointee inside the input stream
       address pointee_stream_header_addr = _stream_bottom + pointee_byte_offset;
+
+      // The materialized address of this pointer is stored there.
       oop materialized_pointee = *(oop*)pointee_stream_header_addr;
+
       assert(materialized_pointee >= _loader->_lowest_materialized_oop &&
              materialized_pointee <= _loader->_highest_materialized_oop, "sanity");
       HeapAccess<IS_NOT_NULL>::oop_store(p, materialized_pointee);
@@ -251,7 +207,7 @@ private:
     // The requested address of the lowest archived object is encoded as this narrowOop
     narrowOop _lowest_requested_narrowOop;
   public:
-    NarrowOopPatcher(NewQuickLoaderImpl<COOPS, RAW_ALLOC>* loader, narrowOop* base) : OopPatcherBase<narrowOop>(loader, base) {
+    NarrowOopPatcher(ArchiveHeapLoaderImpl<COOPS>* loader, narrowOop* base) : OopPatcherBase<narrowOop>(loader, base) {
       size_t n = FileMapInfo::current_info()->region_at(MetaspaceShared::hp)->mapping_offset() >> DUMPTIME_SHIFT;
       assert(n <= 0xffffffff, "must be");
       _lowest_requested_narrowOop = (narrowOop)n;
@@ -272,7 +228,7 @@ private:
   class OopPatcher: OopPatcherBase<oop> {
     oop _lowest_requested_oop; // Requested address of the lowest archived object
   public:
-    OopPatcher(NewQuickLoaderImpl<COOPS, RAW_ALLOC>* loader, oop* base) : OopPatcherBase<oop>(loader, base) {
+    OopPatcher(ArchiveHeapLoaderImpl<COOPS>* loader, oop* base) : OopPatcherBase<oop>(loader, base) {
       _lowest_requested_oop = cast_to_oop(FileMapInfo::current_info()->heap_region_requested_address());
     }
     bool do_bit(size_t offset) {
@@ -335,7 +291,33 @@ private:
     }
   }
 
-  void update_next_native_ptr_in_stream(BitMap::idx_t increment) {
+  void init_oopmap() {
+    FileMapInfo::current_info()->map_bitmap_region();
+    FileMapRegion* heap_region = FileMapInfo::current_info()->region_at(MetaspaceShared::hp);
+    FileMapRegion* bitmap_region = FileMapInfo::current_info()->region_at(MetaspaceShared::bm);
+
+    address start = (address)(bitmap_region->mapped_base()) + heap_region->oopmap_offset();
+    _oopmap = BitMapView((BitMap::bm_word_t*)start, heap_region->oopmap_size_in_bits());
+  }
+
+  void init_ptrmap() {
+    _next_native_ptr_in_stream = _stream_top;
+    _next_native_ptr_idx = 0;
+
+    if (MetaspaceShared::relocation_delta() == 0) {
+      return;
+    }
+
+    FileMapRegion* r = FileMapInfo::current_info()->region_at(MetaspaceShared::hp);
+    if (!r->has_ptrmap()) {
+      return;
+    }
+
+    _ptrmap = r->ptrmap_view();
+    update_next_native_ptr_in_stream(0);
+  }
+
+  inline void update_next_native_ptr_in_stream(BitMap::idx_t increment) {
     _next_native_ptr_idx += increment;
     _next_native_ptr_idx = _ptrmap.find_first_set_bit(_next_native_ptr_idx);
     if (_next_native_ptr_idx < _ptrmap.size()) {
@@ -346,7 +328,7 @@ private:
     }
   }
 
-  void relocate_one_native_pointer(HeapWord* stream, HeapWord* m) {
+  inline void relocate_one_native_pointer(HeapWord* stream, HeapWord* m) {
     assert(_stream_bottom < _next_native_ptr_in_stream && _next_native_ptr_in_stream < _stream_top, "must be");
     size_t offset = pointer_delta(_next_native_ptr_in_stream, stream, sizeof(HeapWord));
     address* src_loc = (address*)_next_native_ptr_in_stream;
@@ -362,71 +344,44 @@ private:
 
     update_next_native_ptr_in_stream(1);
   }
+}; // ArchiveHeapLoaderImpl
 
-  inline oop allocate(HeapWord* stream, size_t& size, TRAPS) {
-    oop o = cast_to_oop(stream); // "original" from the stream
-    size = o->size();
 
-    if (RAW_ALLOC) {
-      return cast_to_oop(NewQuickLoader::mem_allocate_raw(size));
-    }
-    assert(!o->is_instanceRef(), "no such objects are archived");
-    assert(!o->is_stackChunk(), "no such objects are archived");
-
-    if (o->is_instance()) {
-      return Universe::heap()->obj_allocate(o->klass(), size, CHECK_NULL);
-      // Can't use the following because o->klass() isn't initialized (so injected field sizes aren't known??)
-      // m = InstanceKlass::cast(o->klass())->allocate_instance(CHECK);
-    } else if (o->is_typeArray()) {
-      int len = static_cast<typeArrayOop>(o)->length();
-      return TypeArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-    } else {
-      assert(o->is_objArray(), "must be");
-      int len = static_cast<objArrayOop>(o)->length();
-      return ObjArrayKlass::cast(o->klass())->allocate(len, CHECK_NULL);
-    }
-  }
-};
-
-#define LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(a, b) \
-   NewQuickLoaderImpl<a, b> loader; \
-   roots = loader.load_archive_heap(THREAD);
-
-void ArchiveHeapLoader::new_fixup_region(TRAPS) {
-  if (_new_load_heap_buff == nullptr) {
-    FileMapInfo::current_info()->unmap_region(MetaspaceShared::bm);
-    return;
-  }
-
-  log_info(cds)("new heap loading: start");
-
-  ResourceMark rm;
+bool ArchiveHeapLoader::load_heap_region(char* stream, size_t bytesize) {
+  JavaThread* THREAD = JavaThread::current();
+  ResourceMark rm(THREAD);
   jlong time_started = os::thread_cpu_time(THREAD);
   jlong time_done;
   oop roots;
 
-  // The parameters are <UseCompressedOops, NahlRawAlloc>
   if (UseCompressedOops) {
-    if (NahlRawAlloc) {
-      LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, true);
-    } else {
-      LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(true, false);
-    }
+    ArchiveHeapLoaderImpl<true> loader(stream, bytesize);
+    roots = loader.load_archive_heap(THREAD);
   } else {
-    if (NahlRawAlloc) {
-      LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, true);
-    } else {
-      LOAD_ARCHIVE_HEAP_WITH_TEMPLATE(false, false);
-    }
+    ArchiveHeapLoaderImpl<false> loader(stream, bytesize);
+    roots = loader.load_archive_heap(THREAD);
+  }
+  if (HAS_PENDING_EXCEPTION) {
+    // We cannot continue, as some of the materialized objects will have unrelocated
+    // oop pointers. There's no point trying to recover. The heap is too small to do
+    // anything anyway.
+    vm_exit_during_initialization("Cannot load archived heap. "
+                                  "Initial heap size too small.");
+
   }
   _is_loaded = true;
   HeapShared::init_roots(roots);
-  log_info(cds)("new heap loading: roots = " INTPTR_FORMAT, p2i(roots));
+
+  if (!MetaspaceShared::use_full_module_graph()) {
+    // Need to remove all the archived java.lang.Module objects from HeapShared::roots().
+    ClassLoaderDataShared::clear_archived_oops();
+  }
+
+
+  log_info(cds)("Finished heap loading: roots = " INTPTR_FORMAT, p2i(roots));
   time_done = os::thread_cpu_time(THREAD);
   log_info(cds, gc)("Load Time: " JLONG_FORMAT, (time_done - time_started));
 
-  FileMapInfo::current_info()->unmap_region(MetaspaceShared::bm);
-  return;
+  return is_loaded();
 }
-
 #endif // INCLUDE_CDS_JAVA_HEAP
