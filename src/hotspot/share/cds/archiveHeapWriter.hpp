@@ -43,9 +43,6 @@ class ArchiveHeapInfo {
   CHeapBitMap _ptrmap;
   size_t _heap_roots_offset;            // Offset of the HeapShared::roots() object, from the bottom
                                         // of the archived heap objects, in bytes.
-  size_t _first_quick_reloc;            // The first object in the archive that has relocatable oop fields.
-  size_t _first_slow_reloc;             // The first object in the archive that has relocatable oop fields that point
-                                        // to a lower address.
 
 public:
   ArchiveHeapInfo() : _buffer_region(), _oopmap(128, mtClassShared), _ptrmap(128, mtClassShared) {}
@@ -62,14 +59,6 @@ public:
 
   void set_heap_roots_offset(size_t n) { _heap_roots_offset = n; }
   size_t heap_roots_offset() const { return _heap_roots_offset; }
-
-  void set_reloc_boundaries(size_t first_quick_reloc, size_t first_slow_reloc) {
-    _first_quick_reloc = first_quick_reloc;
-    _first_slow_reloc = first_slow_reloc;
-  }
-
-  size_t first_quick_reloc() const { return _first_quick_reloc;}
-  size_t first_slow_reloc()  const { return _first_slow_reloc;}
 };
 
 #if INCLUDE_CDS_JAVA_HEAP
@@ -213,35 +202,16 @@ private:
   inline static void store_oop_in_buffer(oop* buffered_addr, oop requested_obj);
   inline static void store_oop_in_buffer(narrowOop* buffered_addr, oop requested_obj);
 
-  // RelocType describes how the oop fields of an object X should be relocated at runtime
-  enum RelocType : int {
-    RelocNone,       // X has no oop fields that need to be relocated.
-    RelocQuick,      // all oop fields that need to be relocated point to an address that's lower than X
-    RelocSlow,       // some oop fields that need to be relocated point to an address that's higher than X
-  };
-
   template <typename T> static oop load_source_oop_from_buffer(T* buffered_addr);
   template <typename T> static void store_requested_oop_in_buffer(T* buffered_addr, oop request_oop);
 
   template <typename T> static T* requested_addr_to_buffered_addr(T* p);
-  template <typename T> static RelocType relocate_field_in_buffer(T* field_addr_in_buffer, CHeapBitMap* oopmap);
+  template <typename T> static void relocate_field_in_buffer(T* field_addr_in_buffer, CHeapBitMap* oopmap);
   template <typename T> static void mark_oop_pointer(T* buffered_addr, CHeapBitMap* oopmap);
   template <typename T> static void relocate_root_at(oop requested_roots, int index, CHeapBitMap* oopmap);
 
   static void update_header_for_requested_obj(oop requested_obj, oop src_obj, Klass* src_klass);
 
-  enum PointToOops : int {
-    PointToNone,
-    PointToSome,
-    PointToSpecific,
-  };
-
-  class CheckPointToOopsClosure;
-
-  // PointToNone:     from_obj doesn't point to any oops
-  // PointToSome:     from_obj points to one or more oops, but doesn't point to to_obj
-  // PointToSpecific: from_obj points to to_obj
-  static PointToOops check_point_to_oops(oop from_obj, oop to_obj);
   static int compare_objs_by_oop_fields(int* a, int* b);
   static void sort_source_objs();
 

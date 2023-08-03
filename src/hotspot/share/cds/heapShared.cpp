@@ -282,7 +282,7 @@ bool HeapShared::archive_object(oop obj) {
     // the identity_hash in the object header will have a predictable value,
     // making the archive reproducible.
     obj->identity_hash();
-    CachedOopInfo info = make_cached_oop_info();
+    CachedOopInfo info = make_cached_oop_info(obj);
     archived_object_cache()->put(obj, info);
     mark_native_pointers(obj);
 
@@ -430,6 +430,18 @@ void HeapShared::mark_native_pointers(oop orig_obj) {
     ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::klass_offset());
     ArchiveHeapWriter::mark_native_pointer(orig_obj, java_lang_Class::array_klass_offset());
   }
+}
+
+bool HeapShared::has_oop_pointers(oop src_obj) {
+  CachedOopInfo* info = archived_object_cache()->get(src_obj);
+  assert(info != nullptr, "must be");
+  return info->has_oop_pointers();
+}
+
+bool HeapShared::has_native_pointers(oop src_obj) {
+  CachedOopInfo* info = archived_object_cache()->get(src_obj);
+  assert(info != nullptr, "must be");
+  return info->has_native_pointers();
 }
 
 void HeapShared::set_has_native_pointers(oop src_obj) {
@@ -1132,10 +1144,26 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
 
 WalkOopAndArchiveClosure* WalkOopAndArchiveClosure::_current = nullptr;
 
-HeapShared::CachedOopInfo HeapShared::make_cached_oop_info() {
+class PointsToOopsChecker : public BasicOopIterateClosure {
+  bool _result;
+
+  template <class T> void check(T *p) {
+    _result |= (HeapAccess<>::oop_load(p) != nullptr);
+  }
+
+public:
+  PointsToOopsChecker() : _result(false) {}
+  void do_oop(narrowOop *p) { check(p); }
+  void do_oop(      oop *p) { check(p); }
+  bool result() { return _result; }
+};
+
+HeapShared::CachedOopInfo HeapShared::make_cached_oop_info(oop obj) {
   WalkOopAndArchiveClosure* walker = WalkOopAndArchiveClosure::current();
   oop referrer = (walker == nullptr) ? nullptr : walker->referencing_obj();
-  return CachedOopInfo(referrer);
+  PointsToOopsChecker points_to_oops_checker;
+  obj->oop_iterate(&points_to_oops_checker);
+  return CachedOopInfo(referrer, points_to_oops_checker.result());
 }
 
 // (1) If orig_obj has not been archived yet, archive it.
