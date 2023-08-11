@@ -60,9 +60,6 @@
 #include "runtime/safepointVerifiers.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/copy.hpp"
-#if INCLUDE_G1GC
-#include "gc/g1/g1CollectedHeap.hpp"
-#endif
 
 #if INCLUDE_CDS_JAVA_HEAP
 
@@ -147,6 +144,18 @@ static bool is_subgraph_root_class_of(ArchivableStaticFieldInfo fields[], Instan
 bool HeapShared::is_subgraph_root_class(InstanceKlass* ik) {
   return is_subgraph_root_class_of(archive_subgraph_entry_fields, ik) ||
          is_subgraph_root_class_of(fmg_archive_subgraph_entry_fields, ik);
+}
+
+// Can this VM write a heap region into the CDS archive? Currently only G1+compressed{oops,cp}
+bool HeapShared::can_write() {
+  if (_disable_writing) {
+    return false;
+  }
+  if (CompressedOops::shift() > 3) {
+    // ArchiveHeapLoader can only handle heap images that have shifts of 3 or below.
+    return false;
+  }
+  return (UseG1GC && UseCompressedClassPointers);
 }
 
 unsigned HeapShared::oop_hash(oop const& p) {
@@ -252,7 +261,7 @@ oop HeapShared::get_root(int index, bool clear) {
 void HeapShared::clear_root(int index) {
   assert(index >= 0, "sanity");
   assert(UseSharedSpaces, "must be");
-  if (ArchiveHeapLoader::is_in_use()) {
+  if (ArchiveHeapLoader::is_loaded()) {
     if (log_is_enabled(Debug, cds, heap)) {
       oop old = roots()->obj_at(index);
       log_debug(cds, heap)("Clearing root %d: was " PTR_FORMAT, index, p2i(old));
@@ -514,7 +523,7 @@ void HeapShared::check_enum_obj(int level,
 
 // See comments in HeapShared::check_enum_obj()
 bool HeapShared::initialize_enum_klass(InstanceKlass* k, TRAPS) {
-  if (!ArchiveHeapLoader::is_in_use()) {
+  if (!ArchiveHeapLoader::is_loaded()) {
     return false;
   }
 
@@ -548,11 +557,6 @@ void HeapShared::archive_objects(ArchiveHeapInfo *heap_info) {
     // Cache for recording where the archived objects are copied to
     create_archived_object_cache();
 
-    log_info(cds)("Heap range = [" PTR_FORMAT " - "  PTR_FORMAT "]",
-                   UseCompressedOops ? p2i(CompressedOops::begin()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().start()),
-                   UseCompressedOops ? p2i(CompressedOops::end()) :
-                                       p2i((address)G1CollectedHeap::heap()->reserved().end()));
     copy_objects();
 
     CDSHeapVerifier::verify();
@@ -852,7 +856,7 @@ void HeapShared::write_subgraph_info_table() {
 
 void HeapShared::init_roots(oop roots_oop) {
   if (roots_oop != nullptr) {
-    assert(ArchiveHeapLoader::is_in_use(), "must be");
+    assert(ArchiveHeapLoader::is_loaded(), "must be");
     _roots = OopHandle(Universe::vm_global(), roots_oop);
   }
 }
@@ -905,7 +909,7 @@ static void verify_the_heap(Klass* k, const char* which) {
 // this case, we will not load the ArchivedKlassSubGraphInfoRecord and will clear its roots.
 void HeapShared::resolve_classes(JavaThread* current) {
   assert(UseSharedSpaces, "runtime only!");
-  if (!ArchiveHeapLoader::is_in_use()) {
+  if (!ArchiveHeapLoader::is_loaded()) {
     return; // nothing to do
   }
   resolve_classes_for_subgraphs(current, archive_subgraph_entry_fields);
@@ -937,7 +941,7 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
 
 void HeapShared::initialize_from_archived_subgraph(JavaThread* current, Klass* k) {
   JavaThread* THREAD = current;
-  if (!ArchiveHeapLoader::is_in_use()) {
+  if (!ArchiveHeapLoader::is_loaded()) {
     return; // nothing to do
   }
 

@@ -454,11 +454,8 @@ public:
   static size_t readonly_total();
   MapArchiveResult map_regions(int regions[], int num_regions, char* mapped_base_address, ReservedSpace rs);
   void  unmap_regions(int regions[], int num_regions);
-  void  map_or_load_heap_region() NOT_CDS_JAVA_HEAP_RETURN;
-  void  fixup_mapped_heap_region() NOT_CDS_JAVA_HEAP_RETURN;
-  void  patch_heap_embedded_pointers() NOT_CDS_JAVA_HEAP_RETURN;
+  void  load_heap_region() NOT_CDS_JAVA_HEAP_RETURN;
   bool  has_heap_region()  NOT_CDS_JAVA_HEAP_RETURN_(false);
-  MemRegion get_heap_region_requested_range() NOT_CDS_JAVA_HEAP_RETURN_(MemRegion());
   bool  read_region(int i, char* base, size_t size, bool do_commit);
   char* map_bitmap_region();
   void  unmap_region(int i);
@@ -551,21 +548,15 @@ public:
                     unsigned int runtime_prefix_len) NOT_CDS_RETURN_(false);
   bool  validate_boot_class_paths() NOT_CDS_RETURN_(false);
   bool  validate_app_class_paths(int shared_app_paths_len) NOT_CDS_RETURN_(false);
-  bool  map_heap_region_impl() NOT_CDS_JAVA_HEAP_RETURN_(false);
-  void  dealloc_heap_region() NOT_CDS_JAVA_HEAP_RETURN;
-  bool  can_use_heap_region();
-  bool  load_heap_region() NOT_CDS_JAVA_HEAP_RETURN_(false);
-  bool  map_heap_region() NOT_CDS_JAVA_HEAP_RETURN_(false);
-  void  init_heap_region_relocation();
+  bool  can_load_heap_region();
   MapArchiveResult map_region(int i, intx addr_delta, char* mapped_base_address, ReservedSpace rs);
   bool  relocate_pointers_in_core_regions(intx addr_delta);
-
-  static MemRegion _mapped_heap_memregion;
+  char* map_noncore_region(int region_index, bool read_only);
 
 public:
-  address heap_region_dumptime_address() NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
   address heap_region_requested_address() NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
-  narrowOop encoded_heap_region_dumptime_address();
+
+  char* new_map_heap(size_t& size);
 
 private:
 

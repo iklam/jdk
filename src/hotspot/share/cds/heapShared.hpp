@@ -134,22 +134,12 @@ class ArchivedKlassSubGraphInfoRecord {
 };
 #endif // INCLUDE_CDS_JAVA_HEAP
 
-struct LoadedArchiveHeapRegion;
-
 class HeapShared: AllStatic {
   friend class VerifySharedOopClosure;
 
 public:
-  // Can this VM write a heap region into the CDS archive? Currently only G1+compressed{oops,cp}
-  static bool can_write() {
-    CDS_JAVA_HEAP_ONLY(
-      if (_disable_writing) {
-        return false;
-      }
-      return (UseG1GC && UseCompressedClassPointers);
-    )
-    NOT_CDS_JAVA_HEAP(return false;)
-  }
+  // Can this VM write a heap region into the CDS archive?
+  static bool can_write() NOT_CDS_JAVA_HEAP_RETURN_(false);
 
   static void disable_writing() {
     CDS_JAVA_HEAP_ONLY(_disable_writing = true;)
@@ -333,15 +323,6 @@ private:
   static void resolve_or_init(Klass* k, bool do_init, TRAPS);
   static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record);
 
-  static int init_loaded_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loaded_regions,
-                                 MemRegion& archive_space);
-  static void sort_loaded_regions(LoadedArchiveHeapRegion* loaded_regions, int num_loaded_regions,
-                                  uintptr_t buffer);
-  static bool load_regions(FileMapInfo* mapinfo, LoadedArchiveHeapRegion* loaded_regions,
-                           int num_loaded_regions, uintptr_t buffer);
-  static void init_loaded_heap_relocation(LoadedArchiveHeapRegion* reloc_info,
-                                          int num_loaded_regions);
-  static void fill_failed_loaded_region();
   static void mark_native_pointers(oop orig_obj);
   static bool has_been_archived(oop orig_obj);
   static void archive_java_mirrors();

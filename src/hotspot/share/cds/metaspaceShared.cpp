@@ -1159,9 +1159,6 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
             cds_base, ccs_end - cds_base // Klass range
             );
 #endif // INCLUDE_CDS_JAVA_HEAP
-          // map_or_load_heap_region() compares the current narrow oop and klass encodings
-          // with the archived ones, so it must be done after all encodings are determined.
-          static_mapinfo->map_or_load_heap_region();
         }
 #endif // _LP64
     log_info(cds)("optimized module handling: %s", MetaspaceShared::use_optimized_module_handling() ? "enabled" : "disabled");
@@ -1453,16 +1450,12 @@ void MetaspaceShared::initialize_shared_spaces() {
   ReadClosure rc(&array);
   serialize(&rc);
 
-  // Finish up archived heap initialization. These must be
-  // done after ReadClosure.
-  static_mapinfo->patch_heap_embedded_pointers();
-  ArchiveHeapLoader::finish_initialization();
+  // Heap initialization can be done only after vtables are initialized by ReadClosure.
+  static_mapinfo->load_heap_region();
 
   CDS_JAVA_HEAP_ONLY(Universe::update_archived_basic_type_mirrors());
 
-  // Close the mapinfo file
   static_mapinfo->close();
-
   static_mapinfo->unmap_region(MetaspaceShared::bm);
 
   FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_info();
@@ -1545,7 +1538,7 @@ bool MetaspaceShared::use_full_module_graph() {
   if (DumpSharedSpaces) {
     result &= HeapShared::can_write();
   } else if (UseSharedSpaces) {
-    result &= ArchiveHeapLoader::can_use();
+    result &= ArchiveHeapLoader::can_load();
   } else {
     result = false;
   }

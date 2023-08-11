@@ -245,7 +245,7 @@ void Universe::set_archived_basic_type_mirror_index(BasicType t, int index) {
 }
 
 void Universe::update_archived_basic_type_mirrors() {
-  if (ArchiveHeapLoader::is_in_use()) {
+  if (ArchiveHeapLoader::is_loaded()) {
     for (int i = T_BOOLEAN; i < T_VOID+1; i++) {
       int index = _archived_basic_type_mirror_indices[i];
       if (!is_reference_type((BasicType)i) && index >= 0) {
@@ -459,9 +459,9 @@ void Universe::genesis(TRAPS) {
 void Universe::initialize_basic_type_mirrors(TRAPS) {
 #if INCLUDE_CDS_JAVA_HEAP
     if (UseSharedSpaces &&
-        ArchiveHeapLoader::is_in_use() &&
+        ArchiveHeapLoader::is_loaded() &&
         _basic_type_mirrors[T_INT].resolve() != nullptr) {
-      assert(ArchiveHeapLoader::can_use(), "Sanity");
+      assert(ArchiveHeapLoader::can_load(), "Sanity");
 
       // check that all basic type mirrors are mapped also
       for (int i = T_BOOLEAN; i < T_VOID+1; i++) {
