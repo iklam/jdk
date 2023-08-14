@@ -38,10 +38,14 @@
 bool ArchiveHeapLoader::_is_loaded = false;
 
 bool ArchiveHeapLoader::can_load() {
-  if (MinHeapSize < 8 * M) {
+  log_info(cds)("MinHeapSize = %zu MaxNewSize = %zu", MinHeapSize, MaxNewSize);
+  if ((MinHeapSize < size_t(8) * size_t(M)) ||
+      (MaxNewSize < size_t(4) * size_t(M))) {
     // This may trigger early GC, leading to VM exit.
     // TODO: is a more precise check possible?
     // TODO: need to check how much heap is actually needed by CDS.
+    log_info(cds)("MinHeapSize = %zu MaxNewSize = %zu", MinHeapSize, MaxNewSize);
+    log_info(cds)("%d", (MaxNewSize < size_t(4) * size_t(M)));
     return false;
   }
 
