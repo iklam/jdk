@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveHeapLoader.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.inline.hpp"
@@ -85,7 +86,7 @@ void Klass::set_name(Symbol* n) {
   _name = n;
   if (_name != nullptr) _name->increment_refcount();
 
-  if (Arguments::is_dumping_archive() && is_instance_klass()) {
+  if (CDSConfig::use_dumptime_tables() && is_instance_klass()) {
     SystemDictionaryShared::init_dumptime_info(InstanceKlass::cast(this));
   }
 }

@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/filemap.hpp"
+#include "cds/heapShared.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/javaAssertions.hpp"
 #include "classfile/moduleEntry.hpp"
@@ -3075,6 +3076,8 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
       SharedArchiveFile = CDSPreimage;
       UseSharedSpaces = true;
       log_info(cds)("Generate CacheDataStore %s from CDSPreimage %s", CacheDataStore, CDSPreimage);
+
+      HeapShared::disable_writing(); // FIXME -- skip this for now, until we can get the metadata dumping to work.
     }
   } else {
     if (CDSPreimage != nullptr) {
@@ -3423,6 +3426,12 @@ jint Arguments::parse_options_buffer(const char* name, char* buffer, const size_
   // Fill out JavaVMInitArgs structure.
   return vm_args->set_args(&options);
 }
+
+#ifndef PRODUCT
+void Arguments::assert_is_dumping_archive() {
+  assert(Arguments::is_dumping_archive() || CDSPreimage != nullptr, "dump time only");
+}
+#endif
 
 void Arguments::set_shared_spaces_flags_and_archive_paths() {
   if (DumpSharedSpaces) {

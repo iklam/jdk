@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/classPrelinker.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/classFileParser.hpp"
@@ -172,6 +173,8 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
     // TODO: copy the verification and loader constraints from preimage to final image
     // TODO: load archived classes for custom loaders as well.
     log_info(cds)("Dumping final image of CacheDataStore %s", CacheDataStore);
+    MetaspaceShared::preload_and_dump();
+    vm_direct_exit(0, "CacheDataStore dumping is complete");
   }
 }
 
@@ -1190,6 +1193,7 @@ InstanceKlass* SystemDictionary::load_shared_class(InstanceKlass* ik,
   }
 
   load_shared_class_misc(ik, loader_data);
+
   return ik;
 }
 
@@ -1207,6 +1211,10 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
 
   // notify a class loaded from shared object
   ClassLoadingService::notify_class_loaded(ik, true /* shared class */);
+
+  if (CDSConfig::use_dumptime_tables()) {
+    SystemDictionaryShared::init_dumptime_info(ik);
+  }
 }
 
 #endif // INCLUDE_CDS

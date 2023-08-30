@@ -90,7 +90,7 @@ void ClassPrelinker::initialize() {
   for (auto id : EnumRange<vmClassID>{}) {
     add_one_vm_class(vmClasses::klass_at(id));
   }
-  if (_static_preloaded_klasses._boot != nullptr) {
+  if (_static_preloaded_klasses._boot != nullptr && CDSPreimage == nullptr) {
     assert(DynamicDumpSharedSpaces, "must be");
     add_preloaded_klasses(_static_preloaded_klasses._boot);
     add_preloaded_klasses(_static_preloaded_klasses._boot2);

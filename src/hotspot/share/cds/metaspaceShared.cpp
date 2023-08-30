@@ -831,6 +831,7 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
   log_info(cds)("Rewriting and linking classes: done");
 
 #if INCLUDE_CDS_JAVA_HEAP
+ if (HeapShared::can_write()) {
   StringTable::allocate_shared_strings_array(CHECK);
   ArchiveHeapWriter::init();
   if (use_full_module_graph()) {
@@ -847,6 +848,7 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
                            vmSymbols::void_method_signature(),
                            CHECK);
   }
+ }
 #endif
 
   _method_handle_intrinsics = new (mtClassShared) GrowableArray<Method*>(256, mtClassShared);

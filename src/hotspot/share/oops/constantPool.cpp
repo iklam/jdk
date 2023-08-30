@@ -413,9 +413,12 @@ void ConstantPool::remove_unshareable_info() {
   // we always set _on_stack to true to avoid having to change _flags during runtime.
   _flags |= (_on_stack | _is_shared);
 
+// FIXME-hack
+ if (CDSPreimage == nullptr) {
   if (!ArchiveBuilder::current()->get_source_addr(_pool_holder)->is_linked()) {
     return;
   }
+ }
   if (is_for_method_handle_intrinsic()) {
     // This CP was created by Method::make_method_handle_intrinsic() and has nothing
     // that need to be removed/restored. It has no cpCache since the intrinsic methods
