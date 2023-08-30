@@ -167,6 +167,12 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
 
   SystemDictionaryShared::init_archived_lambda_proxy_classes(Handle(THREAD, java_platform_loader()), CHECK);
   SystemDictionaryShared::init_archived_lambda_proxy_classes(Handle(THREAD, java_system_loader()), CHECK);
+
+  if (CDSPreimage != nullptr) {
+    // TODO: copy the verification and loader constraints from preimage to final image
+    // TODO: load archived classes for custom loaders as well.
+    log_info(cds)("Dumping final image of CacheDataStore %s", CacheDataStore);
+  }
 }
 
 oop SystemDictionary::get_system_class_loader_impl(TRAPS) {

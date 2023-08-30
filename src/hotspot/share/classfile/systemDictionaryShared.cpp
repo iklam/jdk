@@ -913,7 +913,7 @@ InstanceKlass* SystemDictionaryShared::prepare_shared_lambda_proxy_class(Instanc
 
 void SystemDictionaryShared::check_verification_constraints(InstanceKlass* klass,
                                                             TRAPS) {
-  assert(!DumpSharedSpaces && UseSharedSpaces, "called at run time with CDS enabled only");
+//assert(!DumpSharedSpaces && UseSharedSpaces, "called at run time with CDS enabled only");
   RunTimeClassInfo* record = RunTimeClassInfo::get_for(klass);
 
   int length = record->_num_verifier_constraints;
@@ -1023,7 +1023,7 @@ void SystemDictionaryShared::record_linking_constraint(Symbol* name, InstanceKla
 // returns true IFF there's no need to re-initialize the i/v-tables for klass for
 // the purpose of checking class loader constraints.
 bool SystemDictionaryShared::check_linking_constraints(Thread* current, InstanceKlass* klass) {
-  assert(!DumpSharedSpaces && UseSharedSpaces, "called at run time with CDS enabled only");
+//assert(!DumpSharedSpaces && UseSharedSpaces, "called at run time with CDS enabled only");
   LogTarget(Info, class, loader, constraints) log;
   if (klass->is_shared_boot_class()) {
     // No class loader constraint check performed for boot classes.

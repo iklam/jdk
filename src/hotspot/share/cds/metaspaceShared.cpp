@@ -697,6 +697,7 @@ void MetaspaceShared::prepare_for_dumping() {
 void MetaspaceShared::preload_and_dump() {
   EXCEPTION_MARK;
   ResourceMark rm(THREAD);
+  HandleMark hm(THREAD);
   preload_and_dump_impl(THREAD);
   if (HAS_PENDING_EXCEPTION) {
     if (PENDING_EXCEPTION->is_a(vmClasses::OutOfMemoryError_klass())) {
@@ -806,12 +807,15 @@ void MetaspaceShared::preload_classes(TRAPS) {
 }
 
 void MetaspaceShared::preload_and_dump_impl(TRAPS) {
-  preload_classes(CHECK);
+  if (CacheDataStore == nullptr) {
+    // We are running with -Xshare:dump
+    preload_classes(CHECK);
 
-  if (SharedArchiveConfigFile) {
-    log_info(cds)("Reading extra data from %s ...", SharedArchiveConfigFile);
-    read_extra_data(THREAD, SharedArchiveConfigFile);
-    log_info(cds)("Reading extra data: done.");
+    if (SharedArchiveConfigFile) {
+      log_info(cds)("Reading extra data from %s ...", SharedArchiveConfigFile);
+      read_extra_data(THREAD, SharedArchiveConfigFile);
+      log_info(cds)("Reading extra data: done.");
+    }
   }
 
   HeapShared::init_for_dumping(CHECK);

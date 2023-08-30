@@ -860,7 +860,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   _vm_complete = true;
 #endif
 
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces && CacheDataStore == nullptr) {
+    // Regular -Xshare:dump
     MetaspaceShared::preload_and_dump();
   }
 

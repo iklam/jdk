@@ -3040,6 +3040,48 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
   }
 
 #if INCLUDE_CDS
+  if (CacheDataStore != nullptr) {
+    if (SharedArchiveFile != nullptr) {
+      vm_exit_during_initialization("CacheDataStore and SharedArchiveFile cannot be both specified");
+    }
+    if (!PreloadSharedClasses) {
+      // TODO: in the forked JVM, we should ensure all classes are loaded from the hotspot.cds.preimage.
+      // PreloadSharedClasses only loads the classes for built-in loaders. We need to load the classes
+      // for custom loaders as well.
+      vm_exit_during_initialization("CacheDataStore requires PreloadSharedClasses");
+    }
+
+    if (CDSPreimage == nullptr) {
+      // The preimage phase -- run the app and write the preimage file
+      SharedArchiveFile = CacheDataStore;
+      if (!os::file_exists(CacheDataStore) /* || TODO: CDS file is invalid*/) {
+        // Force to load everything from classfiles
+        size_t len = strlen(CacheDataStore) + 10;
+        char* preimage = AllocateHeap(len, mtArguments);
+        jio_snprintf(preimage, len, "%s.preimage", CacheDataStore);
+
+        UseSharedSpaces = false;
+        DumpSharedSpaces = true;
+        SharedArchiveFile = preimage;
+        log_info(cds)("CacheDataStore needs to be updated. Writing %s file", SharedArchiveFile);
+
+        // At VM exit, the module graph may be contaminated with program states. We should rebuild the
+        // module graph when dumping the CDS final image.
+        MetaspaceShared::disable_full_module_graph();
+        log_info(cds)("full module graph: disabled when writing CDS preimage");
+      }
+    } else {
+      // The final image phase -- load the preimage and write the final image file
+      SharedArchiveFile = CDSPreimage;
+      UseSharedSpaces = true;
+      log_info(cds)("Generate CacheDataStore %s from CDSPreimage %s", CacheDataStore, CDSPreimage);
+    }
+  } else {
+    if (CDSPreimage != nullptr) {
+      vm_exit_during_initialization("CDSPreimage must be specified only when CacheDataStore is specified");
+    }
+  }
+
   if (DumpSharedSpaces) {
     // Compiler threads may concurrently update the class metadata (such as method entries), so it's
     // unsafe with -Xshare:dump (which modifies the class metadata in place). Let's disable
@@ -3048,7 +3090,10 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
     // Note: this is not a concern for dynamically dumping shared spaces, which makes a copy of the
     // class metadata instead of modifying them in place. The copy is inaccessible to the compiler.
     // TODO: revisit the following for the static archive case.
-    set_mode_flags(_int);
+    if (CacheDataStore == nullptr) {
+      // FIXME -- the above comment about "modifies the class metadata in place" is wrong.
+      set_mode_flags(_int);
+    }
 
     // String deduplication may cause CDS to iterate the strings in different order from one
     // run to another which resulting in non-determinstic CDS archives.
@@ -3384,7 +3429,6 @@ void Arguments::set_shared_spaces_flags_and_archive_paths() {
     if (RequireSharedSpaces) {
       warning("Cannot dump shared archive while using shared archive");
     }
-    UseSharedSpaces = false;
   }
 #if INCLUDE_CDS
   // Initialize shared archive paths which could include both base and dynamic archive paths
