@@ -440,7 +440,8 @@ void ConstantPool::remove_unshareable_info() {
 }
 
 void ConstantPool::archive_entries() {
-  assert(ArchiveBuilder::current()->get_source_addr(_pool_holder)->is_linked(), "must be");
+  InstanceKlass* src_holder = ArchiveBuilder::current()->get_source_addr(_pool_holder);
+  assert(src_holder->is_linked(), "must be");
   ResourceMark rm;
   GrowableArray<bool> keep_cpcache(cache()->length(), cache()->length(), false);
   bool archived = false;

@@ -537,8 +537,10 @@ void Klass::metaspace_pointers_do(MetaspaceClosure* it) {
 
 #if INCLUDE_CDS
 void Klass::remove_unshareable_info() {
+#if 0
   assert (Arguments::is_dumping_archive(),
           "only called during CDS dump time");
+#endif
   JFR_ONLY(REMOVE_ID(this);)
   if (log_is_enabled(Trace, cds, unshareable)) {
     ResourceMark rm;

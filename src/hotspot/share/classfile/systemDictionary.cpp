@@ -1212,8 +1212,15 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
   // notify a class loaded from shared object
   ClassLoadingService::notify_class_loaded(ik, true /* shared class */);
 
-  if (CDSConfig::use_dumptime_tables()) {
+  if (CDSPreimage != nullptr) {
     SystemDictionaryShared::init_dumptime_info(ik);
+    if (ik->constants()->cache()) {
+      EXCEPTION_MARK;
+      ik->constants()->cache()->save_for_archive(THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        vm_exit_during_initialization(err_msg("OOM when loading CDSPreimage"));
+      }
+    }
   }
 }
 

@@ -299,6 +299,10 @@ size_t ArchiveBuilder::estimate_archive_size() {
   size_t training_data_est = TrainingData::estimate_size_for_archive();
   _estimated_hashtable_bytes = symbol_table_est + dictionary_est + training_data_est;
 
+  if (CDSPreimage != nullptr) {
+    _estimated_hashtable_bytes += 200 * 1024 * 1024; // FIXME -- need to iterate archived symbols??
+  }
+
   if (DynamicDumpSharedSpaces) {
     // Some extra space for traning data. Be generous. Unused areas will be trimmed from the archive file.
     _estimated_hashtable_bytes += 200 * 1024 * 1024;
@@ -349,7 +353,7 @@ address ArchiveBuilder::reserve_buffer() {
   // The bottom of the archive (that I am writing now) should be mapped at this address by default.
   address my_archive_requested_bottom;
 
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces || CDSPreimage != nullptr) {
     my_archive_requested_bottom = _requested_static_archive_bottom;
   } else {
     _mapped_static_archive_bottom = (address)MetaspaceObj::shared_metaspace_base();
@@ -377,7 +381,7 @@ address ArchiveBuilder::reserve_buffer() {
     MetaspaceShared::unrecoverable_writing_error();
   }
 
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces || CDSPreimage != nullptr) {
     // We don't want any valid object to be at the very bottom of the archive.
     // See ArchivePtrMarker::mark_pointer().
     rw_region()->allocate(16);
@@ -963,7 +967,7 @@ void ArchiveBuilder::relocate_to_requested() {
 
   size_t my_archive_size = buffer_top() - buffer_bottom();
 
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces || CDSPreimage != nullptr) {
     _requested_static_archive_top = _requested_static_archive_bottom + my_archive_size;
     RelocateBufferToRequested<true> patcher(this);
     patcher.doit();

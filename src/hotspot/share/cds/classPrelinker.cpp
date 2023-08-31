@@ -589,8 +589,11 @@ class ClassPrelinker::PreloadedKlassRecorder : StackObj {
       return;
     }
     if (MetaspaceObj::is_shared(ik)) {
-      assert(DynamicDumpSharedSpaces, "must be");
-      return;
+      if (DynamicDumpSharedSpaces) {
+        return;
+      } else {
+        assert(CDSPreimage != nullptr, "must be");
+      }
     }
 
     // Do not preload any module classes that are not from the modules images,
@@ -643,7 +646,7 @@ public:
     GrowableArray<Klass*>* klasses = ArchiveBuilder::current()->klasses();
     for (GrowableArrayIterator<Klass*> it = klasses->begin(); it != klasses->end(); ++it) {
       Klass* k = *it;
-      assert(!k->is_shared(), "must be");
+      //assert(!k->is_shared(), "must be");
       if (k->is_instance_klass()) {
         maybe_record(InstanceKlass::cast(k));
       }
