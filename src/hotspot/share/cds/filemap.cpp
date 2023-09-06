@@ -203,7 +203,7 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _core_region_alignment = core_region_alignment;
   _obj_alignment = ObjectAlignmentInBytes;
   _compact_strings = CompactStrings;
-  if (DumpSharedSpaces && HeapShared::can_write()) {
+  if ((DumpSharedSpaces || CDSPreimage != nullptr) && HeapShared::can_write()) {
     _narrow_oop_mode = CompressedOops::mode();
     _narrow_oop_base = CompressedOops::base();
     _narrow_oop_shift = CompressedOops::shift();

@@ -190,7 +190,7 @@ ArchiveBuilder::~ArchiveBuilder() {
 }
 
 bool ArchiveBuilder::is_dumping_full_module_graph() {
-  return DumpSharedSpaces && MetaspaceShared::use_full_module_graph();
+  return (DumpSharedSpaces || CDSPreimage != nullptr) && MetaspaceShared::use_full_module_graph();
 }
 
 class GatherKlassesAndSymbols : public UniqueMetaspaceClosure {
@@ -876,7 +876,7 @@ uintx ArchiveBuilder::any_to_offset(address p) const {
 
 #if INCLUDE_CDS_JAVA_HEAP
 narrowKlass ArchiveBuilder::get_requested_narrow_klass(Klass* k) {
-  assert(DumpSharedSpaces, "sanity");
+  assert(DumpSharedSpaces || CDSPreimage != nullptr, "sanity");
   k = get_buffered_klass(k);
   Klass* requested_k = to_requested(k);
   address narrow_klass_base = _requested_static_archive_bottom; // runtime encoding base == runtime mapping start

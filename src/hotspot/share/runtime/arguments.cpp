@@ -3068,8 +3068,9 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
 
         // At VM exit, the module graph may be contaminated with program states. We should rebuild the
         // module graph when dumping the CDS final image.
-        MetaspaceShared::disable_full_module_graph();
         log_info(cds)("full module graph: disabled when writing CDS preimage");
+        HeapShared::disable_writing();
+        MetaspaceShared::disable_full_module_graph();
       }
     } else {
       // The final image phase -- load the preimage and write the final image file
@@ -3077,8 +3078,6 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
       UseSharedSpaces = true;
       log_info(cds)("Generate CacheDataStore %s from CDSPreimage %s", CacheDataStore, CDSPreimage);
     }
-
-    HeapShared::disable_writing(); // FIXME -- skip this for now, until we can get the metadata dumping to work.
   } else {
     if (CDSPreimage != nullptr) {
       vm_exit_during_initialization("CDSPreimage must be specified only when CacheDataStore is specified");
@@ -3438,6 +3437,7 @@ void Arguments::set_shared_spaces_flags_and_archive_paths() {
     if (RequireSharedSpaces) {
       warning("Cannot dump shared archive while using shared archive");
     }
+    UseSharedSpaces = false;
   }
 #if INCLUDE_CDS
   // Initialize shared archive paths which could include both base and dynamic archive paths

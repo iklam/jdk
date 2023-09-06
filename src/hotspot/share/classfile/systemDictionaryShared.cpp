@@ -761,7 +761,7 @@ bool SystemDictionaryShared::add_verification_constraint(InstanceKlass* k, Symbo
 }
 
 void SystemDictionaryShared::add_enum_klass_static_field(InstanceKlass* ik, int root_index) {
-  assert(DumpSharedSpaces, "static dump only");
+  assert(DumpSharedSpaces || CDSPreimage != nullptr, "static dump only");
   DumpTimeClassInfo* info = get_info_locked(ik);
   info->add_enum_klass_static_field(root_index);
 }
@@ -786,7 +786,7 @@ void SystemDictionaryShared::add_lambda_proxy_class(InstanceKlass* caller_ik,
                                                     Method* member_method,
                                                     Symbol* instantiated_method_type,
                                                     TRAPS) {
-  if (DumpSharedSpaces && ArchiveInvokeDynamic) {
+  if ((DumpSharedSpaces || CDSPreimage != nullptr) && ArchiveInvokeDynamic) {
     // The proxy classes will be accessible through the archived CP entries.
     return;
   }

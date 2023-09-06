@@ -153,7 +153,7 @@ oop ArchiveHeapWriter::requested_obj_from_buffer_offset(size_t offset) {
 }
 
 oop ArchiveHeapWriter::source_obj_to_requested_obj(oop src_obj) {
-  assert(DumpSharedSpaces, "dump-time only");
+  assert(DumpSharedSpaces || CDSPreimage != nullptr, "dump-time only");
   HeapShared::CachedOopInfo* p = HeapShared::archived_object_cache()->get(src_obj);
   if (p != nullptr) {
     return requested_obj_from_buffer_offset(p->buffer_offset());

@@ -223,7 +223,7 @@ void ConstantPool::initialize_resolved_references(ClassLoaderData* loader_data,
     set_resolved_references(loader_data->add_handle(refs_handle));
 
     // Create a "scratch" copy of the resolved references array to archive
-    if (DumpSharedSpaces) {
+    if (DumpSharedSpaces || CDSPreimage != nullptr) {
       objArrayOop scratch_references = oopFactory::new_objArray(vmClasses::Object_klass(), map_length, CHECK);
       HeapShared::add_scratch_resolved_references(this, scratch_references);
     }
@@ -403,6 +403,11 @@ void ConstantPool::restore_unshareable_info(TRAPS) {
         set_resolved_references(loader_data->add_handle(refs_handle));
       }
     }
+  }
+
+  if (CDSPreimage != nullptr && resolved_references() != nullptr) {
+    objArrayOop scratch_references = oopFactory::new_objArray(vmClasses::Object_klass(), resolved_references()->length(), CHECK);
+    HeapShared::add_scratch_resolved_references(this, scratch_references);
   }
 }
 

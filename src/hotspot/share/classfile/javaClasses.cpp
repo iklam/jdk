@@ -1064,7 +1064,7 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
       // concurrently doesn't expect a k to have a null java_mirror.
       release_set_array_klass(comp_mirror(), k);
     }
-    if (DumpSharedSpaces) {
+    if (DumpSharedSpaces || CDSPreimage != nullptr) {
       create_scratch_mirror(k, CHECK);
     }
   } else {
@@ -1366,7 +1366,7 @@ BasicType java_lang_Class::primitive_type(oop java_class) {
     assert(java_class == Universe::void_mirror(), "only valid non-array primitive");
   }
 #ifdef ASSERT
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces || CDSPreimage != nullptr) {
     oop mirror = Universe::java_mirror(type);
     oop scratch_mirror = HeapShared::scratch_java_mirror(type);
     assert(java_class == mirror || java_class == scratch_mirror, "must be consistent");

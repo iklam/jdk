@@ -650,7 +650,7 @@ void Klass::clear_archived_mirror_index() {
 
 // No GC barrier
 void Klass::set_archived_java_mirror(int mirror_index) {
-  assert(DumpSharedSpaces, "called only during dumptime");
+  assert(DumpSharedSpaces || CDSPreimage != nullptr, "called only during dumptime");
   _archived_mirror_index = mirror_index;
 }
 #endif // INCLUDE_CDS_JAVA_HEAP

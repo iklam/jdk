@@ -507,7 +507,7 @@ void ClassPrelinker::preresolve_indy_cp_entries(JavaThread* current, InstanceKla
 static GrowableArrayCHeap<char*, mtClassShared>* _invokedynamic_filter = nullptr;
 
 bool ClassPrelinker::should_preresolve_invokedynamic(ConstantPool* cp, int cp_index) {
-  if (!ArchiveInvokeDynamic) {
+  if (!ArchiveInvokeDynamic || !HeapShared::can_write()) {
     return false;
   }
 
