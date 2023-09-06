@@ -3076,9 +3076,9 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
       SharedArchiveFile = CDSPreimage;
       UseSharedSpaces = true;
       log_info(cds)("Generate CacheDataStore %s from CDSPreimage %s", CacheDataStore, CDSPreimage);
-
-      HeapShared::disable_writing(); // FIXME -- skip this for now, until we can get the metadata dumping to work.
     }
+
+    HeapShared::disable_writing(); // FIXME -- skip this for now, until we can get the metadata dumping to work.
   } else {
     if (CDSPreimage != nullptr) {
       vm_exit_during_initialization("CDSPreimage must be specified only when CacheDataStore is specified");
@@ -3536,6 +3536,10 @@ void Arguments::init_shared_archive_paths() {
         "Cannot have more than 1 archive file specified in -XX:SharedArchiveFile during CDS dumping");
     }
 
+    if (CDSPreimage != nullptr && archives > 1) {
+      vm_exit_during_initialization("CDSPreimage must point to a single file", CDSPreimage);
+    }
+
     if (DumpSharedSpaces) {
       assert(archives == 1, "must be");
       // Static dump is simple: only one archive is allowed in SharedArchiveFile. This file
@@ -3560,6 +3564,10 @@ void Arguments::init_shared_archive_paths() {
         bool success =
           FileMapInfo::get_base_archive_name_from_header(SharedArchiveFile, &base_archive_path);
         if (!success) {
+          if (CDSPreimage != nullptr) {
+            vm_exit_during_initialization("Unable to map shared spaces from CDSPreimage", CDSPreimage);
+          }
+
           // If +AutoCreateSharedArchive and the specified shared archive does not exist,
           // regenerate the dynamic archive base on default archive.
           if (AutoCreateSharedArchive && !os::file_exists(SharedArchiveFile)) {

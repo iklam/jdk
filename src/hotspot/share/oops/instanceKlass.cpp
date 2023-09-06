@@ -2743,6 +2743,7 @@ void InstanceKlass::remove_unshareable_info() {
   init_shared_package_entry();
   _dep_context_last_cleaned = 0;
   _init_monitor = nullptr;
+  _shared_class_load_count = 0;
 
   _training_data = nullptr;
   remove_unshareable_flags();

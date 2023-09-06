@@ -1666,7 +1666,7 @@ static Array<InstanceKlass*>* copy_klass_array(GrowableArray<InstanceKlass*>* sr
 }
 
 void SystemDictionaryShared::record_archived_lambda_form_classes() {
-  if (!ArchiveInvokeDynamic && !DumpSharedSpaces) {
+  if (!(ArchiveInvokeDynamic && DumpSharedSpaces)) {
     return;
   }
 

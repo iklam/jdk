@@ -569,7 +569,14 @@ void VM_PopulateDumpSharedSpace::doit() {
   builder.relocate_to_requested();
 
   // Write the archive file
-  const char* static_archive = Arguments::GetSharedArchivePath();
+  const char* static_archive;
+  if (CDSPreimage != nullptr) {
+    static_archive = CacheDataStore;
+    assert(FileMapInfo::current_info() != nullptr, "sanity");
+    delete FileMapInfo::current_info();
+  } else {
+    static_archive = Arguments::GetSharedArchivePath();
+  }
   assert(static_archive != nullptr, "SharedArchiveFile not set?");
   FileMapInfo* mapinfo = new FileMapInfo(static_archive, true);
   mapinfo->populate_header(MetaspaceShared::core_region_alignment());
@@ -1023,6 +1030,9 @@ void MetaspaceShared::initialize_runtime_shared_and_meta_spaces() {
       MetaspaceShared::unrecoverable_loading_error("Unable to use shared archive.");
     } else if (RequireSharedSpaces) {
       MetaspaceShared::unrecoverable_loading_error("Unable to map shared spaces");
+    } else if (CDSPreimage != nullptr) {
+      log_error(cds)("Unable to map shared spaces for CDSPreimage = %s", CDSPreimage);
+      MetaspaceShared::unrecoverable_loading_error();
     }
   }
 
@@ -1038,6 +1048,10 @@ void MetaspaceShared::initialize_runtime_shared_and_meta_spaces() {
   }
   if (RequireSharedSpaces && has_failed) {
       MetaspaceShared::unrecoverable_loading_error("Unable to map shared spaces");
+  }
+  if (CDSPreimage != nullptr && has_failed) {
+    log_error(cds)("Unable to map shared spaces for CDSPreimage = %s", CDSPreimage);
+    MetaspaceShared::unrecoverable_loading_error();
   }
 }
 

@@ -244,7 +244,7 @@ void ArchiveBuilder::gather_klasses_and_symbols() {
 #endif
   doit.finish();
 
-  if (DumpSharedSpaces) {
+  if (DumpSharedSpaces || CDSPreimage != nullptr) {
     // To ensure deterministic contents in the static archive, we need to ensure that
     // we iterate the MetaspaceObjs in a deterministic order. It doesn't matter where
     // the MetaspaceObjs are located originally, as they are copied sequentially into
