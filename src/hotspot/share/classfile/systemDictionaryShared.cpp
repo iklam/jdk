@@ -106,8 +106,10 @@ InstanceKlass* SystemDictionaryShared::load_shared_class_for_builtin_loader(
         (SystemDictionary::is_platform_class_loader(class_loader()) && ik->is_shared_platform_class())) {
       SharedClassLoadingMark slm(THREAD, ik);
       PackageEntry* pkg_entry = CDSProtectionDomain::get_package_entry_from_class(ik, class_loader);
-      Handle protection_domain =
-        CDSProtectionDomain::init_security_info(class_loader, ik, pkg_entry, CHECK_NULL);
+      Handle protection_domain;
+      if (CDSPreimage == nullptr) {
+        protection_domain = CDSProtectionDomain::init_security_info(class_loader, ik, pkg_entry, CHECK_NULL);
+      }
       return load_shared_class(ik, class_loader, protection_domain, nullptr, pkg_entry, THREAD);
     }
   }
@@ -514,7 +516,7 @@ void SystemDictionaryShared::set_shared_class_misc_info(InstanceKlass* k, ClassF
 }
 
 void SystemDictionaryShared::initialize() {
-  if (CDSConfig::use_dumptime_tables()) {
+  if (CDSConfig::is_using_dumptime_tables()) {
     _dumptime_table = new (mtClass) DumpTimeSharedClassTable;
     _dumptime_lambda_proxy_class_dictionary =
                       new (mtClass) DumpTimeLambdaProxyClassDictionary;

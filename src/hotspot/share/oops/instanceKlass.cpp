@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveUtils.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/cdsEnumKlass.hpp"
 #include "cds/classListWriter.hpp"
 #include "cds/heapShared.hpp"
@@ -2743,7 +2744,7 @@ void InstanceKlass::remove_unshareable_info() {
   init_shared_package_entry();
   _dep_context_last_cleaned = 0;
   _init_monitor = nullptr;
-  _shared_class_load_count = 0;
+  DEBUG_ONLY(_shared_class_load_count = 0);
 
   _training_data = nullptr;
   remove_unshareable_flags();
@@ -2772,7 +2773,7 @@ void InstanceKlass::init_shared_package_entry() {
 #if !INCLUDE_CDS_JAVA_HEAP
   _package_entry = nullptr;
 #else
-  if (!MetaspaceShared::use_full_module_graph()) {
+  if (!CDSConfig::is_dumping_full_module_graph()) {
     _package_entry = nullptr;
   } else if (DynamicDumpSharedSpaces) {
     if (!MetaspaceShared::is_in_shared_metaspace(_package_entry)) {
@@ -3114,7 +3115,7 @@ void InstanceKlass::set_package(ClassLoaderData* loader_data, PackageEntry* pkg_
   }
 
   if (is_shared() && _package_entry != nullptr) {
-    if (MetaspaceShared::use_full_module_graph() && _package_entry == pkg_entry) {
+    if (CDSConfig::is_loading_full_module_graph() && _package_entry == pkg_entry) {
       // we can use the saved package
       assert(MetaspaceShared::is_in_shared_metaspace(_package_entry), "must be");
       return;

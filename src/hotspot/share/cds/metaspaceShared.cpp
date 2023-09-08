@@ -27,6 +27,7 @@
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
 #include "cds/cds_globals.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/cdsProtectionDomain.hpp"
 #include "cds/classListWriter.hpp"
 #include "cds/classListParser.hpp"
@@ -97,7 +98,6 @@ void* MetaspaceShared::_shared_metaspace_static_top = nullptr;
 intx MetaspaceShared::_relocation_delta;
 char* MetaspaceShared::_requested_base_address;
 bool MetaspaceShared::_use_optimized_module_handling = true;
-bool MetaspaceShared::_use_full_module_graph = true;
 Array<Method*>* MetaspaceShared::_archived_method_handle_intrinsics = NULL;
 
 // The CDS archive is divided into the following regions:
@@ -720,7 +720,7 @@ void MetaspaceShared::preload_and_dump() {
 
 #if INCLUDE_CDS_JAVA_HEAP
   // Restore the java loaders that were cleared at dump time
-  if (use_full_module_graph()) {
+  if (CDSConfig::is_dumping_full_module_graph()) {
     HeapShared::restore_loader_data();
   }
 #endif
@@ -841,7 +841,7 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
  if (HeapShared::can_write()) {
   StringTable::allocate_shared_strings_array(CHECK);
   ArchiveHeapWriter::init();
-  if (use_full_module_graph()) {
+  if (CDSConfig::is_dumping_full_module_graph()) {
     HeapShared::reset_archived_object_states(CHECK);
   }
 
@@ -870,7 +870,13 @@ bool MetaspaceShared::try_link_class(JavaThread* current, InstanceKlass* ik) {
   ExceptionMark em(current);
   JavaThread* THREAD = current; // For exception macros.
   Arguments::assert_is_dumping_archive();
-  if (/*!ik->is_shared() && */ ik->is_loaded() && !ik->is_linked() && ik->can_be_verified_at_dumptime() &&
+
+  if (ik->is_shared() && CDSPreimage == nullptr) {
+    assert(CDSConfig::is_dumping_dynamic_archive(), "must be");
+    return false;
+  }
+
+  if (ik->is_loaded() && !ik->is_linked() && ik->can_be_verified_at_dumptime() &&
       !SystemDictionaryShared::has_class_failed_verification(ik)) {
     bool saved = BytecodeVerificationLocal;
     if (ik->is_shared_unregistered_class() && ik->class_loader() == nullptr) {
@@ -1247,7 +1253,7 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
         }
 #endif // _LP64
     log_info(cds)("optimized module handling: %s", MetaspaceShared::use_optimized_module_handling() ? "enabled" : "disabled");
-    log_info(cds)("full module graph: %s", MetaspaceShared::use_full_module_graph() ? "enabled" : "disabled");
+    log_info(cds)("full module graph: %s", CDSConfig::is_loading_full_module_graph() ? "loaded" : "not loaded");
   } else {
     unmap_archive(static_mapinfo);
     unmap_archive(dynamic_mapinfo);
@@ -1622,29 +1628,6 @@ bool MetaspaceShared::remap_shared_readonly_as_readwrite() {
     _remapped_readwrite = true;
   }
   return true;
-}
-
-bool MetaspaceShared::use_full_module_graph() {
-#if INCLUDE_CDS_JAVA_HEAP
-  if (ClassLoaderDataShared::is_full_module_graph_loaded()) {
-    return true;
-  }
-#endif
-  bool result = _use_optimized_module_handling && _use_full_module_graph;
-  if (DumpSharedSpaces) {
-    result &= HeapShared::can_write();
-  } else if (UseSharedSpaces) {
-    result &= ArchiveHeapLoader::can_use();
-  } else {
-    result = false;
-  }
-
-  if (result && UseSharedSpaces) {
-    // Classes used by the archived full module graph are loaded in JVMTI early phase.
-    assert(!(JvmtiExport::should_post_class_file_load_hook() && JvmtiExport::has_early_class_hook_env()),
-           "CDS should be disabled if early class hooks are enabled");
-  }
-  return result;
 }
 
 void MetaspaceShared::print_on(outputStream* st) {

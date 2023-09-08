@@ -23,14 +23,76 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"
+#include "cds/heapShared.hpp"
+#include "cds/metaspaceShared.hpp"
+#include "classfile/classLoaderDataShared.hpp"
+#include "logging/log.hpp"
+#include "prims/jvmtiExport.hpp"
 #include "runtime/arguments.hpp"
 
-bool CDSConfig::use_dumptime_tables() {
+static bool _enable_dumping_full_module_graph = true;
+static bool _enable_loading_full_module_graph = true;
+
+bool CDSConfig::is_using_dumptime_tables() {
   return Arguments::is_dumping_archive() || CDSPreimage != nullptr;
 }
 
-void CDSConfig::assert_using_dumptime_tables() {
-  assert(use_dumptime_tables(), "must be");
+bool CDSConfig::is_dumping_static_archive() {
+  return DumpSharedSpaces || (CDSPreimage != nullptr);
+}
+
+bool CDSConfig::is_dumping_dynamic_archive() {
+  return DynamicDumpSharedSpaces;
+}
+
+bool CDSConfig::is_dumping_full_module_graph() {
+  if (is_dumping_static_archive() &&
+      HeapShared::can_write() &&
+      MetaspaceShared::use_optimized_module_handling() &&
+      _enable_dumping_full_module_graph) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool CDSConfig::is_loading_full_module_graph() {
+#if INCLUDE_CDS_JAVA_HEAP
+  if (ClassLoaderDataShared::is_full_module_graph_loaded()) {
+    return true;
+  }
+#endif
+
+  if (UseSharedSpaces &&
+      ArchiveHeapLoader::can_use() &&
+      MetaspaceShared::use_optimized_module_handling() &&
+      _enable_loading_full_module_graph) {
+    // Classes used by the archived full module graph are loaded in JVMTI early phase.
+    assert(!(JvmtiExport::should_post_class_file_load_hook() && JvmtiExport::has_early_class_hook_env()),
+           "CDS should be disabled if early class hooks are enabled");
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void CDSConfig::disable_dumping_full_module_graph(const char* reason) {
+  if (_enable_dumping_full_module_graph) {
+    _enable_dumping_full_module_graph = false;
+    if (reason != nullptr) {
+      log_info(cds)("full module graph cannot be dumped: %s", reason);
+    }
+  }
+}
+
+void CDSConfig::disable_loading_full_module_graph(const char* reason) {
+  if (_enable_loading_full_module_graph) {
+    _enable_loading_full_module_graph = false;
+    if (reason != nullptr) {
+      log_info(cds)("full module graph cannot be loaded: %s", reason);
+    }
+  }
 }

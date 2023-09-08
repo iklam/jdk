@@ -26,11 +26,33 @@
 #define SHARE_CDS_CDSCONFIG_HPP
 
 #include "memory/allStatic.hpp"
+//#include "utilities/debug.hpp"
+#include "utilities/macros.hpp"
 
 class CDSConfig : public AllStatic {
 public:
-  static bool use_dumptime_tables();
-  static void assert_using_dumptime_tables();
+  static bool        is_using_dumptime_tables();
+//static void assert_using_dumptime_tables() { assert(use_dumptime_tables(), ""); }
+
+  static bool        is_dumping_archive(); // dynamic or static archive
+//static void assert_is_dumping_archive()  { assert(is_dumping_archive(), ""); }
+
+  static bool        is_dumping_static_archive();
+//static void assert_is_dumping_static_archive() { assert(is_dumping_static_archive(), ""); }
+
+  static bool        is_dumping_dynamic_archive();
+//static void assert_is_dumping_dynamic_archive() { assert(is_dumping_dynamic_archive(), ""); }
+
+  static bool        is_dumping_heap();
+//static void assert_is_dumping_heap() { assert(is_dumping_heap(), ""); }
+
+  static void   disable_dumping_full_module_graph(const char* reason = nullptr);
+  static bool        is_dumping_full_module_graph();
+//static void assert_is_dumping_full_module_graph() { assert(is_dumping_full_module_graph(), ""); }
+
+  static void   disable_loading_full_module_graph(const char* reason = nullptr);
+  static bool        is_loading_full_module_graph();
+//static void assert_is_loading_full_module_graph() { assert(is_loading_full_module_graph(), ""); }
 };
 
 #endif // SHARE_CDS_CDSCONFIG_HPP
