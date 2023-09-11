@@ -84,6 +84,10 @@
           "(** internal use only **) -- used by a child JVM process to "    \
           "create the CacheDataStore final image")                          \
                                                                             \
+  product(bool, CDSManualFinalImage, false, DIAGNOSTIC,                     \
+          "(** internal use only **) -- if false, automatically launch a "  \
+          "child process to create the final image.")                       \
+                                                                            \
   product(ccstr, SharedClassListFile, nullptr,                              \
           "Override the default CDS class list")  \
                                                                             \

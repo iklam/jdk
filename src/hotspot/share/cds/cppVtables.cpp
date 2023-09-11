@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/archiveBuilder.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "logging/log.hpp"
@@ -223,7 +224,7 @@ void CppVtableCloner<T>::init_orig_cpp_vtptr(int kind) {
 CppVtableInfo** CppVtables::_index = nullptr;
 
 char* CppVtables::dumptime_init(ArchiveBuilder* builder) {
-  assert(DumpSharedSpaces || CDSPreimage != nullptr, "must");
+  assert(CDSConfig::is_dumping_static_archive(), "must");
   size_t vtptrs_bytes = _num_cloned_vtable_kinds * sizeof(CppVtableInfo*);
   _index = (CppVtableInfo**)builder->rw_region()->allocate(vtptrs_bytes);
 
@@ -301,7 +302,7 @@ intptr_t* CppVtables::get_archived_vtable(MetaspaceObj::Type msotype, address ob
 }
 
 void CppVtables::zero_archived_vtables() {
-  assert(DumpSharedSpaces || CDSPreimage != nullptr, "dump-time only");
+  assert(CDSConfig::is_dumping_static_archive(), "dump-time only");
   for (int kind = 0; kind < _num_cloned_vtable_kinds; kind ++) {
     _index[kind]->zero();
   }

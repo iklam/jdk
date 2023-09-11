@@ -550,6 +550,9 @@ void VM_PopulateDumpSharedSpace::doit() {
   {
     ArchiveBuilder::OtherROAllocMark mark;
     ClassPrelinker::record_preloaded_klasses(true);
+    if (CacheDataStore != nullptr && DumpSharedSpaces) {
+      ClassPrelinker::record_resolved_indys();
+    }
   }
 
   log_info(cds)("Make classes shareable");
@@ -690,6 +693,8 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
       }
     }
   }
+
+  ClassPrelinker::preresolve_indys_from_preimage(CHECK);
 }
 
 void MetaspaceShared::prepare_for_dumping() {
@@ -728,7 +733,7 @@ void MetaspaceShared::preload_and_dump() {
 
 #if INCLUDE_CDS_JAVA_HEAP && defined(_LP64)
 void MetaspaceShared::adjust_heap_sizes_for_dumping() {
-  if (!DumpSharedSpaces || UseCompressedOops) {
+  if (!CDSConfig::is_dumping_heap() || UseCompressedOops) {
     return;
   }
   // CDS heap dumping requires all string oops to have an offset
@@ -863,6 +868,46 @@ void MetaspaceShared::preload_and_dump_impl(TRAPS) {
 
   VM_PopulateDumpSharedSpace op;
   VMThread::execute(&op);
+
+  if (CacheDataStore != nullptr && CDSPreimage == nullptr) {
+    // Create the final CDS image.
+    ResourceMark rm;
+    stringStream st;
+    st.print("%s%sbin%sjava", Arguments::get_java_home(), os::file_separator(), os::file_separator());
+    const char* cp = Arguments::get_appclasspath();
+    if (cp != nullptr && strlen(cp) > 0 && strcmp(cp, ".") != 0) {
+      st.print(" -cp %s", cp);
+    }
+    for (int i = 0; i < Arguments::num_jvm_flags(); i++) {
+      st.print(" %s", Arguments::jvm_flags_array()[i]);
+    }
+    for (int i = 0; i < Arguments::num_jvm_args(); i++) {
+      st.print(" %s", Arguments::jvm_args_array()[i]);
+    }
+    st.print(" -XX:CDSPreimage=%s", SharedArchiveFile);
+
+    const char* cmd = st.freeze();
+    if (CDSManualFinalImage) {
+      tty->print_cr("-XX:+CDSManualFinalImage is specified");
+      tty->print_cr("Please manually execute the following command to create the final CDS image:");
+      tty->print_cr("    %s", cmd);
+    } else {
+      log_info(cds)("Launching child process to create final CDS image:");
+      log_info(cds)("    %s", cmd);
+      int status = os::fork_and_exec(cmd);
+      if (status != 0) {
+        log_error(cds)("Child process finished; status = %d", status);
+      } else {
+        log_info(cds)("Child process finished; status = %d", status);
+        status = remove(SharedArchiveFile);
+        if (status != 0) {
+          log_error(cds)("Failed to remove CDSPreimage file %s", SharedArchiveFile);
+        } else {
+          log_info(cds)("Removed CDSPreimage file %s", SharedArchiveFile);
+        }
+      }
+    }
+  }
 }
 
 // Returns true if the class's status has changed.

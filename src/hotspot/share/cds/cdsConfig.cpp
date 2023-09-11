@@ -48,9 +48,12 @@ bool CDSConfig::is_dumping_dynamic_archive() {
   return DynamicDumpSharedSpaces;
 }
 
+bool CDSConfig::is_dumping_heap() {
+  return is_dumping_static_archive() && HeapShared::can_write();
+}
+
 bool CDSConfig::is_dumping_full_module_graph() {
-  if (is_dumping_static_archive() &&
-      HeapShared::can_write() &&
+  if (is_dumping_heap() &&
       MetaspaceShared::use_optimized_module_handling() &&
       _enable_dumping_full_module_graph) {
     return true;

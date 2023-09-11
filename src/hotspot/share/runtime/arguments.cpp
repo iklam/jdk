@@ -3073,6 +3073,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
         log_info(cds)("full module graph: disabled when writing CDS preimage");
         HeapShared::disable_writing();
         CDSConfig::disable_dumping_full_module_graph();
+        ArchiveInvokeDynamic = false;
       }
     } else {
       // The final image phase -- load the preimage and write the final image file
@@ -3086,7 +3087,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
     }
   }
 
-  if (DumpSharedSpaces) {
+  if (CDSConfig::is_dumping_static_archive()) {
     // Compiler threads may concurrently update the class metadata (such as method entries), so it's
     // unsafe with -Xshare:dump (which modifies the class metadata in place). Let's disable
     // compiler just to be safe.
@@ -3151,12 +3152,7 @@ jint Arguments::finalize_vm_init_args(bool patch_mod_javabase) {
     }
   }
 
-  if (DynamicDumpSharedSpaces) {
-    ArchiveInvokeDynamic = false; // requires heap dumping, which is not supported in dynamic archive.
-  } else if (!DumpSharedSpaces) {
-    ArchiveInvokeDynamic = false; // This flag is useful only when dumping the static archive.
-  }
-  if (!PreloadSharedClasses) {
+  if (!CDSConfig::is_dumping_static_archive() || !PreloadSharedClasses) {
     ArchiveInvokeDynamic = false;
   }
 #endif

@@ -706,7 +706,7 @@ void InstanceKlass::deallocate_contents(ClassLoaderData* loader_data) {
   SystemDictionaryShared::handle_class_unloading(this);
 
 #if INCLUDE_CDS_JAVA_HEAP
-  if (DumpSharedSpaces) {
+  if (CDSConfig::is_dumping_heap()) {
     HeapShared::remove_scratch_objects(this);
   }
 #endif
@@ -802,7 +802,7 @@ bool InstanceKlass::link_class_or_fail(TRAPS) {
 }
 
 bool InstanceKlass::link_class_impl(TRAPS) {
-  if (DumpSharedSpaces && SystemDictionaryShared::has_class_failed_verification(this)) {
+  if (CDSConfig::is_dumping_static_archive() && SystemDictionaryShared::has_class_failed_verification(this)) {
     // This is for CDS dumping phase only -- we use the in_error_state to indicate that
     // the class has failed verification. Throwing the NoClassDefFoundError here is just
     // a convenient way to stop repeat attempts to verify the same (bad) class.
@@ -2735,7 +2735,7 @@ void InstanceKlass::remove_unshareable_info() {
   _methods_jmethod_ids = nullptr;
   _jni_ids = nullptr;
   _oop_map_cache = nullptr;
-  if (DumpSharedSpaces && ArchiveInvokeDynamic && HeapShared::is_lambda_proxy_klass(this)) {
+  if (ArchiveInvokeDynamic && HeapShared::is_lambda_proxy_klass(this)) {
     // keep _nest_host
   } else {
     // clear _nest_host to ensure re-load at runtime
