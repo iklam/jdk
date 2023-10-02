@@ -33,6 +33,7 @@ import java.lang.module.ModuleDescriptor;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -441,6 +442,22 @@ public class Proxy implements java.io.Serializable {
         }
     }
 
+    private static void updateCacheForCDS(ClassLoader loader,
+                                          Class<?>[] interfaces,
+                                          Constructor<?> cons) {
+        if (interfaces.length == 1) {
+            Class<?> intf = interfaces[0];
+            proxyCache.sub(intf).putIfAbsent(loader, cons);
+            assert proxyCache.sub(intf).get(loader) == cons;
+        } else {
+            // interfaces cloned
+            final Class<?>[] intfsArray = interfaces.clone();
+            final List<Class<?>> intfs = Arrays.asList(intfsArray);
+            proxyCache.sub(intfs).putIfAbsent(loader, cons);
+            assert proxyCache.sub(intfs).get(loader) == cons;
+        }
+    }
+
     /*
      * Check permissions required to create a Proxy class.
      *
@@ -552,12 +569,20 @@ public class Proxy implements java.io.Serializable {
 
             ClassLoader loader = getLoader(context.module());
             trace(proxyName, context.module(), loader, interfaces);
+            int accessFlags = context.accessFlags() | Modifier.FINAL;
 
+            if (CDS.isDumpingClassList()) {
+                CDS.traceDynamicProxy(loader, proxyName, interfaces.toArray(new Class<?>[0]), accessFlags);
+            }
+            return defineProxyClassInner(loader, proxyName, interfaces, accessFlags);
+        }
+
+        private static Class<?> defineProxyClassInner(ClassLoader loader, String proxyName,
+                                                      List<Class<?>> interfaces, int accessFlags) {
             /*
              * Generate the specified proxy class.
              */
-            byte[] proxyClassFile = ProxyGenerator.generateProxyClass(loader, proxyName, interfaces,
-                                                                      context.accessFlags() | Modifier.FINAL);
+            byte[] proxyClassFile = ProxyGenerator.generateProxyClass(loader, proxyName, interfaces, accessFlags);
             try {
                 Class<?> pc = JLA.defineClass(loader, proxyName, proxyClassFile,
                                               null, "__dynamic_proxy__");
@@ -573,6 +598,17 @@ public class Proxy implements java.io.Serializable {
                  */
                 throw new IllegalArgumentException(e.toString());
             }
+        }
+
+        private static void defineProxyClassForCDS(ClassLoader loader, String proxyName, Class<?>[] interfaces,
+                                                   int accessFlags) {
+            ArrayList<Class<?>> list = new ArrayList<>();
+            for (Object o : interfaces) {
+                list.add((Class<?>)o);
+            }
+            Class<?> proxyClass = defineProxyClassInner(loader, proxyName, list, accessFlags);
+            Constructor<?> cons = getAccessibleConstructor(proxyClass);
+            updateCacheForCDS(loader, interfaces, cons);
         }
 
         /**
@@ -667,10 +703,13 @@ public class Proxy implements java.io.Serializable {
          * Must call the checkProxyAccess method to perform permission checks
          * before calling this.
          */
-        @SuppressWarnings("removal")
         Constructor<?> build() {
             Class<?> proxyClass = defineProxyClass(context, interfaces);
+            return getAccessibleConstructor(proxyClass);
+        }
 
+        @SuppressWarnings("removal")
+        private static Constructor<?> getAccessibleConstructor(Class<?> proxyClass) {
             final Constructor<?> cons;
             try {
                 cons = proxyClass.getConstructor(constructorParams);

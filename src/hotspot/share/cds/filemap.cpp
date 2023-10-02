@@ -214,6 +214,7 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _max_heap_size = MaxHeapSize;
   _use_optimized_module_handling = MetaspaceShared::use_optimized_module_handling();
   _has_full_module_graph = CDSConfig::is_dumping_full_module_graph();
+  _has_archived_invokedynamic = CDSConfig::is_dumping_invokedynamic();
 
   // The following fields are for sanity checks for whether this archive
   // will function correctly with this JVM and the bootclasspath it's
@@ -292,6 +293,7 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- allow_archiving_with_java_agent:%d", _allow_archiving_with_java_agent);
   st->print_cr("- use_optimized_module_handling:  %d", _use_optimized_module_handling);
   st->print_cr("- has_full_module_graph           %d", _has_full_module_graph);
+  st->print_cr("- has_archived_invokedynamic      %d", _has_archived_invokedynamic);
   st->print_cr("- ptrmap_size_in_bits:            " SIZE_FORMAT, _ptrmap_size_in_bits);
 }
 
@@ -2313,7 +2315,7 @@ int FileMapHeader::compute_crc() {
 }
 
 // This function should only be called during run time with UseSharedSpaces enabled.
-bool FileMapHeader::validate() {
+bool FileMapHeader::validate(bool is_static) {
   if (_obj_alignment != ObjectAlignmentInBytes) {
     log_info(cds)("The shared archive file's ObjectAlignmentInBytes of %d"
                   " does not equal the current ObjectAlignmentInBytes of %d.",
@@ -2392,11 +2394,17 @@ bool FileMapHeader::validate() {
     CDSConfig::disable_loading_full_module_graph("archive was created without full module graph");
   }
 
+  if (is_static) {
+    if (_has_archived_invokedynamic) {
+      CDSConfig::set_is_loading_invokedynamic();
+    }
+  }
+
   return true;
 }
 
 bool FileMapInfo::validate_header() {
-  if (!header()->validate()) {
+  if (!header()->validate(_is_static)) {
     return false;
   }
   if (_is_static) {

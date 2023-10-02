@@ -3751,6 +3751,41 @@ JVM_ENTRY(void, JVM_LogLambdaFormInvoker(JNIEnv *env, jstring line))
 #endif // INCLUDE_CDS
 JVM_END
 
+JVM_ENTRY(void, JVM_LogDynamicProxy(JNIEnv *env, jobject loader, jstring proxy_name, jobjectArray interfaces, jint accessFlags))
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces) {
+    return; // FIXME jdk.internal.misc.CDS.isDumpingClassList() is wrong!
+  }
+  assert(ClassListWriter::is_enabled(),  "sanity");
+  ResourceMark rm(THREAD);
+  Handle h_proxy_name(THREAD, JNIHandles::resolve_non_null(proxy_name));
+  char* c_proxy_name = java_lang_String::as_utf8_string(h_proxy_name());
+  oop loaderOop = JNIHandles::resolve(loader);
+  objArrayOop interfacesOop = objArrayOop(JNIHandles::resolve_non_null(interfaces));
+  if (interfacesOop->length() < 1) {
+    return;
+  }
+  stringStream ss;
+  if (loaderOop == nullptr) {
+    ss.print("boot");
+  } else if (loaderOop == SystemDictionary::java_platform_loader()) {
+    ss.print("platform");
+  } else if (loaderOop == SystemDictionary::java_system_loader()) {
+    ss.print("app");
+  } else {
+    return;
+  }
+  ss.print(" %s %d %d", c_proxy_name, accessFlags, interfacesOop->length());
+  for (int i = 0; i < interfacesOop->length(); i++) {
+    oop mirror = interfacesOop->obj_at(i);
+    Klass* k = java_lang_Class::as_Klass(mirror);
+    ss.print(" %s", k->name()->as_C_string());
+  }
+  ClassListWriter w;
+  w.stream()->print_cr("@dynamic-proxy %s", ss.freeze());
+#endif // INCLUDE_CDS
+JVM_END
+
 JVM_ENTRY(void, JVM_DumpClassListToFile(JNIEnv *env, jstring listFileName))
 #if INCLUDE_CDS
   ResourceMark rm(THREAD);

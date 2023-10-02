@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/archiveUtils.hpp"
+#include "cds/cdsConfig.hpp"
 #include "cds/classListParser.hpp"
 #include "cds/classPrelinker.hpp"
 #include "cds/lambdaFormInvokers.hpp"
@@ -43,6 +44,7 @@
 #include "jvm.h"
 #include "logging/log.hpp"
 #include "logging/logTag.hpp"
+#include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.inline.hpp"
 #include "oops/cpCache.inline.hpp"
@@ -55,7 +57,8 @@
 
 const char* ClassListParser::LAMBDA_PROXY_TAG = "@lambda-proxy";
 const char* ClassListParser::LAMBDA_FORM_TAG  = "@lambda-form-invoker";
-const char* ClassListParser::CONSTANT_POOL_TAG  = "@cp";
+const char* ClassListParser::CONSTANT_POOL_TAG= "@cp";
+const char* ClassListParser::DYNAMIC_PROXY_TAG= "@dynamic-proxy";
 volatile Thread* ClassListParser::_parsing_thread = nullptr;
 ClassListParser* ClassListParser::_instance = nullptr;
 
@@ -326,6 +329,11 @@ bool ClassListParser::parse_at_tags() {
     _token = _line + offset;
     _constant_pool_line = true;
     parse_constant_pool_tag();
+    return true;
+  } else if (strcmp(_token, DYNAMIC_PROXY_TAG) == 0) {
+    _token = _line + offset;
+    _constant_pool_line = true;
+    parse_dynamic_proxy_tag();
     return true;
   } else {
     error("Invalid @ tag at the beginning of line \"%s\" line #%d", _token, _line_no);
@@ -848,5 +856,98 @@ void ClassListParser::parse_constant_pool_tag() {
   }
   if (preresolve_indy) {
     ClassPrelinker::preresolve_indy_cp_entries(THREAD, ik, &preresolve_list);
+  }
+}
+
+void ClassListParser::parse_dynamic_proxy_tag() {
+  if (_parse_mode == _parse_lambda_forms_invokers_only) {
+    return;
+  }
+
+  JavaThread* THREAD = JavaThread::current();
+
+  skip_whitespaces();
+  char* loader = _token;
+  skip_non_whitespaces();
+  *_token = '\0';
+  _token ++;
+
+  skip_whitespaces();
+  char* proxy_name = _token;
+  skip_non_whitespaces();
+  *_token = '\0';
+  _token ++;
+
+  skip_whitespaces();
+  int access_flags;
+  parse_uint(&access_flags);
+
+  skip_whitespaces();
+  int num_intfs;
+  parse_uint(&num_intfs);
+
+  objArrayOop interfaces_oop = oopFactory::new_objArray(vmClasses::Class_klass(), num_intfs, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    error("Out of memory");
+  }
+
+  for (int i = 0; i < num_intfs; i++) {
+    skip_whitespaces();
+    char* intf_name = _token;
+    skip_non_whitespaces();
+    *_token = '\0';
+    _token ++;
+
+    InstanceKlass* ik = find_builtin_class(THREAD, intf_name);
+    if (ik != nullptr) {
+      interfaces_oop->obj_at_put(i, ik->java_mirror());
+    } else {
+      error("Unknown class %s", intf_name); 
+    }
+  }
+
+  oop loader_oop = nullptr;
+  if (strcmp(loader, "boot") == 0) {
+    loader_oop = nullptr;
+  } else if (strcmp(loader, "platform") == 0) {
+    loader_oop = SystemDictionary::java_platform_loader();
+  } else if (strcmp(loader, "app") == 0) {
+    loader_oop = SystemDictionary::java_system_loader();
+  } else {
+    error("Unknown loader %s", loader);
+  }
+
+  if (!CDSConfig::is_dumping_invokedynamic()) {
+    return;
+  }
+
+  oop proxy_name_oop = java_lang_String::create_oop_from_str(proxy_name, THREAD);
+  if (HAS_PENDING_EXCEPTION) {
+    error("Out of memory");
+  }
+
+  InstanceKlass* builder_klass = find_builtin_class(THREAD, "java/lang/reflect/Proxy$ProxyBuilder");
+  if (builder_klass == nullptr) {
+    error("java/lang/reflect/Proxy$ProxyBuilder should be in classlist");
+  }
+
+  TempNewSymbol method = SymbolTable::new_symbol("defineProxyClassForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)V");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, loader_oop));
+  args.push_oop(Handle(THREAD, proxy_name_oop));
+  args.push_oop(Handle(THREAD, interfaces_oop));
+  args.push_int(access_flags);
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         builder_klass,
+                         method,
+                         signature,
+                         &args, THREAD);
+
+  if (HAS_PENDING_EXCEPTION) {
+    PENDING_EXCEPTION->print_on(tty);
+    error("defineProxyClassForCDS failed");
   }
 }

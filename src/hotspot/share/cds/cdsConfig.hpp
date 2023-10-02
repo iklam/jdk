@@ -33,6 +33,7 @@ class CDSConfig : public AllStatic {
   static bool      _enable_dumping_full_module_graph;
   static bool      _enable_loading_full_module_graph;
   static bool      _has_preloaded_classes;
+  static bool      _is_loading_invokedynamic;
 public:
   static bool      is_using_dumptime_tables();
   static bool      is_dumping_archive(); // dynamic or static archive
@@ -46,6 +47,8 @@ public:
   static void disable_loading_full_module_graph(const char* reason = nullptr);
   static bool      is_loading_full_module_graph();
   static bool      is_dumping_invokedynamic();
+  static bool      is_loading_invokedynamic();
+  static void  set_is_loading_invokedynamic() { _is_loading_invokedynamic = true; }
   static bool      is_dumping_cached_code();
   static void disable_dumping_cached_code();
   static void  enable_dumping_cached_code();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -117,6 +117,16 @@ public class CDS {
             logLambdaFormInvoker(prefix + " " + cn);
         }
     }
+
+    public static void traceDynamicProxy(ClassLoader loader, String proxyName,
+                                         Class<?>[] interfaces, int accessFlags) {
+        Objects.requireNonNull(proxyName);
+        Objects.requireNonNull(interfaces);
+        logDynamicProxy(loader, proxyName, interfaces, accessFlags);
+    }
+
+    private static native void logDynamicProxy(ClassLoader loader, String proxyName,
+                                               Class<?>[] interfaces, int accessFlags);
 
     static final String DIRECT_HOLDER_CLASS_NAME  = "java.lang.invoke.DirectMethodHandle$Holder";
     static final String DELEGATING_HOLDER_CLASS_NAME = "java.lang.invoke.DelegatingMethodHandle$Holder";

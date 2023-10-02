@@ -36,6 +36,7 @@
 bool CDSConfig::_has_preloaded_classes;
 bool CDSConfig::_enable_dumping_full_module_graph = true;
 bool CDSConfig::_enable_loading_full_module_graph = true;
+bool CDSConfig::_is_loading_invokedynamic = false;
 
 bool CDSConfig::is_using_dumptime_tables() {
   return is_dumping_static_archive() || is_dumping_dynamic_archive();
@@ -100,6 +101,14 @@ bool CDSConfig::is_loading_full_module_graph() {
   } else {
     return false;
   }
+}
+
+bool CDSConfig::is_loading_invokedynamic() {
+#if INCLUDE_CDS_JAVA_HEAP
+  return UseSharedSpaces && is_loading_heap() && _is_loading_invokedynamic;
+#else
+  return false;
+#endif
 }
 
 void CDSConfig::disable_dumping_full_module_graph(const char* reason) {

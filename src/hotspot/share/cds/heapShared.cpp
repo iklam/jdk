@@ -1135,18 +1135,15 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
 }
 
 void HeapShared::initialize_java_lang_invoke(TRAPS) {
-  if (!UseSharedSpaces) {
-    return;
+  if (CDSConfig::is_loading_invokedynamic()) {
+    resolve_or_init("java/lang/invoke/Invokers$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/MethodHandle", true, CHECK);
+    resolve_or_init("java/lang/invoke/MethodHandleNatives", true, CHECK);
+    resolve_or_init("java/lang/invoke/DirectMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/DelegatingMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/LambdaForm$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/BoundMethodHandle$Species_L", true, CHECK);
   }
-
-  // FIXME - the following should be called only if we have archived MethodType table.
-  resolve_or_init("java/lang/invoke/Invokers$Holder", true, CHECK);
-  resolve_or_init("java/lang/invoke/MethodHandle", true, CHECK);
-  resolve_or_init("java/lang/invoke/MethodHandleNatives", true, CHECK);
-  resolve_or_init("java/lang/invoke/DirectMethodHandle$Holder", true, CHECK);
-  resolve_or_init("java/lang/invoke/DelegatingMethodHandle$Holder", true, CHECK);
-  resolve_or_init("java/lang/invoke/LambdaForm$Holder", true, CHECK);
-  resolve_or_init("java/lang/invoke/BoundMethodHandle$Species_L", true, CHECK);
 }
 
 void HeapShared::initialize_from_archived_subgraph(JavaThread* current, Klass* k) {

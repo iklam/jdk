@@ -68,6 +68,7 @@ class ClassListParser : public StackObj {
   static const char* LAMBDA_PROXY_TAG;
   static const char* LAMBDA_FORM_TAG;
   static const char* CONSTANT_POOL_TAG;
+  static const char* DYNAMIC_PROXY_TAG;
 public:
   enum ParseMode {
     _parse_all,
@@ -137,6 +138,7 @@ private:
   bool parse_one_line();
   Klass* load_current_class(Symbol* class_name_symbol, TRAPS);
   void parse_constant_pool_tag();
+  void parse_dynamic_proxy_tag();
 
   ClassListParser(const char* file, ParseMode _parse_mode);
   ~ClassListParser();

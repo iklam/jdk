@@ -224,6 +224,7 @@ private:
   bool   _use_optimized_module_handling;// No module-relation VM options were specified, so we can skip
                                         // some expensive operations.
   bool   _has_full_module_graph;        // Does the archive includes the full archived module graph?
+  bool   _has_archived_invokedynamic;   // Does the archive have preresolved invokedynamic CP entries?
   size_t _ptrmap_size_in_bits;          // Size of pointer relocation bitmap
   size_t _heap_roots_offset;            // Offset of the HeapShared::roots() object, from the bottom
                                         // of the archived heap objects, in bytes.
@@ -295,7 +296,7 @@ public:
                            from_mapped_offset(_shared_path_table_offset));
   }
 
-  bool validate();
+  bool validate(bool is_static);
   int compute_crc();
 
   FileMapRegion* region_at(int i) {
