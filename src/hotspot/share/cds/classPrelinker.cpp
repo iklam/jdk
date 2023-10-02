@@ -926,6 +926,8 @@ void ClassPrelinker::record_resolved_indys() {
 class ForcePreinitClosure : public CLDClosure {
 public:
   void do_cld(ClassLoaderData* cld) {
+    assert(CDSConfig::is_dumping_invokedynamic(), "sanity");
+
     static const char* forced_preinit_classes[] = {
       "java/util/HexFormat",
       "jdk/internal/util/ClassFileDumper",
@@ -944,6 +946,10 @@ public:
       "java/lang/invoke/DirectMethodHandle$Holder",
       "java/lang/invoke/BoundMethodHandle$Specializer",
       "java/lang/invoke/MethodHandles$Lookup",
+
+    //TODO: these use java.lang.ClassValue$Entry which is a subtype of WeakReference
+    //"java/lang/reflect/Proxy$ProxyBuilder",
+    //"java/lang/reflect/Proxy",
 
     // TODO -- need to clear internTable, etc
     //"java/lang/invoke/MethodType",
@@ -971,7 +977,7 @@ public:
 };
 
 void ClassPrelinker::setup_forced_preinit_classes() {
-  if (!ArchiveInvokeDynamic) {
+  if (!CDSConfig::is_dumping_invokedynamic()) {
     return;
   }
 

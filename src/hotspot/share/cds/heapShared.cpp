@@ -143,6 +143,7 @@ static ArchivableStaticFieldInfo archive_subgraph_entry_fields[] = {
   {"java/lang/invoke/DirectMethodHandle",         "archivedObjects"},
   {"java/lang/invoke/MethodType",                 "archivedObjects"},
   {"java/lang/invoke/LambdaForm$NamedFunction",   "archivedObjects"},
+  {"java/lang/reflect/Proxy",                     "archivedData"},
 #ifndef PRODUCT
   {nullptr, nullptr}, // Extra slot for -XX:ArchiveHeapTestClass
 #endif
@@ -1408,6 +1409,11 @@ class WalkOopAndArchiveClosure: public BasicOopIterateClosure {
           obj->print_on(&out);
         }
       }
+
+      //if (_referencing_obj->klass()->name()->equals("java/lang/reflect/Constructor") && field_delta == 36) {
+      //  _referencing_obj->print_on(tty);
+      //  tty->cr();
+      //}
 
       bool success = HeapShared::archive_reachable_objects_from(
           _level + 1, _subgraph_info, obj);

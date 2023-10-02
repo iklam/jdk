@@ -399,6 +399,11 @@ public class Proxy implements java.io.Serializable {
             .getDeclaringClass();
     }
 
+    static {
+        CDS.initializeFromArchive(Proxy.class);
+    }
+    static ArchivedData archivedData;
+
     /**
      * Returns the {@code Constructor} object of a proxy class that takes a
      * single argument of type {@link InvocationHandler}, given a class loader
@@ -424,6 +429,12 @@ public class Proxy implements java.io.Serializable {
             if (caller != null) {
                 checkProxyAccess(caller, loader, intf);
             }
+            if (archivedData != null) {
+                Constructor<?> cons = archivedData.get(loader, intf);
+                if (cons != null) {
+                    return cons;
+                }
+            }
             return proxyCache.sub(intf).computeIfAbsent(
                 loader,
                 (ld, clv) -> new ProxyBuilder(ld, clv.key()).build()
@@ -434,6 +445,12 @@ public class Proxy implements java.io.Serializable {
             if (caller != null) {
                 checkProxyAccess(caller, loader, intfsArray);
             }
+            if (archivedData != null) {
+                Constructor<?> cons = archivedData.get(loader, intfsArray);
+                if (cons != null) {
+                    return cons;
+                }
+            }
             final List<Class<?>> intfs = Arrays.asList(intfsArray);
             return proxyCache.sub(intfs).computeIfAbsent(
                 loader,
@@ -442,20 +459,101 @@ public class Proxy implements java.io.Serializable {
         }
     }
 
-    private static void updateCacheForCDS(ClassLoader loader,
-                                          Class<?>[] interfaces,
-                                          Constructor<?> cons) {
-        if (interfaces.length == 1) {
-            Class<?> intf = interfaces[0];
-            proxyCache.sub(intf).putIfAbsent(loader, cons);
-            assert proxyCache.sub(intf).get(loader) == cons;
-        } else {
-            // interfaces cloned
-            final Class<?>[] intfsArray = interfaces.clone();
-            final List<Class<?>> intfs = Arrays.asList(intfsArray);
-            proxyCache.sub(intfs).putIfAbsent(loader, cons);
-            assert proxyCache.sub(intfs).get(loader) == cons;
+    static class InterfacesKey {
+        Class<?>[] intfsArray;
+        InterfacesKey(Class<?>[] intfs) {
+            intfsArray = new Class<?>[intfs.length];
+            for (int i = 0; i < intfs.length; i++) {
+                intfsArray[i] = intfs[i];
+            }
         }
+        InterfacesKey(Class<?> intf) {
+            intfsArray = new Class<?>[1];
+            intfsArray[0] = intf;
+        }
+        @Override
+        public int hashCode() {
+            int h = 0;
+            for (Class<?> cls : intfsArray) {
+                h += cls.hashCode();
+            }
+            return h;
+        }
+        @Override
+        public boolean equals(Object other) {
+            if (other instanceof InterfacesKey) {
+                InterfacesKey o = (InterfacesKey)other;
+                int len = intfsArray.length;
+                if (len != o.intfsArray.length) {
+                    return false;
+                }
+                Class<?>[] oa = o.intfsArray;
+                for (int i = 0; i < len; i++) {
+                    if (intfsArray[i] != oa[i]) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    static class ArchivedData {
+        ClassLoader platformLoader;
+        ClassLoader appLoader;
+        HashMap<InterfacesKey,Constructor<?>> bootCache = new HashMap<>();
+        HashMap<InterfacesKey,Constructor<?>> platformCache = new HashMap<>();
+        HashMap<InterfacesKey,Constructor<?>> appCache = new HashMap<>();
+        ArchivedData(ClassLoader plat, ClassLoader app) {
+            platformLoader = plat;
+            appLoader = app;
+        }
+
+        HashMap<InterfacesKey,Constructor<?>> cacheForLoader(ClassLoader loader) {
+            if (loader == null) {
+                return bootCache;
+            } else if (loader == platformLoader) {
+                return platformCache;
+            } else if (loader == appLoader) {
+                return appCache;
+            } else {
+                return null;
+            }
+        }
+
+        void put(ClassLoader loader, Class<?>[] interfaces, Constructor<?> cons) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null) {
+                InterfacesKey key = new InterfacesKey(interfaces);
+                cache.put(key, cons);
+            } else {
+                throw new  UnsupportedOperationException("Class loader " + loader + " is not supported");
+            }
+        }
+        Constructor<?> get(ClassLoader loader, Class<?>[] interfaces) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null && cache.size() > 0) {
+                InterfacesKey key = new InterfacesKey(interfaces);
+                return cache.get(key);
+            } else {
+                return null;
+            }
+        }
+        Constructor<?> get(ClassLoader loader, Class<?> intf) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null && cache.size() > 0) {                
+                InterfacesKey key = new InterfacesKey(intf);
+                return cache.get(key);
+            } else {
+                return null;
+            }
+        }
+    }
+
+    private static void initCacheForCDS(ClassLoader platformLoader, ClassLoader appLoader) {
+        archivedData = new ArchivedData(platformLoader, appLoader);
     }
 
     /*
@@ -505,7 +603,7 @@ public class Proxy implements java.io.Serializable {
             // IOI-FIXME: (temp) work around problems where the leyden-premain code finds two
             // classes named "jdk.proxy2.$Proxy8"
             // A proper fix in CDS is needed.
-            if (CDS.isDumpingArchive()) {
+            if (CDS.isDumpingArchive() || CDS.isDumpingClassList()) {
                 if (CDS.isSharingEnabled()) {
                     return "$Proxy0100"; // CDS dynamic dump
                 } else {
@@ -600,7 +698,7 @@ public class Proxy implements java.io.Serializable {
             }
         }
 
-        private static void defineProxyClassForCDS(ClassLoader loader, String proxyName, Class<?>[] interfaces,
+        private static Constructor<?> defineProxyClassForCDS(ClassLoader loader, String proxyName, Class<?>[] interfaces,
                                                    int accessFlags) {
             ArrayList<Class<?>> list = new ArrayList<>();
             for (Object o : interfaces) {
@@ -608,7 +706,8 @@ public class Proxy implements java.io.Serializable {
             }
             Class<?> proxyClass = defineProxyClassInner(loader, proxyName, list, accessFlags);
             Constructor<?> cons = getAccessibleConstructor(proxyClass);
-            updateCacheForCDS(loader, interfaces, cons);
+            archivedData.put(loader, interfaces, cons);
+            return cons;
         }
 
         /**

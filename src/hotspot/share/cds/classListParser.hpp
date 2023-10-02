@@ -139,6 +139,7 @@ private:
   Klass* load_current_class(Symbol* class_name_symbol, TRAPS);
   void parse_constant_pool_tag();
   void parse_dynamic_proxy_tag();
+  void init_dynamic_proxy_cache(JavaThread* THREAD);
 
   ClassListParser(const char* file, ParseMode _parse_mode);
   ~ClassListParser();

@@ -111,10 +111,11 @@ ${PC_APP_UNPACKED}: ${PC_APP_JAR}
 	    | sed -e 's/ /:/g' > ${PC_APP_UNPACKED}/classpath
 	$(MAKE) run17
 
+SAVE_GEN_FILES=-Djdk.proxy.ProxyGenerator.saveGeneratedFiles=true
 
 ${PC_CLASSLIST}: ${PC_APP_UNPACKED}
 	${PREMAIN_JAVA} -Xshare:off -XX:DumpLoadedClassList=${PC_CLASSLIST} \
-	    -Xlog:class+load=debug:file=spring-petclinic.classload.log \
+	    -Xlog:class+load=debug:file=spring-petclinic.classload.log ${SAVE_GEN_FILES} \
 	    ${UNPACKED_CMDLINE}
 	wc -lc ${PC_CLASSLIST}
 

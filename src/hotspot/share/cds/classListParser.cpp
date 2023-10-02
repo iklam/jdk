@@ -921,6 +921,8 @@ void ClassListParser::parse_dynamic_proxy_tag() {
     return;
   }
 
+  init_dynamic_proxy_cache(THREAD);
+
   oop proxy_name_oop = java_lang_String::create_oop_from_str(proxy_name, THREAD);
   if (HAS_PENDING_EXCEPTION) {
     error("Out of memory");
@@ -932,14 +934,14 @@ void ClassListParser::parse_dynamic_proxy_tag() {
   }
 
   TempNewSymbol method = SymbolTable::new_symbol("defineProxyClassForCDS");
-  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)V");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)Ljava/lang/reflect/Constructor;");
 
   JavaCallArguments args;
   args.push_oop(Handle(THREAD, loader_oop));
   args.push_oop(Handle(THREAD, proxy_name_oop));
   args.push_oop(Handle(THREAD, interfaces_oop));
   args.push_int(access_flags);
-  JavaValue result(T_VOID);
+  JavaValue result(T_OBJECT);
   JavaCalls::call_static(&result,
                          builder_klass,
                          method,
@@ -949,5 +951,37 @@ void ClassListParser::parse_dynamic_proxy_tag() {
   if (HAS_PENDING_EXCEPTION) {
     PENDING_EXCEPTION->print_on(tty);
     error("defineProxyClassForCDS failed");
+  }
+  assert(result.get_type() == T_OBJECT, "just checking");
+  oop obj = result.get_oop();
+}
+
+void ClassListParser::init_dynamic_proxy_cache(JavaThread* THREAD) {
+  static bool inited = false;
+  if (inited) {
+    return;
+  }
+  inited = true;
+  InstanceKlass* builder_klass = find_builtin_class(THREAD, "java/lang/reflect/Proxy");
+  if (builder_klass == nullptr) {
+    error("java/lang/reflect/Proxy should be in classlist");
+  }
+
+  TempNewSymbol method = SymbolTable::new_symbol("initCacheForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/ClassLoader;)V");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, SystemDictionary::java_platform_loader()));
+  args.push_oop(Handle(THREAD, SystemDictionary::java_system_loader()));
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         builder_klass,
+                         method,
+                         signature,
+                         &args, THREAD);
+
+  if (HAS_PENDING_EXCEPTION) {
+    PENDING_EXCEPTION->print_on(tty);
+    error("initCacheForCDS failed");
   }
 }

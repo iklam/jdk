@@ -375,6 +375,11 @@ size_t ArchiveHeapWriter::copy_one_source_obj_to_buffer(oop src_obj) {
   size_t byte_size = src_obj->size() * HeapWordSize;
   assert(byte_size > 0, "no zero-size objects");
 
+  //if (src_obj->klass()->name()->equals("java/lang/reflect/Constructor")) {
+  //  src_obj->print_on(tty);
+  //  tty->cr();
+  //}
+
   // For region-based collectors such as G1, the archive heap may be mapped into
   // multiple regions. We need to make sure that we don't have an object that can possible
   // span across two regions.
