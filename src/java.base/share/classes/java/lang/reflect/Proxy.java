@@ -672,6 +672,13 @@ public class Proxy implements java.io.Serializable {
             if (CDS.isDumpingClassList()) {
                 CDS.traceDynamicProxy(loader, proxyName, interfaces.toArray(new Class<?>[0]), accessFlags);
             }
+            if (myArchivedData != null) {
+                Class<?> pc = myArchivedData.get(loader, proxyName, interfaces, accessFlags);
+                if (pc != null) {
+                    reverseProxyCache.sub(pc).putIfAbsent(loader, Boolean.TRUE);
+                    return pc;
+                }
+            }
             return defineProxyClassInner(loader, proxyName, interfaces, accessFlags);
         }
 
@@ -699,7 +706,7 @@ public class Proxy implements java.io.Serializable {
         }
 
         private static Constructor<?> defineProxyClassForCDS(ClassLoader loader, String proxyName, Class<?>[] interfaces,
-                                                   int accessFlags) {
+                                                             int accessFlags) {
             ArrayList<Class<?>> list = new ArrayList<>();
             for (Object o : interfaces) {
                 list.add((Class<?>)o);
@@ -1055,23 +1062,70 @@ public class Proxy implements java.io.Serializable {
          * Each class loader will have one dynamic module.
          */
         private static Module getDynamicModule(ClassLoader loader) {
-            return dynProxyModules.computeIfAbsent(loader, (ld, clv) -> {
-                // create a dynamic module and setup module access
-                String mn = "jdk.proxy" + counter.incrementAndGet();
-                String pn = PROXY_PACKAGE_PREFIX + "." + mn;
-                ModuleDescriptor descriptor =
-                        ModuleDescriptor.newModule(mn, Set.of(SYNTHETIC))
-                                        .packages(Set.of(pn, mn))
-                                        .exports(mn)
-                                        .build();
-                Module m = Modules.defineModule(ld, descriptor, null);
-                Modules.addReads(m, Proxy.class.getModule());
-                Modules.addExports(m, mn);
-                // java.base to create proxy instance and access its Lookup instance
-                Modules.addOpens(m, pn, Proxy.class.getModule());
-                Modules.addOpens(m, mn, Proxy.class.getModule());
-                return m;
-            });
+            return dynProxyModules.computeIfAbsent(loader, (ld, clv) -> makeDynamicModule(ld, counter.incrementAndGet()));
+        }
+
+        private static Module makeDynamicModule(ClassLoader loader, int num) {
+            // create a dynamic module and setup module access
+            String mn = "jdk.proxy" + num;
+            String pn = PROXY_PACKAGE_PREFIX + "." + mn;
+            ModuleDescriptor descriptor =
+                ModuleDescriptor.newModule(mn, Set.of(SYNTHETIC))
+                                .packages(Set.of(pn, mn))
+                                .exports(mn)
+                                .build();
+            Module m = Modules.defineModule(loader, descriptor, null);
+            Modules.addReads(m, Proxy.class.getModule());
+            Modules.addExports(m, mn);
+            // java.base to create proxy instance and access its Lookup instance
+            Modules.addOpens(m, pn, Proxy.class.getModule());
+            Modules.addOpens(m, mn, Proxy.class.getModule());
+
+            if (CDS.isDumpingClassList()) {
+                CDS.traceDynamicProxyModule(loader, num);
+            }
+            return m;
+        }
+
+        // This is called from CDS native code for building the archived heap objects
+        private static void initDynamicModuleForCDS(ClassLoader loader, int num) {
+            assert num >= counter.get();
+            while (num > counter.get()) {
+                counter.incrementAndGet();
+            }
+            assert dynProxyModules.get(loader) == null;
+            Module m = makeDynamicModule(loader, num);
+            Module last = dynProxyModules.putIfAbsent(loader, m);
+            assert last == null;
+            assert CDS.isDumpingHeapObjects();
+
+            if (myArchivedData.loader1 == null) {
+                myArchivedData.loader1 = loader;
+                myArchivedData.num1 = num;
+            } else if (myArchivedData.loader2 == null) {
+                myArchivedData.loader2 = loader;
+                myArchivedData.num2 = num;
+            } else {
+                throw new  UnsupportedOperationException("CDS should call initDynamicModuleForCDS at most two times!");
+            }
+        }
+
+        static class ArchivedData {
+            ClassLoader loader1, loader2;
+            int num1, num2;
+            Class<?> get(ClassLoader loader, String proxyName, List<Class<?>> interfaces, int accessFlags) {
+                return null;
+            }
+        }
+
+        static ArchivedData myArchivedData;
+
+        static {
+            if (CDS.isDumpingHeapObjects()) {
+                myArchivedData = new ArchivedData();
+            } else {
+                CDS.initializeFromArchive(ProxyBuilder.class);
+            }
         }
     }
 

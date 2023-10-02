@@ -71,6 +71,11 @@ public class CDS {
         return isSharingEnabled;
     }
 
+    public static boolean isDumpingHeapObjects() {
+        // FIXME -- support one-step training
+        return (CDS.isDumpingArchive() && !CDS.isSharingEnabled());
+    }
+
     private static native boolean isDumpingClassList0();
     private static native boolean isDumpingArchive0();
     private static native boolean isSharingEnabled0();
@@ -123,6 +128,9 @@ public class CDS {
         Objects.requireNonNull(proxyName);
         Objects.requireNonNull(interfaces);
         logDynamicProxy(loader, proxyName, interfaces, accessFlags);
+    }
+    public static void traceDynamicProxyModule(ClassLoader loader, int num) {
+        Objects.requireNonNull(loader);
     }
 
     private static native void logDynamicProxy(ClassLoader loader, String proxyName,
