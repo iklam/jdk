@@ -623,6 +623,9 @@ public class Proxy implements java.io.Serializable {
         private static final String DEBUG =
             GetPropertyAction.privilegedGetProperty("jdk.proxy.debug", "");
 
+        private static final String DEBUG2 =
+            GetPropertyAction.privilegedGetProperty("jdk.proxy.debug2", "");
+
         private static boolean isDebug() {
             return !DEBUG.isEmpty();
         }
@@ -932,6 +935,15 @@ public class Proxy implements java.io.Serializable {
                 // java.base to create proxy instance and access its Lookup instance
                 Modules.addOpens(m, pn, Proxy.class.getModule());
                 Modules.addOpens(m, mn, Proxy.class.getModule());
+
+                if (!DEBUG2.equals("")) {
+                    System.out.println("CDS: loader   = " + loader);
+                    System.out.println("CDS: module   = " + m);
+                    System.out.println("CDS: mn       = " + mn);
+                    System.out.println("CDS: pn       = " + pn);
+                    Thread.dumpStack();
+                    System.out.println("========================");
+                }
                 return m;
             });
         }

@@ -95,6 +95,8 @@ import sun.security.util.SecurityConstants;
 import sun.reflect.annotation.*;
 import sun.reflect.misc.ReflectUtil;
 
+import sun.security.action.GetPropertyAction;
+
 /**
  * Instances of the class {@code Class} represent classes and
  * interfaces in a running Java application. An enum class and a record
@@ -4284,7 +4286,13 @@ public final class Class<T> implements java.io.Serializable,
         }
     }
 
+    static long _counter;
+    static Object lll = new Object();
+    static String DEBUG;
+
     private AnnotationData createAnnotationData(int classRedefinedCount) {
+      long start = System.nanoTime();
+      try {
         Map<Class<? extends Annotation>, Annotation> declaredAnnotations =
             AnnotationParser.parseAnnotations(getRawAnnotations(), getConstantPool(), this);
         Class<?> superClass = getSuperclass();
@@ -4314,6 +4322,25 @@ public final class Class<T> implements java.io.Serializable,
             annotations.putAll(declaredAnnotations);
         }
         return new AnnotationData(annotations, declaredAnnotations, classRedefinedCount);
+      } finally{
+        synchronized (lll) {
+            _counter += System.nanoTime() - start;
+            if (DEBUG == null) {
+                DEBUG = GetPropertyAction.privilegedGetProperty("ioi", "");
+                if (!DEBUG.equals("")) {
+                    System.out.println("Adding hook");
+                    Runtime.getRuntime().addShutdownHook(new Thread()
+                        {
+                            public void run()
+                            {
+                                System.out.println("Shutdown Hook is running ! " + _counter + " ns");
+                                System.out.println("Shutdown Hook is running ! " + (_counter / 1000.0 / 1000.0) + " ms");
+                            }
+                        });
+                }
+            }
+        }
+      }
     }
 
     // Annotation interfaces cache their internal (AnnotationType) form

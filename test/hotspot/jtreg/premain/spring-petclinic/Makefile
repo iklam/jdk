@@ -138,7 +138,7 @@ ${PC_CACHED_CODE}: ${PC_DYNAMIC_JSA}
 
 # run with premain optimizatipn
 run: ${PC_CACHED_CODE}
-	time ${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+LoadCachedCode \
+	time ${PREMAIN_JAVA} -XX:SharedArchiveFile=${PC_DYNAMIC_JSA} -XX:+ReplayTraining -XX:+LoadCachedCode -Dioi=1 \
 		-XX:CachedCodeFile=${PC_CACHED_CODE} -Xlog:init -Xlog:scc=error ${UNPACKED_CMDLINE}
 
 # run with just static CDS archive
