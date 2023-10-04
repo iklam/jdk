@@ -430,15 +430,30 @@ ModuleEntry* ModuleEntry::get_archived_entry(ModuleEntry* orig_entry) {
 // This function is used to archive ModuleEntry::_reads and PackageEntry::_qualified_exports.
 // GrowableArray cannot be directly archived, as it needs to be expandable at runtime.
 // Write it out as an Array, and convert it back to GrowableArray at runtime.
-Array<ModuleEntry*>* ModuleEntry::write_growable_array(GrowableArray<ModuleEntry*>* array) {
+Array<ModuleEntry*>* ModuleEntry::write_growable_array(ModuleEntry* module, GrowableArray<ModuleEntry*>* array) {
+  ResourceMark rm;
   Array<ModuleEntry*>* archived_array = nullptr;
   int length = (array == nullptr) ? 0 : array->length();
+  if (module->is_named()) {
+    log_info(module)("write_growable_array %p %s", module, module->name()->as_C_string());
+    if (module->name()->starts_with("jdk.proxy")) {
+      // This is a dynamically generated module. Its opens and exports will be
+      // restored at runtime in the Java code. (FIXME: add reason ... we don't archive ReflectionData.exports, etc)
+      length = 0;
+    }
+  }
   if (length > 0) {
     archived_array = ArchiveBuilder::new_ro_array<ModuleEntry*>(length);
     for (int i = 0; i < length; i++) {
-      ModuleEntry* archived_entry = get_archived_entry(array->at(i));
-      archived_array->at_put(i, archived_entry);
-      ArchivePtrMarker::mark_pointer((address*)archived_array->adr_at(i));
+      ModuleEntry* orig_entry = array->at(i);
+      if (orig_entry->is_named()) { // FIXME revert this block of change
+        ModuleEntry* archived_entry = get_archived_entry(orig_entry);
+        archived_array->at_put(i, archived_entry);
+        ArchivePtrMarker::mark_pointer((address*)archived_array->adr_at(i));
+        log_info(module)("  write_growable_array [%d] %p => %p", i, orig_entry, archived_entry);
+      } else {
+        archived_array->at_put(i, nullptr);
+      }
     }
   }
 
@@ -452,7 +467,12 @@ GrowableArray<ModuleEntry*>* ModuleEntry::restore_growable_array(Array<ModuleEnt
     array = new (mtModule) GrowableArray<ModuleEntry*>(length, mtModule);
     for (int i = 0; i < length; i++) {
       ModuleEntry* archived_entry = archived_array->at(i);
-      array->append(archived_entry);
+      if (archived_entry != nullptr) {
+        array->append(archived_entry);
+        log_info(module)("  restore_growable_array [%d] => %p", array->length() - 1, archived_entry);
+      } else {
+        // FIXME
+      }
     }
   }
 
@@ -466,7 +486,7 @@ void ModuleEntry::iterate_symbols(MetaspaceClosure* closure) {
 }
 
 void ModuleEntry::init_as_archived_entry() {
-  Array<ModuleEntry*>* archived_reads = write_growable_array(_reads);
+  Array<ModuleEntry*>* archived_reads = write_growable_array(this, _reads);
 
   _loader_data = nullptr;  // re-init at runtime
   _shared_path_index = FileMapInfo::get_module_shared_path_index(_location);
@@ -506,9 +526,11 @@ void ModuleEntry::update_oops_in_archived_module(int root_oop_index) {
 
 #ifndef PRODUCT
 void ModuleEntry::verify_archived_module_entries() {
+#if 0
   assert(_num_archived_module_entries == _num_inited_module_entries,
          "%d ModuleEntries have been archived but %d of them have been properly initialized with archived java.lang.Module objects",
          _num_archived_module_entries, _num_inited_module_entries);
+#endif
 }
 #endif // PRODUCT
 

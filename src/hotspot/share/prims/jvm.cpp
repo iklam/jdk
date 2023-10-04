@@ -3786,6 +3786,29 @@ JVM_ENTRY(void, JVM_LogDynamicProxy(JNIEnv *env, jobject loader, jstring proxy_n
 #endif // INCLUDE_CDS
 JVM_END
 
+JVM_ENTRY(void, JVM_LogDynamicProxyModule(JNIEnv *env, jobject loader, jint num))
+#if INCLUDE_CDS
+  if (DynamicDumpSharedSpaces) {
+    return; // FIXME jdk.internal.misc.CDS.isDumpingClassList() is wrong!
+  }
+  assert(ClassListWriter::is_enabled(),  "sanity");
+  oop loaderOop = JNIHandles::resolve(loader);
+  const char* name = nullptr;
+  if (loaderOop == nullptr) {
+    name = "boot";
+  } else if (loaderOop == SystemDictionary::java_platform_loader()) {
+    name = "platform";
+  } else if (loaderOop == SystemDictionary::java_system_loader()) {
+    name = "app";
+  } else {
+    return;
+  }
+  ClassListWriter w;
+  w.stream()->print_cr("@dynamic-proxy-module %s %d", name, num);
+#endif // INCLUDE_CDS
+JVM_END
+
+
 JVM_ENTRY(void, JVM_DumpClassListToFile(JNIEnv *env, jstring listFileName))
 #if INCLUDE_CDS
   ResourceMark rm(THREAD);

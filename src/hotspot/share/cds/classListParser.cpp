@@ -56,9 +56,10 @@
 #include "utilities/macros.hpp"
 
 const char* ClassListParser::LAMBDA_PROXY_TAG = "@lambda-proxy";
-const char* ClassListParser::LAMBDA_FORM_TAG  = "@lambda-form-invoker";
+const char* ClassListParser::LAMBDA_FORM_TAG = "@lambda-form-invoker";
 const char* ClassListParser::CONSTANT_POOL_TAG= "@cp";
-const char* ClassListParser::DYNAMIC_PROXY_TAG= "@dynamic-proxy";
+const char* ClassListParser::DYNAMIC_PROXY_TAG = "@dynamic-proxy";
+const char* ClassListParser::DYNAMIC_PROXY_MODULE_TAG= "@dynamic-proxy-module";
 volatile Thread* ClassListParser::_parsing_thread = nullptr;
 ClassListParser* ClassListParser::_instance = nullptr;
 
@@ -334,6 +335,11 @@ bool ClassListParser::parse_at_tags() {
     _token = _line + offset;
     _constant_pool_line = true;
     parse_dynamic_proxy_tag();
+    return true;
+  } else if (strcmp(_token, DYNAMIC_PROXY_MODULE_TAG) == 0) {
+    _token = _line + offset;
+    _constant_pool_line = true;
+    parse_dynamic_proxy_module_tag();
     return true;
   } else {
     error("Invalid @ tag at the beginning of line \"%s\" line #%d", _token, _line_no);
@@ -859,6 +865,64 @@ void ClassListParser::parse_constant_pool_tag() {
   }
 }
 
+void ClassListParser::parse_dynamic_proxy_module_tag() {
+  if (_parse_mode == _parse_lambda_forms_invokers_only) {
+    return;
+  }
+
+  JavaThread* THREAD = JavaThread::current();
+
+  skip_whitespaces();
+  char* loader = _token;
+  skip_non_whitespaces();
+  *_token = '\0';
+  _token ++;
+
+  skip_whitespaces();
+  int num;
+  parse_uint(&num);
+
+  oop loader_oop = nullptr;
+  if (strcmp(loader, "boot") == 0) {
+    loader_oop = nullptr;
+  } else if (strcmp(loader, "platform") == 0) {
+    loader_oop = SystemDictionary::java_platform_loader();
+  } else if (strcmp(loader, "app") == 0) {
+    loader_oop = SystemDictionary::java_system_loader();
+  } else {
+    error("Unknown loader %s", loader);
+  }
+
+  if (!CDSConfig::is_dumping_dynamic_proxy()) {
+    return;
+  }
+
+  init_dynamic_proxy_cache(THREAD);
+
+  InstanceKlass* builder_klass = find_builtin_class(THREAD, "java/lang/reflect/Proxy$ProxyBuilder");
+  if (builder_klass == nullptr) {
+    error("java/lang/reflect/Proxy$ProxyBuilder should be in classlist");
+  }
+
+  TempNewSymbol method = SymbolTable::new_symbol("defineDynamicModuleForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;I)V");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, loader_oop));
+  args.push_int(num);
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         builder_klass,
+                         method,
+                         signature,
+                         &args, THREAD);
+
+  if (HAS_PENDING_EXCEPTION) {
+    PENDING_EXCEPTION->print_on(tty);
+    error("defineDynamicModuleForCDS failed");
+  }
+}
+
 void ClassListParser::parse_dynamic_proxy_tag() {
   if (_parse_mode == _parse_lambda_forms_invokers_only) {
     return;
@@ -917,7 +981,11 @@ void ClassListParser::parse_dynamic_proxy_tag() {
     error("Unknown loader %s", loader);
   }
 
-  if (!CDSConfig::is_dumping_invokedynamic()) {
+  if (!CDSConfig::is_dumping_dynamic_proxy()) {
+    return;
+  }
+
+  if (strncmp("jdk.proxy", proxy_name, 9) != 0) {
     return;
   }
 
@@ -934,7 +1002,7 @@ void ClassListParser::parse_dynamic_proxy_tag() {
   }
 
   TempNewSymbol method = SymbolTable::new_symbol("defineProxyClassForCDS");
-  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)Ljava/lang/reflect/Constructor;");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)Ljava/lang/Class;");
 
   JavaCallArguments args;
   args.push_oop(Handle(THREAD, loader_oop));
@@ -952,8 +1020,31 @@ void ClassListParser::parse_dynamic_proxy_tag() {
     PENDING_EXCEPTION->print_on(tty);
     error("defineProxyClassForCDS failed");
   }
+
+  // Assumptions:
+  // FMG is archived, which means -modulepath is not specified. All named modules are loaded from system modules files.
+  // All app classes are in unnamed module.
+  // TODO: test support for -Xbootclasspath
   assert(result.get_type() == T_OBJECT, "just checking");
-  oop obj = result.get_oop();
+  oop mirror = result.get_oop();
+  if (mirror != nullptr) {
+    // Could be null if Proxy.java decides to not archive it.
+    InstanceKlass* ik = InstanceKlass::cast(java_lang_Class::as_Klass(mirror));
+    if (ik->is_shared_boot_class() || ik->is_shared_platform_class()) {
+      // FIXME: add code in Proxy.java to return null
+      // FIXME: get classpath index from the ik->package_entry(); (??)
+      assert(ik->module()->is_named(), "dynamic proxies defined in unnamed modules for boot/platform loaders not supported");
+      ik->set_shared_classpath_index(0);
+    } else {
+      assert(ik->is_shared_app_class(), "must be");
+      // FIXME: get classpath index from the ik->package_entry(); (??)
+      //
+      ik->set_shared_classpath_index(ClassLoaderExt::app_class_paths_start_index());
+    }
+
+    ResourceMark rm(THREAD);
+    log_info(cds, dynamic, proxy)("%s classpath index = %d", ik->external_name(), ik->shared_classpath_index());
+  }
 }
 
 void ClassListParser::init_dynamic_proxy_cache(JavaThread* THREAD) {

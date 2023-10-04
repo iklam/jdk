@@ -557,6 +557,9 @@ int FileMapInfo::num_non_existent_class_paths() {
 }
 
 int FileMapInfo::get_module_shared_path_index(Symbol* location) {
+  if (location == nullptr) {
+    return 0; // Used by java/lang/reflect/Proxy$ProxyBuilder
+  }
   if (location->starts_with("jrt:", 4) && get_number_of_shared_paths() > 0) {
     assert(shared_path(0)->is_modules_image(), "first shared_path must be the modules image");
     return 0;
@@ -2390,11 +2393,11 @@ bool FileMapHeader::validate(bool is_static) {
     log_info(cds)("optimized module handling: disabled because archive was created without optimized module handling");
   }
 
-  if (!_has_full_module_graph) {
-    CDSConfig::disable_loading_full_module_graph("archive was created without full module graph");
-  }
-
   if (is_static) {
+    if (!_has_full_module_graph) {
+      CDSConfig::disable_loading_full_module_graph("archive was created without full module graph");
+    }
+
     if (_has_archived_invokedynamic) {
       CDSConfig::set_is_loading_invokedynamic();
     }

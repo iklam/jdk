@@ -137,11 +137,12 @@ void ClassPrelinker::add_unrecorded_initiated_klasses(ClassesTable* table, Array
 void ClassPrelinker::add_extra_initiated_klasses(PreloadedKlasses* table) {
   if (table->_app->length() > 0) {
     // Add all public classes in boot/platform to the app loader. This speeds up
-    // Class.forName() opertaions in frameworks like spring.
+    // Class.forName() operations in frameworks like spring.
     GrowableArray<Klass*>* klasses = ArchiveBuilder::current()->klasses();
     for (GrowableArrayIterator<Klass*> it = klasses->begin(); it != klasses->end(); ++it) {
       Klass* k = *it;
-      if (k->is_instance_klass()) {
+      if (k->is_instance_klass() && !k->name()->starts_with("jdk/proxy")) { // FIXME ik->is_archived_dynamic_proxy()
+        // FIXME: only add classes that are visible to unnamed module in app loader.
         InstanceKlass* ik = InstanceKlass::cast(k);
         if (ik->is_public() && (ik->is_shared_boot_class() || ik->is_shared_platform_class())) {
           add_initiated_klass(_app_initiated_classes, "app", ik);
@@ -1176,6 +1177,8 @@ void ClassPrelinker::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
         log_info(cds, preload)("%s %s%s", loader_name, ik->external_name(),
                                ik->is_loaded() ? " (already loaded)" : "");
       }
+      // FIXME Do not load proxy classes if FMG is disabled.
+
       if (!ik->is_loaded()) {
         if (ik->is_hidden()) {
           preload_archived_hidden_class(loader, ik, loader_name, CHECK);
@@ -1195,6 +1198,8 @@ void ClassPrelinker::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
           assert(actual->is_loaded(), "must be");
         }
       }
+
+      // FIXME assert - if FMG, package must be archived
     }
 
     if (!_preload_javabase_only) {

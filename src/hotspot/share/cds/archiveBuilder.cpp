@@ -1182,9 +1182,6 @@ class ArchiveBuilder::CDSMapLogger : AllStatic {
 
       if (source_oop != nullptr) {
         // This is a regular oop that got archived.
-        //if (source_oop->klass()->name()->equals("java/lang/reflect/Constructor")) {
-        //  tty->print_cr("Here");
-        //}
         print_oop_with_requested_addr_cr(&st, source_oop, false);
         byte_size = source_oop->size() * BytesPerWord;
       } else if (start == ArchiveHeapWriter::buffered_heap_roots_addr()) {

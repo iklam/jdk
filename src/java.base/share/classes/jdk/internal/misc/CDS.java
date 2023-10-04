@@ -130,11 +130,12 @@ public class CDS {
         logDynamicProxy(loader, proxyName, interfaces, accessFlags);
     }
     public static void traceDynamicProxyModule(ClassLoader loader, int num) {
-        Objects.requireNonNull(loader);
+        logDynamicProxyModule(loader, num);
     }
 
     private static native void logDynamicProxy(ClassLoader loader, String proxyName,
                                                Class<?>[] interfaces, int accessFlags);
+    private static native void logDynamicProxyModule(ClassLoader loader, int num);
 
     static final String DIRECT_HOLDER_CLASS_NAME  = "java.lang.invoke.DirectMethodHandle$Holder";
     static final String DELEGATING_HOLDER_CLASS_NAME = "java.lang.invoke.DelegatingMethodHandle$Holder";

@@ -49,6 +49,7 @@ public:
   static bool      is_dumping_invokedynamic();
   static bool      is_loading_invokedynamic();
   static void  set_is_loading_invokedynamic() { _is_loading_invokedynamic = true; }
+  static bool      is_dumping_dynamic_proxy();
   static bool      is_dumping_cached_code();
   static void disable_dumping_cached_code();
   static void  enable_dumping_cached_code();

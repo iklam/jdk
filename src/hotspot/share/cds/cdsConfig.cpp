@@ -129,6 +129,10 @@ void CDSConfig::disable_loading_full_module_graph(const char* reason) {
   }
 }
 
+bool CDSConfig::is_dumping_dynamic_proxy() {
+  return is_dumping_full_module_graph() && is_dumping_invokedynamic();
+}
+
 // This is allowed by default. We disable it only in the final image dump before the
 // metadata and heap are dumped.
 static bool _is_dumping_cached_code = true;

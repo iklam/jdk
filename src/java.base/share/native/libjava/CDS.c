@@ -71,6 +71,11 @@ Java_jdk_internal_misc_CDS_logDynamicProxy(JNIEnv *env, jclass jcls, jobject loa
 }
 
 JNIEXPORT void JNICALL
+Java_jdk_internal_misc_CDS_logDynamicProxyModule(JNIEnv *env, jclass jcls, jobject loader, jint num) {
+    JVM_LogDynamicProxyModule(env, loader, num);
+}
+
+JNIEXPORT void JNICALL
 Java_jdk_internal_misc_CDS_dumpClassList(JNIEnv *env, jclass jcls, jstring fileName) {
     JVM_DumpClassListToFile(env, fileName);
 }

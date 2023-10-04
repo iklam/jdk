@@ -170,6 +170,7 @@ JVM_LoadLibrary
 JVM_LookupDefineClass
 JVM_LookupLambdaProxyClassFromArchive
 JVM_LogDynamicProxy
+JVM_LogDynamicProxyModule
 JVM_LogLambdaFormInvoker
 JVM_MaxMemory
 JVM_MaxObjectInspectionAge
