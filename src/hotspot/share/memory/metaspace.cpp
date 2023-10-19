@@ -601,6 +601,11 @@ ReservedSpace Metaspace::reserve_address_space_for_compressed_classes(size_t siz
       result = os::attempt_reserve_memory_between((char*)unscaled_max, (char*)zerobased_max,
                                                   size, Metaspace::reserve_alignment(), randomize);
     }
+    if (result != nullptr) {
+      log_info(metaspace)("low range reservation succeeded");
+    } else {
+      log_info(metaspace)("low range reservation failed");
+    }
   } // end: low-address reservation
 
 #if defined(AARCH64) || defined(PPC64) || defined(S390)

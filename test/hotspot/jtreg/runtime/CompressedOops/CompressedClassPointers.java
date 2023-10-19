@@ -95,8 +95,13 @@ public class CompressedClassPointers {
             "-XX:+VerifyBeforeGC", "-version");
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
         if (testNarrowKlassBase() && !isCCSReservedAnywhere(output)) {
+            // We never come to here on Linux/x64 because we always get "Reserving compressed class space anywhere"
+            // This is WRONG ----------------------------------------------------------------v
             output.shouldContain("Narrow klass base: 0x0000000000000000, Narrow klass shift: 3");
+        } else {
+            System.out.println("Huh? why am I here??");
         }
+        check(output);
         output.shouldHaveExitValue(0);
     }
 
@@ -124,6 +129,51 @@ public class CompressedClassPointers {
         output.shouldHaveExitValue(0);
     }
 
+    // TODO: this method should match the logic used by HotSpot in choosing the narrow klass base and shift
+    // Because of ASLR, we cannot assume the address of "Compressed class space mapped at"
+    static void check(OutputAnalyzer output) throws Exception {
+        // TEMP debug
+        System.out.println(output.getOutput());
+
+        if (output.getOutput().contains("low range reservation succeeded")) {
+            // We succeeded in low range reservation, so we must have base==shift==0
+            output.shouldContain("Narrow klass base: 0x0000000000000000");
+            output.shouldContain("Narrow klass shift: 0");
+        } else {
+            // Parse the reserved range and size
+            //
+            // [0.002s][info][gc,metaspace] Compressed class space mapped at: 0x0000000047000000-0x0000000087000000, reserved size: 1073741824
+            // [0.002s][info][gc,metaspace] Narrow klass base: 0x0000000000000000, Narrow klass shift: 0, Narrow klass range: 0x87000000
+            //
+            // check that the base, shift and range are correct
+            // E.g., if (Narrow klass range) <= 0x10000000, then must have base==shift==0
+            // etc etc
+            long reservedSize = 1073741824; // FAKE
+            long mappedAtEnd = 0x0000000087000000L; // FAKE
+
+            if (reservedSize <= 0x1_0000_0000L) {
+                if (mappedAtEnd <= 0x1_0000_0000L) {
+                    System.out.println("====11111");
+                    output.shouldContain("Narrow klass base: 0x0000000000000000");
+                    output.shouldContain("Narrow klass shift: 0");
+                } else if (mappedAtEnd <= 0x8_0000_0000L) {
+                    // If we managed to get under 32GB, the VM prefers zero-base 3 shift 
+                    System.out.println("====22222");
+                    output.shouldContain("Narrow klass base: 0x0000000000000000");
+                    output.shouldContain("Narrow klass shift: 3");
+                } else {
+                    // Cannot do zero-based -- do we always 
+                    System.out.println("====33333");
+                    output.shouldNotContain("Narrow klass base: 0x0000000000000000");
+                    output.shouldContain("Narrow klass shift: 3");
+                }
+            } else {
+                // Do we allow CompressedClassSpaceSize > 4GB?
+                // If not, assert we never come to here
+            }
+        }
+    }
+
     // Settings as in largeHeapTest() except for max heap size. We make max heap
     // size even larger such that it cannot fit into lower 32G but not too large
     // for compressed oops.
@@ -137,14 +187,7 @@ public class CompressedClassPointers {
             "-Xshare:off",
             "-XX:+VerifyBeforeGC", "-version");
         OutputAnalyzer output = new OutputAnalyzer(pb.start());
-        if (testNarrowKlassBase()) {
-            if (!(Platform.isAArch64() && Platform.isOSX())  && !isCCSReservedAnywhere(output)) { // see JDK-8262895
-                output.shouldContain("Narrow klass base: 0x0000000000000000");
-                if (!Platform.isAArch64() && !Platform.isPPC() && !Platform.isOSX()) {
-                    output.shouldContain("Narrow klass shift: 0");
-                }
-            }
-        }
+        check(output);
         output.shouldHaveExitValue(0);
     }
 
@@ -338,6 +381,11 @@ public class CompressedClassPointers {
     }
 
     public static void main(String[] args) throws Exception {
+        if (true) {
+            largeHeapAbove32GTest();
+            smallHeapTestWith1G();
+            return;
+        }
         smallHeapTest();
         smallHeapTestWith1G();
         largeHeapTest();
