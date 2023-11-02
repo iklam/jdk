@@ -289,6 +289,8 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- requested_base_address:         " INTPTR_FORMAT, p2i(_requested_base_address));
   st->print_cr("- mapped_base_address:            " INTPTR_FORMAT, p2i(_mapped_base_address));
   st->print_cr("- heap_roots_offset:              " SIZE_FORMAT, _heap_roots_offset);
+  st->print_cr("- heap_oopmap_leading_zeros:      " SIZE_FORMAT, _heap_oopmap_leading_zeros);
+  st->print_cr("- heap_ptrmap_leading_zeros:      " SIZE_FORMAT, _heap_ptrmap_leading_zeros);
   st->print_cr("- allow_archiving_with_java_agent:%d", _allow_archiving_with_java_agent);
   st->print_cr("- use_optimized_module_handling:  %d", _use_optimized_module_handling);
   st->print_cr("- use_full_module_graph           %d", _use_full_module_graph);
@@ -1598,6 +1600,8 @@ size_t FileMapInfo::write_heap_region(ArchiveHeapInfo* heap_info) {
   size_t buffer_size = heap_info->buffer_byte_size();
   write_region(MetaspaceShared::hp, buffer_start, buffer_size, false, false);
   header()->set_heap_roots_offset(heap_info->heap_roots_offset());
+  header()->set_heap_oopmap_leading_zeros(heap_info->oopmap()->find_first_set_bit(0));
+  header()->set_heap_ptrmap_leading_zeros(heap_info->ptrmap()->find_first_set_bit(0));
   return buffer_size;
 }
 
