@@ -213,6 +213,12 @@ JNIEXPORT void JNICALL
 JVM_LogLambdaFormInvoker(JNIEnv* env, jstring line);
 
 JNIEXPORT void JNICALL
+JVM_LogDynamicProxy(JNIEnv *env, jobject loader, jstring proxy_name, jobjectArray interfaces, jint accessFlags);
+
+JNIEXPORT void JNICALL
+JVM_LogDynamicProxyModule(JNIEnv *env, jobject loader, jint num);
+
+JNIEXPORT void JNICALL
 JVM_DumpClassListToFile(JNIEnv* env, jstring fileName);
 
 JNIEXPORT void JNICALL

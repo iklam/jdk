@@ -640,10 +640,12 @@ void Modules::define_archived_modules(Handle h_platform_loader, Handle h_system_
 }
 
 void Modules::check_cds_restrictions(TRAPS) {
+#if 0 // TMP - FIXME
   if (CDSConfig::is_dumping_full_module_graph() && Universe::is_module_initialized()) {
     THROW_MSG(vmSymbols::java_lang_UnsupportedOperationException(),
               "During -Xshare:dump, module system cannot be modified after it's initialized");
   }
+#endif
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 

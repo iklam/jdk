@@ -34,7 +34,9 @@
 #include "cds/regeneratedClasses.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
+#include "classfile/classLoaderExt.hpp"
 #include "classfile/dictionary.hpp"
+#include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
@@ -151,7 +153,8 @@ void ClassPrelinker::add_extra_initiated_klasses(PreloadedKlasses* table) {
     GrowableArray<Klass*>* klasses = ArchiveBuilder::current()->klasses();
     for (GrowableArrayIterator<Klass*> it = klasses->begin(); it != klasses->end(); ++it) {
       Klass* k = *it;
-      if (k->is_instance_klass()) {
+      if (k->is_instance_klass() && !k->name()->starts_with("jdk/proxy")) { // FIXME ik->is_archived_dynamic_proxy()
+        // FIXME: only add classes that are visible to unnamed module in app loader.
         InstanceKlass* ik = InstanceKlass::cast(k);
         if (ik->is_public() && (ik->is_shared_boot_class() || ik->is_shared_platform_class())) {
           add_initiated_klass(_app_initiated_classes, "app", ik);
@@ -1102,12 +1105,112 @@ void ClassPrelinker::generate_reflection_data(JavaThread* current, InstanceKlass
   }
 }
 
+Klass* ClassPrelinker::resolve_boot_klass_or_fail(const char* class_name, TRAPS) {
+  Handle class_loader;
+  Handle protection_domain;
+  TempNewSymbol class_name_sym = SymbolTable::new_symbol(class_name);
+  return SystemDictionary::resolve_or_fail(class_name_sym, class_loader, protection_domain, true, THREAD);
+}
+
+void ClassPrelinker::init_dynamic_proxy_cache(TRAPS) {
+  static bool inited = false;
+  if (inited) {
+    return;
+  }
+  inited = true;
+
+  Klass* klass = resolve_boot_klass_or_fail("java/lang/reflect/Proxy", CHECK);
+  TempNewSymbol method = SymbolTable::new_symbol("initCacheForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/ClassLoader;)V");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, SystemDictionary::java_platform_loader()));
+  args.push_oop(Handle(THREAD, SystemDictionary::java_system_loader()));
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         klass,
+                         method,
+                         signature,
+                         &args, CHECK);
+}
+
+void ClassPrelinker::define_dynamic_proxy_module(Handle loader, int num, TRAPS) {
+  if (!CDSConfig::is_dumping_dynamic_proxy()) {
+    return;
+  }
+  init_dynamic_proxy_cache(CHECK);
+
+  Klass* klass = resolve_boot_klass_or_fail("java/lang/reflect/Proxy$ProxyBuilder", CHECK);
+  TempNewSymbol method = SymbolTable::new_symbol("defineDynamicModuleForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;I)V");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, loader()));
+  args.push_int(num);
+  JavaValue result(T_VOID);
+  JavaCalls::call_static(&result,
+                         klass,
+                         method,
+                         signature,
+                         &args, THREAD);
+}
+
+void ClassPrelinker::define_dynamic_proxy_class(Handle loader, Handle proxy_name, Handle interfaces, int access_flags, TRAPS) {
+  if (!CDSConfig::is_dumping_dynamic_proxy()) {
+    return;
+  }
+  init_dynamic_proxy_cache(CHECK);
+
+  Klass* klass = resolve_boot_klass_or_fail("java/lang/reflect/Proxy$ProxyBuilder", CHECK);
+  TempNewSymbol method = SymbolTable::new_symbol("defineProxyClassForCDS");
+  TempNewSymbol signature = SymbolTable::new_symbol("(Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Class;I)Ljava/lang/Class;");
+
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, loader()));
+  args.push_oop(Handle(THREAD, proxy_name()));
+  args.push_oop(Handle(THREAD, interfaces()));
+  args.push_int(access_flags);
+  JavaValue result(T_OBJECT);
+  JavaCalls::call_static(&result,
+                         klass,
+                         method,
+                         signature,
+                         &args, CHECK);
+
+  // Assumptions:
+  // FMG is archived, which means -modulepath is not specified. All named modules are loaded from system modules files.
+  // All app classes are in unnamed module.
+  // TODO: test support for -Xbootclasspath
+  assert(result.get_type() == T_OBJECT, "just checking");
+  oop mirror = result.get_oop();
+  if (mirror != nullptr) {
+    // Could be null if Proxy.java decides to not archive it.
+    InstanceKlass* ik = InstanceKlass::cast(java_lang_Class::as_Klass(mirror));
+    if (ik->is_shared_boot_class() || ik->is_shared_platform_class()) {
+      // FIXME: add code in Proxy.java to return null
+      // FIXME: get classpath index from the ik->package_entry(); (??)
+      assert(ik->module()->is_named(), "dynamic proxies defined in unnamed modules for boot/platform loaders not supported");
+      ik->set_shared_classpath_index(0);
+    } else {
+      assert(ik->is_shared_app_class(), "must be");
+      // FIXME: get classpath index from the ik->package_entry(); (??)
+      //
+      ik->set_shared_classpath_index(ClassLoaderExt::app_class_paths_start_index());
+    }
+
+    ResourceMark rm(THREAD);
+    log_info(cds, dynamic, proxy)("%s classpath index = %d", ik->external_name(), ik->shared_classpath_index());
+  }
+}
+
 // Warning -- this is fragile!!!
 // This is a hard-coded list of classes that are safe to preinitialize at dump time. It needs
 // to be updated if the Java source code changes.
 class ForcePreinitClosure : public CLDClosure {
 public:
   void do_cld(ClassLoaderData* cld) {
+    assert(CDSConfig::is_dumping_invokedynamic(), "sanity");
+
     static const char* forced_preinit_classes[] = {
       "java/util/HexFormat",
       "jdk/internal/util/ClassFileDumper",
@@ -1126,6 +1229,10 @@ public:
       "java/lang/invoke/DirectMethodHandle$Holder",
       "java/lang/invoke/BoundMethodHandle$Specializer",
       "java/lang/invoke/MethodHandles$Lookup",
+
+    //TODO: these use java.lang.ClassValue$Entry which is a subtype of WeakReference
+    //"java/lang/reflect/Proxy$ProxyBuilder",
+    //"java/lang/reflect/Proxy",
 
     // TODO -- need to clear internTable, etc
     //"java/lang/invoke/MethodType",
@@ -1153,7 +1260,7 @@ public:
 };
 
 void ClassPrelinker::setup_forced_preinit_classes() {
-  if (!ArchiveInvokeDynamic) {
+  if (!CDSConfig::is_dumping_invokedynamic()) {
     return;
   }
 
@@ -1385,6 +1492,8 @@ void ClassPrelinker::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
         log_info(cds, preload)("%s %s%s", loader_name, ik->external_name(),
                                ik->is_loaded() ? " (already loaded)" : "");
       }
+      // FIXME Do not load proxy classes if FMG is disabled.
+
       if (!ik->is_loaded()) {
         if (ik->is_hidden()) {
           preload_archived_hidden_class(loader, ik, loader_name, CHECK);
@@ -1404,6 +1513,8 @@ void ClassPrelinker::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
           assert(actual->is_loaded(), "must be");
         }
       }
+
+      // FIXME assert - if FMG, package must be archived
     }
 
     if (!_preload_javabase_only) {

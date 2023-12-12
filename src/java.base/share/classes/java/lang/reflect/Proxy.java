@@ -33,6 +33,7 @@ import java.lang.module.ModuleDescriptor;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
@@ -398,6 +399,11 @@ public class Proxy implements java.io.Serializable {
             .getDeclaringClass();
     }
 
+    static {
+        CDS.initializeFromArchive(Proxy.class);
+    }
+    static ArchivedData archivedData;
+
     /**
      * Returns the {@code Constructor} object of a proxy class that takes a
      * single argument of type {@link InvocationHandler}, given a class loader
@@ -423,6 +429,12 @@ public class Proxy implements java.io.Serializable {
             if (caller != null) {
                 checkProxyAccess(caller, loader, intf);
             }
+            if (archivedData != null) {
+                Constructor<?> cons = archivedData.get(loader, intf);
+                if (cons != null) {
+                    return cons;
+                }
+            }
             return proxyCache.sub(intf).computeIfAbsent(
                 loader,
                 (ld, clv) -> new ProxyBuilder(ld, clv.key()).build()
@@ -433,12 +445,129 @@ public class Proxy implements java.io.Serializable {
             if (caller != null) {
                 checkProxyAccess(caller, loader, intfsArray);
             }
+            if (archivedData != null) {
+                Constructor<?> cons = archivedData.get(loader, intfsArray);
+                if (cons != null) {
+                    return cons;
+                }
+            }
             final List<Class<?>> intfs = Arrays.asList(intfsArray);
             return proxyCache.sub(intfs).computeIfAbsent(
                 loader,
                 (ld, clv) -> new ProxyBuilder(ld, clv.key()).build()
             );
         }
+    }
+
+    static class InterfacesKey {
+        Class<?>[] intfsArray;
+        InterfacesKey(Class<?>[] intfs) {
+            intfsArray = new Class<?>[intfs.length];
+            for (int i = 0; i < intfs.length; i++) {
+                intfsArray[i] = intfs[i];
+            }
+        }
+        InterfacesKey(List<Class<?>> intfs) {
+            intfsArray = new Class<?>[intfs.size()];
+            for (int i = 0; i < intfs.size(); i++) {
+                intfsArray[i] = intfs.get(i);
+            }
+        }
+        InterfacesKey(Class<?> intf) {
+            intfsArray = new Class<?>[1];
+            intfsArray[0] = intf;
+        }
+        @Override
+        public int hashCode() {
+            int h = 0;
+            for (Class<?> cls : intfsArray) {
+                h += cls.hashCode();
+            }
+            return h;
+        }
+        @Override
+        public boolean equals(Object other) {
+            if (other instanceof InterfacesKey) {
+                InterfacesKey o = (InterfacesKey)other;
+                int len = intfsArray.length;
+                if (len != o.intfsArray.length) {
+                    return false;
+                }
+                Class<?>[] oa = o.intfsArray;
+                for (int i = 0; i < len; i++) {
+                    if (intfsArray[i] != oa[i]) {
+                        return false;
+                    }
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    abstract static class AbstractArchivedData<T> {
+        ClassLoader platformLoader;
+        ClassLoader appLoader;
+        HashMap<InterfacesKey,T> bootCache = new HashMap<>();
+        HashMap<InterfacesKey,T> platformCache = new HashMap<>();
+        HashMap<InterfacesKey,T> appCache = new HashMap<>();
+
+        AbstractArchivedData(ClassLoader plat, ClassLoader app) {
+            platformLoader = plat;
+            appLoader = app;
+        }
+
+        HashMap<InterfacesKey,T> cacheForLoader(ClassLoader loader) {
+            if (loader == null) {
+                return bootCache;
+            } else if (loader == platformLoader) {
+                return platformCache;
+            } else if (loader == appLoader) {
+                return appCache;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    static class ArchivedData extends AbstractArchivedData<Constructor<?>> {
+        ArchivedData(ClassLoader plat, ClassLoader app) {
+            super(plat, app);
+        }
+
+        void put(ClassLoader loader, Class<?>[] interfaces, Constructor<?> cons) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null) {
+                InterfacesKey key = new InterfacesKey(interfaces);
+                cache.put(key, cons);
+            } else {
+                throw new UnsupportedOperationException("Class loader " + loader + " is not supported");
+            }
+        }
+        Constructor<?> get(ClassLoader loader, Class<?>[] interfaces) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null && cache.size() > 0) {
+                InterfacesKey key = new InterfacesKey(interfaces);
+                return cache.get(key);
+            } else {
+                return null;
+            }
+        }
+        Constructor<?> get(ClassLoader loader, Class<?> intf) {
+            HashMap<InterfacesKey,Constructor<?>> cache = cacheForLoader(loader);
+            if (cache != null && cache.size() > 0) {
+                InterfacesKey key = new InterfacesKey(intf);
+                return cache.get(key);
+            } else {
+                return null;
+            }
+        }
+    }
+
+    private static void initCacheForCDS(ClassLoader platformLoader, ClassLoader appLoader) {
+        archivedData = new ArchivedData(platformLoader, appLoader);
+        ProxyBuilder.initCacheForCDS(platformLoader, appLoader);
     }
 
     /*
@@ -488,7 +617,7 @@ public class Proxy implements java.io.Serializable {
             // IOI-FIXME: (temp) work around problems where the leyden-premain code finds two
             // classes named "jdk.proxy2.$Proxy8"
             // A proper fix in CDS is needed.
-            if (CDS.isDumpingArchive()) {
+            if (CDS.isDumpingArchive() || CDS.isDumpingClassList()) {
                 if (CDS.isSharingEnabled()) {
                     return "$Proxy0100"; // CDS dynamic dump
                 } else {
@@ -510,7 +639,7 @@ public class Proxy implements java.io.Serializable {
         private static final ClassLoaderValue<Boolean> reverseProxyCache =
             new ClassLoaderValue<>();
 
-        private record ProxyClassContext(Module module, String packageName, int accessFlags) {
+        private record ProxyClassContext(Module module, String packageName, int accessFlags, boolean isDynamicModule) {
             private ProxyClassContext {
                 if (module.isNamed()) {
                     if (packageName.isEmpty()) {
@@ -545,19 +674,38 @@ public class Proxy implements java.io.Serializable {
             /*
              * Choose a name for the proxy class to generate.
              */
-            long num = nextUniqueNumber.getAndIncrement();
-            String proxyName = context.packageName().isEmpty()
-                                    ? proxyClassNamePrefix + num
-                                    : context.packageName() + "." + proxyClassNamePrefix + num;
-
+            String packagePrefix = context.packageName().isEmpty()
+                                    ? proxyClassNamePrefix
+                                    : context.packageName() + "." + proxyClassNamePrefix;
             ClassLoader loader = getLoader(context.module());
+            int accessFlags = context.accessFlags() | Modifier.FINAL;
+
+            if (myArchivedData != null) {
+                Class<?> pc = myArchivedData.getArchivedProxyClass(loader, packagePrefix, interfaces);
+                if (pc != null) {
+                    reverseProxyCache.sub(pc).putIfAbsent(loader, Boolean.TRUE);
+                    return pc;
+                }
+            }
+
+            long num = nextUniqueNumber.getAndIncrement();
+            String proxyName = packagePrefix + num;
+
             trace(proxyName, context.module(), loader, interfaces);
 
+            if (CDS.isDumpingClassList() && context.isDynamicModule()) {
+                CDS.traceDynamicProxy(loader, proxyName, interfaces.toArray(new Class<?>[0]), accessFlags);
+            }
+
+            return defineProxyClassInner(loader, proxyName, interfaces, accessFlags);
+        }
+
+        private static Class<?> defineProxyClassInner(ClassLoader loader, String proxyName,
+                                                      List<Class<?>> interfaces, int accessFlags) {
             /*
              * Generate the specified proxy class.
              */
-            byte[] proxyClassFile = ProxyGenerator.generateProxyClass(loader, proxyName, interfaces,
-                                                                      context.accessFlags() | Modifier.FINAL);
+            byte[] proxyClassFile = ProxyGenerator.generateProxyClass(loader, proxyName, interfaces, accessFlags);
             try {
                 Class<?> pc = JLA.defineClass(loader, proxyName, proxyClassFile,
                                               null, "__dynamic_proxy__");
@@ -573,6 +721,22 @@ public class Proxy implements java.io.Serializable {
                  */
                 throw new IllegalArgumentException(e.toString());
             }
+        }
+
+        private static Class<?> defineProxyClassForCDS(ClassLoader loader, String proxyName, Class<?>[] interfaces,
+                                                       int accessFlags) {
+            ArrayList<Class<?>> list = new ArrayList<>();
+            for (Object o : interfaces) {
+                list.add((Class<?>)o);
+            }
+
+            // This triggers the modifications in the module graph (some of these changes are recorded ... details needed)
+            ProxyBuilder dummy = new ProxyBuilder(loader, list);
+
+            Class<?> proxyClass = defineProxyClassInner(loader, proxyName, list, accessFlags);
+            Constructor<?> cons = getAccessibleConstructor(proxyClass);
+            myArchivedData.putArchivedProxyClass(loader, proxyName, list, proxyClass);
+            return proxyClass;
         }
 
         /**
@@ -667,10 +831,13 @@ public class Proxy implements java.io.Serializable {
          * Must call the checkProxyAccess method to perform permission checks
          * before calling this.
          */
-        @SuppressWarnings("removal")
         Constructor<?> build() {
             Class<?> proxyClass = defineProxyClass(context, interfaces);
+            return getAccessibleConstructor(proxyClass);
+        }
 
+        @SuppressWarnings("removal")
+        private static Constructor<?> getAccessibleConstructor(Class<?> proxyClass) {
             final Constructor<?> cons;
             try {
                 cons = proxyClass.getConstructor(constructorParams);
@@ -847,7 +1014,7 @@ public class Proxy implements java.io.Serializable {
                     Modules.addOpens(targetModule, targetPackageName, Proxy.class.getModule());
                 }
                 // return the module of the package-private interface
-                return new ProxyClassContext(targetModule, targetPackageName, 0);
+                return new ProxyClassContext(targetModule, targetPackageName, 0, false);
             }
 
             // All proxy interfaces are public.  So maps to a dynamic proxy module
@@ -864,7 +1031,7 @@ public class Proxy implements java.io.Serializable {
 
             var pkgName = nonExported ? PROXY_PACKAGE_PREFIX + '.' + targetModule.getName()
                                       : targetModule.getName();
-            return new ProxyClassContext(targetModule, pkgName, Modifier.PUBLIC);
+            return new ProxyClassContext(targetModule, pkgName, Modifier.PUBLIC, true);
         }
 
         /*
@@ -917,23 +1084,133 @@ public class Proxy implements java.io.Serializable {
          * Each class loader will have one dynamic module.
          */
         private static Module getDynamicModule(ClassLoader loader) {
-            return dynProxyModules.computeIfAbsent(loader, (ld, clv) -> {
-                // create a dynamic module and setup module access
-                String mn = "jdk.proxy" + counter.incrementAndGet();
-                String pn = PROXY_PACKAGE_PREFIX + "." + mn;
-                ModuleDescriptor descriptor =
-                        ModuleDescriptor.newModule(mn, Set.of(SYNTHETIC))
-                                        .packages(Set.of(pn, mn))
-                                        .exports(mn)
-                                        .build();
-                Module m = Modules.defineModule(ld, descriptor, null);
-                Modules.addReads(m, Proxy.class.getModule());
-                Modules.addExports(m, mn);
-                // java.base to create proxy instance and access its Lookup instance
-                Modules.addOpens(m, pn, Proxy.class.getModule());
-                Modules.addOpens(m, mn, Proxy.class.getModule());
-                return m;
-            });
+            return dynProxyModules.computeIfAbsent(loader, (ld, clv) -> makeDynamicModule(ld, counter.incrementAndGet()));
+        }
+
+        private static Module makeDynamicModule(ClassLoader loader, int num) {
+            // create a dynamic module and setup module access
+            String mn = "jdk.proxy" + num;
+            String pn = PROXY_PACKAGE_PREFIX + "." + mn;
+            ModuleDescriptor descriptor =
+                ModuleDescriptor.newModule(mn, Set.of(SYNTHETIC))
+                                .packages(Set.of(pn, mn))
+                                .exports(mn)
+                                .build();
+            Module m = Modules.defineModule(loader, descriptor, null);
+            Modules.addReads(m, Proxy.class.getModule());
+            Modules.addExports(m, mn);
+            // java.base to create proxy instance and access its Lookup instance
+            Modules.addOpens(m, pn, Proxy.class.getModule());
+            Modules.addOpens(m, mn, Proxy.class.getModule());
+
+            if (CDS.isDumpingClassList()) {
+                CDS.traceDynamicProxyModule(loader, num);
+            } else if (CDS.isDumpingHeapObjects() && myArchivedData != null) {
+                myArchivedData.recordModule(loader, m, num);
+            }
+            return m;
+        }
+
+        private static void fixDynamicModule(Module m) {
+            String mn = m.getName();
+            String pn = PROXY_PACKAGE_PREFIX + "." + mn;
+            Modules.addReads(m, Proxy.class.getModule());
+            Modules.addExports(m, mn);
+            // java.base to create proxy instance and access its Lookup instance
+            Modules.addOpens(m, pn, Proxy.class.getModule());
+            Modules.addOpens(m, mn, Proxy.class.getModule());
+        }
+
+        // This is called from CDS native code for building the archived heap objects
+        private static void defineDynamicModuleForCDS(ClassLoader loader, int num) {
+            assert num >= counter.get();
+            while (num > counter.get()) {
+                counter.incrementAndGet();
+            }
+            assert dynProxyModules.get(loader) == null;
+            Module m = makeDynamicModule(loader, num);
+            Module last = dynProxyModules.putIfAbsent(loader, m);
+            assert last == null;
+        }
+
+        static class ArchivedData extends AbstractArchivedData<Class<?>> {
+            Module bootModule;
+            Module platformModule;
+            Module appModule;
+            int maxNum;
+
+            ArchivedData(ClassLoader plat, ClassLoader app) {
+                super(plat, app);
+            }
+
+            void recordModule(ClassLoader loader, Module m, int num) {
+                if (loader == null) {
+                    bootModule = m;
+                } else if (loader == platformLoader) {
+                    platformModule = m;
+                } else if (loader == appLoader) {
+                    appModule = m;
+                } else {
+                    throw new UnsupportedOperationException("Class loader " + loader + " is not supported");
+                }
+                if (maxNum < num) {
+                    maxNum = num;
+                }
+            }
+
+            void restore() {
+                if (bootModule != null) {
+                    Module last = dynProxyModules.putIfAbsent(null, bootModule);
+                    assert last == null;
+                    fixDynamicModule(bootModule);
+                }
+                if (platformModule != null) {
+                    Module last = dynProxyModules.putIfAbsent(platformLoader, platformModule);
+                    assert last == null;
+                    fixDynamicModule(platformModule);
+                }
+                if (appModule != null) {
+                    Module last = dynProxyModules.putIfAbsent(appLoader, appModule);
+                    assert last == null;
+                    fixDynamicModule(appModule);
+                }
+
+                while (maxNum > counter.get()) {
+                    counter.incrementAndGet();
+                }
+            }
+
+
+            Class<?> getArchivedProxyClass(ClassLoader loader, String proxyPrefix, List<Class<?>> interfaces) {
+                HashMap<InterfacesKey,Class<?>> cache = cacheForLoader(loader);
+                if (cache != null && cache.size() > 0) {
+                    InterfacesKey key = new InterfacesKey(interfaces);
+                    return cache.get(key);
+                } else {
+                    return null;
+                }
+            }
+
+            void putArchivedProxyClass(ClassLoader loader, String proxyName, List<Class<?>> interfaces, Class<?> cls) {
+                HashMap<InterfacesKey,Class<?>> cache = cacheForLoader(loader);
+                if (cache != null) {
+                    InterfacesKey key = new InterfacesKey(interfaces);
+                    cache.put(key, cls);
+                }
+            }
+        }
+
+        static ArchivedData myArchivedData;
+
+        static {
+            CDS.initializeFromArchive(ProxyBuilder.class);
+            if (myArchivedData != null) {
+                myArchivedData.restore();
+            }
+        }
+
+        private static void initCacheForCDS(ClassLoader platformLoader, ClassLoader appLoader) {
+            myArchivedData = new ArchivedData(platformLoader, appLoader);
         }
     }
 

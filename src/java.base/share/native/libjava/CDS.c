@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -62,6 +62,17 @@ Java_jdk_internal_misc_CDS_isDumpingClassList0(JNIEnv *env, jclass jcls) {
 JNIEXPORT void JNICALL
 Java_jdk_internal_misc_CDS_logLambdaFormInvoker(JNIEnv *env, jclass jcls, jstring line) {
     JVM_LogLambdaFormInvoker(env, line);
+}
+
+JNIEXPORT void JNICALL
+Java_jdk_internal_misc_CDS_logDynamicProxy(JNIEnv *env, jclass jcls, jobject loader, jstring proxy_name,
+                                           jobjectArray interfaces, jint accessFlags) {
+    JVM_LogDynamicProxy(env, loader, proxy_name, interfaces, accessFlags);
+}
+
+JNIEXPORT void JNICALL
+Java_jdk_internal_misc_CDS_logDynamicProxyModule(JNIEnv *env, jclass jcls, jobject loader, jint num) {
+    JVM_LogDynamicProxyModule(env, loader, num);
 }
 
 JNIEXPORT void JNICALL

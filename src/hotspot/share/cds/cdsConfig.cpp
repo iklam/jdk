@@ -48,6 +48,7 @@ bool CDSConfig::_is_dumping_dynamic_archive = false;
 bool CDSConfig::_dumping_full_module_graph_disabled = false;
 bool CDSConfig::_loading_full_module_graph_disabled = false;
 bool CDSConfig::_has_preloaded_classes;
+bool CDSConfig::_is_loading_invokedynamic = false;
 
 char* CDSConfig::_default_archive_path = nullptr;
 char* CDSConfig::_static_archive_path = nullptr;
@@ -552,6 +553,14 @@ void CDSConfig::disable_loading_full_module_graph(const char* reason) {
       log_info(cds)("full module graph cannot be loaded: %s", reason);
     }
   }
+}
+
+bool CDSConfig::is_loading_invokedynamic() {
+  return UseSharedSpaces && is_loading_heap() && _is_loading_invokedynamic;
+}
+
+bool CDSConfig::is_dumping_dynamic_proxy() {
+  return is_dumping_full_module_graph() && is_dumping_invokedynamic();
 }
 #endif // INCLUDE_CDS_JAVA_HEAP
 

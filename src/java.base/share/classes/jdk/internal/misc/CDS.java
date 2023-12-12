@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -80,6 +80,11 @@ public class CDS {
         return isDumpingStaticArchive;
     }
 
+    public static boolean isDumpingHeapObjects() {
+        // FIXME -- support one-step training
+        return (CDS.isDumpingArchive() && !CDS.isSharingEnabled());
+    }
+
     private static native boolean isDumpingClassList0();
     private static native boolean isDumpingArchive0();
     private static native boolean isSharingEnabled0();
@@ -126,6 +131,20 @@ public class CDS {
             logLambdaFormInvoker(prefix + " " + cn);
         }
     }
+
+    public static void traceDynamicProxy(ClassLoader loader, String proxyName,
+                                         Class<?>[] interfaces, int accessFlags) {
+        Objects.requireNonNull(proxyName);
+        Objects.requireNonNull(interfaces);
+        logDynamicProxy(loader, proxyName, interfaces, accessFlags);
+    }
+    public static void traceDynamicProxyModule(ClassLoader loader, int num) {
+        logDynamicProxyModule(loader, num);
+    }
+
+    private static native void logDynamicProxy(ClassLoader loader, String proxyName,
+                                               Class<?>[] interfaces, int accessFlags);
+    private static native void logDynamicProxyModule(ClassLoader loader, int num);
 
     static final String DIRECT_HOLDER_CLASS_NAME  = "java.lang.invoke.DirectMethodHandle$Holder";
     static final String DELEGATING_HOLDER_CLASS_NAME = "java.lang.invoke.DelegatingMethodHandle$Holder";

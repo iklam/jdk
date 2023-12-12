@@ -1021,6 +1021,11 @@ bool SystemDictionary::is_shared_class_visible_impl(Symbol* class_name,
   bool was_archived_from_named_module = scp_entry->in_named_module();
   bool visible;
 
+  if (mod_entry != nullptr && mod_entry->location() == nullptr) {
+    // dynamic proxy : FIXME is this correct?
+    return true;
+  }
+
   if (was_archived_from_named_module) {
     if (should_be_in_named_module) {
       // Is the module loaded from the same location as during dump time?
