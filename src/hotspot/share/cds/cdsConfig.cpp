@@ -26,6 +26,7 @@
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"
+#include "cds/classListWriter.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderDataShared.hpp"
@@ -486,6 +487,10 @@ bool CDSConfig::is_dumping_regenerated_lambdaform_invokers() {
   } else {
     return is_dumping_archive();
   }
+}
+
+bool CDSConfig::is_tracing_dynamic_proxy() {
+  return ClassListWriter::is_enabled() || is_dumping_preimage_static_archive();
 }
 
 // Preserve all states that were examined used during dumptime verification, such

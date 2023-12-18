@@ -143,8 +143,7 @@ static ArchivableStaticFieldInfo archive_subgraph_entry_fields[] = {
   {"java/lang/invoke/DirectMethodHandle",         "archivedObjects"},
   {"java/lang/invoke/MethodType",                 "archivedObjects"},
   {"java/lang/invoke/LambdaForm$NamedFunction",   "archivedObjects"},
-  {"java/lang/reflect/Proxy",                     "archivedData"},
-  {"java/lang/reflect/Proxy$ProxyBuilder",        "myArchivedData"},
+  {"java/lang/reflect/Proxy$ProxyBuilder",        "archivedData"},
 #ifndef PRODUCT
   {nullptr, nullptr}, // Extra slot for -XX:ArchiveHeapTestClass
 #endif

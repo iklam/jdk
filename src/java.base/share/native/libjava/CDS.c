@@ -46,7 +46,12 @@ Java_jdk_internal_misc_CDS_getRandomSeedForDumping(JNIEnv *env, jclass ignore) {
 
 JNIEXPORT jboolean JNICALL
 Java_jdk_internal_misc_CDS_isDumpingArchive0(JNIEnv *env, jclass jcls) {
-    return JVM_IsCDSDumpingEnabled(env);
+    return JVM_IsDumpingArchive(env);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_misc_CDS_isDumpingStaticArchive0(JNIEnv *env, jclass jcls) {
+    return JVM_IsDumpingStaticArchive(env);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -57,6 +62,16 @@ Java_jdk_internal_misc_CDS_isSharingEnabled0(JNIEnv *env, jclass jcls) {
 JNIEXPORT jboolean JNICALL
 Java_jdk_internal_misc_CDS_isDumpingClassList0(JNIEnv *env, jclass jcls) {
     return JVM_IsDumpingClassList(env);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_misc_CDS_isDumpingHeap0(JNIEnv *env, jclass jcls) {
+    return JVM_IsDumpingHeap(env);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_misc_CDS_isTracingDynamicProxy0(JNIEnv *env, jclass jcls) {
+    return JVM_IsTracingDynamicProxy(env);
 }
 
 JNIEXPORT void JNICALL

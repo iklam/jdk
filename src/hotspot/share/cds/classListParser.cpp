@@ -925,17 +925,11 @@ void ClassListParser::parse_class_reflection_data_tag() {
 }
 
 oop ClassListParser::loader_from_type(const char* loader_type) {
-  if (strcmp(loader_type, "boot") == 0) {
-    return nullptr;
-  } else if (strcmp(loader_type, "platform") == 0) {
-    return SystemDictionary::java_platform_loader();
-  } else if (strcmp(loader_type, "app") == 0) {
-    return SystemDictionary::java_system_loader();
-  } else {
+  oop loader;
+  if (!ArchiveUtils::builtin_loader_from_type(loader_type, &loader)) {
     error("Unknown loader %s", loader_type);
-    ShouldNotReachHere();
-    return nullptr;
   }
+  return loader;
 }
 
 void ClassListParser::parse_dynamic_proxy_module_tag() {

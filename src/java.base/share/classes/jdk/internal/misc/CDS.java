@@ -41,15 +41,19 @@ import java.util.stream.Stream;
 import jdk.internal.access.SharedSecrets;
 
 public class CDS {
-    private static final boolean isDumpingClassList;
     private static final boolean isDumpingArchive;
-    private static final boolean isSharingEnabled;
+    private static final boolean isDumpingClassList;
+    private static final boolean isDumpingHeap;
     private static final boolean isDumpingStaticArchive;
+    private static final boolean isSharingEnabled;
+    private static final boolean isTracingDynamicProxy;
     static {
-        isDumpingClassList = isDumpingClassList0();
         isDumpingArchive = isDumpingArchive0();
+        isDumpingClassList = isDumpingClassList0();
+        isDumpingHeap = isDumpingHeap0();
+        isDumpingStaticArchive = isDumpingStaticArchive0();
         isSharingEnabled = isSharingEnabled0();
-        isDumpingStaticArchive = isDumpingArchive && !isSharingEnabled;
+        isTracingDynamicProxy = isTracingDynamicProxy0();
     }
 
     /**
@@ -80,14 +84,21 @@ public class CDS {
         return isDumpingStaticArchive;
     }
 
-    public static boolean isDumpingHeapObjects() {
-        // FIXME -- support one-step training
-        return (CDS.isDumpingArchive() && !CDS.isSharingEnabled());
+    public static boolean isDumpingHeap() {
+        return isDumpingHeap;
     }
 
-    private static native boolean isDumpingClassList0();
+    public static boolean isTracingDynamicProxy() {
+        return isTracingDynamicProxy;
+    }
+
     private static native boolean isDumpingArchive0();
+    private static native boolean isDumpingClassList0();
+    private static native boolean isDumpingHeap0();
+    private static native boolean isDumpingStaticArchive0();
     private static native boolean isSharingEnabled0();
+    private static native boolean isTracingDynamicProxy0();
+
     private static native void logLambdaFormInvoker(String line);
 
     /**

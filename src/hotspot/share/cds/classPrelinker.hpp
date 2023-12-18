@@ -142,6 +142,8 @@ public:
   static void generate_reflection_data(JavaThread* current, InstanceKlass* ik, int rd_flags);
 
   // java/lang/reflect/Proxy caching
+  static void trace_dynamic_proxy_module(oop loader, int num);
+  static void trace_dynamic_proxy_class(oop loader, const char* proxy_name, objArrayOop interfaces, int access_flags);
   static void define_dynamic_proxy_module(Handle loader, int num, TRAPS);
   static void define_dynamic_proxy_class(Handle loader, Handle proxy_name, Handle interfaces, int access_flags, TRAPS);
 

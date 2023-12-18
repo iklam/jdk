@@ -26,6 +26,7 @@
 #include "cds/cdsConfig.hpp"
 #include "cds/classListParser.hpp"
 #include "cds/classListWriter.hpp"
+#include "cds/classPrelinker.hpp"
 #include "cds/dynamicArchive.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/lambdaFormInvokers.hpp"
@@ -3686,8 +3687,20 @@ JVM_ENTRY_PROF(jclass, JVM_LookupLambdaProxyClassFromArchive, JVM_LookupLambdaPr
 #endif // INCLUDE_CDS
 JVM_END
 
-JVM_LEAF_PROF(jboolean, JVM_IsCDSDumpingEnabled, JVM_IsCDSDumpingEnabled(JNIEnv* env))
+JVM_LEAF_PROF(jboolean, JVM_IsDumpingArchive, JVM_IsDumpingArchive(JNIEnv* env))
   return CDSConfig::is_dumping_archive();
+JVM_END
+
+JVM_LEAF_PROF(jboolean, JVM_IsDumpingStaticArchive, JVM_IsDumpingStaticArchive(JNIEnv* env))
+  return CDSConfig::is_dumping_static_archive();
+JVM_END
+
+JVM_LEAF_PROF(jboolean, JVM_IsDumpingHeap, JVM_IsDumpingHeap(JNIEnv* env))
+  return CDSConfig::is_dumping_heap();
+JVM_END
+
+JVM_LEAF_PROF(jboolean, JVM_IsTracingDynamicProxy, JVM_IsTracingDynamicProxy(JNIEnv* env))
+  return CDSConfig::is_tracing_dynamic_proxy();
 JVM_END
 
 JVM_LEAF_PROF(jboolean, JVM_IsSharingEnabled, JVM_IsSharingEnabled(JNIEnv* env))
@@ -3745,60 +3758,25 @@ JVM_ENTRY_PROF(void, JVM_LogLambdaFormInvoker, JVM_LogLambdaFormInvoker(JNIEnv *
 #endif // INCLUDE_CDS
 JVM_END
 
-JVM_ENTRY_PROF(void, JVM_LogDynamicProxy, JVM_LogDynamicProxy(JNIEnv *env, jobject loader, jstring proxy_name, jobjectArray interfaces, jint accessFlags))
+JVM_ENTRY_PROF(void, JVM_LogDynamicProxy, JVM_LogDynamicProxy(JNIEnv *env, jobject loader, jstring proxy_name, jobjectArray interfaces, jint access_flags))
 #if INCLUDE_CDS
-  if (CDSConfig::is_dumping_dynamic_archive()) {
-    return; // FIXME jdk.internal.misc.CDS.isDumpingClassList() is wrong!
-  }
-  assert(ClassListWriter::is_enabled(),  "sanity");
+  assert(CDSConfig::is_tracing_dynamic_proxy(),  "sanity");
+
   ResourceMark rm(THREAD);
-  Handle h_proxy_name(THREAD, JNIHandles::resolve_non_null(proxy_name));
-  char* c_proxy_name = java_lang_String::as_utf8_string(h_proxy_name());
-  oop loaderOop = JNIHandles::resolve(loader);
-  objArrayOop interfacesOop = objArrayOop(JNIHandles::resolve_non_null(interfaces));
-  if (interfacesOop->length() < 1) {
-    return;
-  }
-  stringStream ss;
-  if (loaderOop == nullptr) {
-    ss.print("boot");
-  } else if (loaderOop == SystemDictionary::java_platform_loader()) {
-    ss.print("platform");
-  } else if (loaderOop == SystemDictionary::java_system_loader()) {
-    ss.print("app");
-  } else {
-    return;
-  }
-  ss.print(" %s %d %d", c_proxy_name, accessFlags, interfacesOop->length());
-  for (int i = 0; i < interfacesOop->length(); i++) {
-    oop mirror = interfacesOop->obj_at(i);
-    Klass* k = java_lang_Class::as_Klass(mirror);
-    ss.print(" %s", k->name()->as_C_string());
-  }
-  ClassListWriter w;
-  w.stream()->print_cr("@dynamic-proxy %s", ss.freeze());
+  oop proxy_name_oop = JNIHandles::resolve_non_null(proxy_name);
+  char* proxy_name_str = java_lang_String::as_utf8_string(proxy_name_oop);
+  oop loader_oop = JNIHandles::resolve(loader);
+  objArrayOop interfaces_oop = objArrayOop(JNIHandles::resolve_non_null(interfaces));
+
+  ClassPrelinker::trace_dynamic_proxy_class(loader_oop, proxy_name_str, interfaces_oop, access_flags);
 #endif // INCLUDE_CDS
 JVM_END
 
 JVM_ENTRY_PROF(void, JVM_LogDynamicProxyModule, JVM_LogDynamicProxyModule(JNIEnv *env, jobject loader, jint num))
 #if INCLUDE_CDS
-  if (CDSConfig::is_dumping_dynamic_archive()) {
-    return; // FIXME jdk.internal.misc.CDS.isDumpingClassList() is wrong!
-  }
-  assert(ClassListWriter::is_enabled(),  "sanity");
+  assert(CDSConfig::is_tracing_dynamic_proxy(),  "sanity");
   oop loaderOop = JNIHandles::resolve(loader);
-  const char* name = nullptr;
-  if (loaderOop == nullptr) {
-    name = "boot";
-  } else if (loaderOop == SystemDictionary::java_platform_loader()) {
-    name = "platform";
-  } else if (loaderOop == SystemDictionary::java_system_loader()) {
-    name = "app";
-  } else {
-    return;
-  }
-  ClassListWriter w;
-  w.stream()->print_cr("@dynamic-proxy-module %s %d", name, num);
+  ClassPrelinker::trace_dynamic_proxy_module(loaderOop, num);
 #endif // INCLUDE_CDS
 JVM_END
 
@@ -4277,7 +4255,10 @@ JVM_END
   macro(JVM_InitializeFromArchive) \
   macro(JVM_RegisterLambdaProxyClassForArchiving) \
   macro(JVM_LookupLambdaProxyClassFromArchive) \
-  macro(JVM_IsCDSDumpingEnabled) \
+  macro(JVM_IsDumpingArchive) \
+  macro(JVM_IsDumpingStaticArchive) \
+  macro(JVM_IsDumpingHeap) \
+  macro(JVM_IsTracingDynamicProxy) \
   macro(JVM_IsSharingEnabled) \
   macro(JVM_GetRandomSeedForDumping) \
   macro(JVM_IsDumpingClassList) \
