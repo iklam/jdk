@@ -1722,8 +1722,11 @@ MapArchiveResult FileMapInfo::map_regions(int regions[], int num_regions, char* 
   DEBUG_ONLY(header()->set_mapped_base_address((char*)(uintptr_t)0xdeadbeef);)
 
   for (int i = 0; i < num_regions; i++) {
+    elapsedTimer timer;
+    timer.start();
     int idx = regions[i];
     MapArchiveResult result = map_region(idx, addr_delta, mapped_base_address, rs);
+    timer.stop();
     if (result != MAP_ARCHIVE_SUCCESS) {
       return result;
     }
@@ -1734,9 +1737,11 @@ MapArchiveResult FileMapInfo::map_regions(int regions[], int num_regions, char* 
         assert(r->mapped_base() == last_region->mapped_end(), "must have no gaps");
       }
       last_region = r;)
-    log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)", is_static() ? "static " : "dynamic",
+    log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s) %9zu = %d us", is_static() ? "static " : "dynamic",
                   idx, p2i(r->mapped_base()), p2i(r->mapped_end()),
-                  shared_region_name[idx]);
+                  shared_region_name[idx],
+                  r->used_aligned(),
+                  (int)(timer.seconds() * 1000000));
 
   }
 
@@ -1843,8 +1848,11 @@ char* FileMapInfo::map_bitmap_region() {
   }
   bool read_only = true, allow_exec = false;
   char* requested_addr = nullptr; // allow OS to pick any location
+  elapsedTimer timer;
+  timer.start();
   char* bitmap_base = map_memory(_fd, _full_path, r->file_offset(),
                                  requested_addr, r->used_aligned(), read_only, allow_exec, mtClassShared);
+  timer.stop();
   if (bitmap_base == nullptr) {
     log_info(cds)("failed to map relocation bitmap");
     return nullptr;
@@ -1860,23 +1868,27 @@ char* FileMapInfo::map_bitmap_region() {
 
   r->set_mapped_from_file(true);
   r->set_mapped_base(bitmap_base);
-  log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)",
+  log_info(cds)("Mapped %s region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s) %9zu bytes = %d us",
                 is_static() ? "static " : "dynamic",
                 MetaspaceShared::bm, p2i(r->mapped_base()), p2i(r->mapped_end()),
-                shared_region_name[MetaspaceShared::bm]);
+                shared_region_name[MetaspaceShared::bm],
+                r->used_aligned(),
+                (int)(timer.seconds() * 1000000));
   return bitmap_base;
 }
 
 // This is called when we cannot map the archive at the requested[ base address (usually 0x800000000).
 // We relocate all pointers in the 2 core regions (ro, rw).
 bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
-  log_debug(cds, reloc)("runtime archive relocation start");
+  log_info(cds, reloc)("runtime archive relocation start");
   char* bitmap_base = map_bitmap_region();
 
   if (bitmap_base == nullptr) {
     return false; // OOM, or CRC check failure
   } else {
     size_t ptrmap_size_in_bits = header()->ptrmap_size_in_bits();
+    elapsedTimer timer;
+    timer.start();
     log_debug(cds, reloc)("mapped relocation bitmap @ " INTPTR_FORMAT " (" SIZE_FORMAT " bits)",
                           p2i(bitmap_base), ptrmap_size_in_bits);
 
@@ -1900,10 +1912,10 @@ bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
     SharedDataRelocator patcher((address*)patch_base, (address*)patch_end, valid_old_base, valid_old_end,
                                 valid_new_base, valid_new_end, addr_delta);
     ptrmap.iterate(&patcher);
-
+    timer.stop();
     // The MetaspaceShared::bm region will be unmapped in MetaspaceShared::initialize_shared_spaces().
 
-    log_debug(cds, reloc)("runtime archive relocation done");
+    log_info(cds, reloc)("runtime archive relocation done %d us", (int)(timer.seconds() * 1000000));
     return true;
   }
 }
@@ -2098,6 +2110,33 @@ bool FileMapInfo::map_heap_region() {
   }
 }
 
+volatile uintx _ioi_tmp;
+
+class MyThread2 : public NamedThread {
+  address _base;
+  address _end;
+
+public:
+  MyThread2(address base, address end) : _base(base), _end(end) {
+    set_name("Ioi2");
+  }
+
+  void run() override {
+    elapsedTimer timer;
+    timer.start();
+    log_info(cds)("archived heap -> pretouch thread start");
+    if (UseNewCode2) {
+      for (address p = _base; p < _end; p += 4096) {
+        _ioi_tmp += *(uintx*)p;
+      }
+    } else {
+      os::pretouch_memory(_base, _end);
+    }
+    timer.stop();
+    log_info(cds)("archived heap -> pretouch thread stop : %d us", (int)(timer.seconds() * 1000000));
+  }
+};
+
 bool FileMapInfo::map_heap_region_impl() {
   assert(UseG1GC, "the following code assumes G1");
 
@@ -2133,6 +2172,14 @@ bool FileMapInfo::map_heap_region_impl() {
                   INTPTR_FORMAT ", size = " SIZE_FORMAT " bytes",
                   p2i(addr), _mapped_heap_memregion.byte_size());
     return false;
+  }
+  if (UseNewCode) {
+    address start = (address)addr;
+    address end = start + _mapped_heap_memregion.byte_size();
+    MyThread2* t = new MyThread2(start, end);
+    if (os::create_thread(t, os::gc_thread)) {
+      os::start_thread(t);
+    }
   }
 
   if (VerifySharedSpaces && !r->check_region_crc(base)) {
@@ -2170,6 +2217,7 @@ bool FileMapInfo::map_heap_region_impl() {
   log_info(cds)("Heap data mapped at " INTPTR_FORMAT ", size = " SIZE_FORMAT_W(8) " bytes",
                 p2i(mapped_start), _mapped_heap_memregion.byte_size());
   log_info(cds)("CDS heap data relocation delta = " INTX_FORMAT " bytes", delta);
+
   return true;
 }
 

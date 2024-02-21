@@ -40,6 +40,7 @@
 #include "memory/resourceArea.hpp"
 #include "oops/compressedOops.inline.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/nonJavaThread.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"
@@ -349,6 +350,34 @@ void ArchiveUtils::log_to_classlist(BootstrapInfo* bootstrap_specifier, TRAPS) {
         }
         w.stream()->cr();
       }
+    }
+  }
+}
+
+class MyThread : public NamedThread {
+  address _base;
+  address _end;
+
+public:
+  MyThread(address base, address end) : _base(base), _end(end) {
+    set_name("Ioi");
+  }
+
+  void run() override {
+    elapsedTimer timer;
+    timer.start();
+    log_info(cds, reloc)("SharedDataRelocator -> pretouch thread start");
+    os::pretouch_memory(_base, _end);
+    timer.stop();
+    log_info(cds, reloc)("SharedDataRelocator -> pretouch thread stop : %d us", (int)(timer.seconds() * 1000000));
+  }
+};
+
+void SharedDataRelocator::start_pretouch_thread() {
+  if (UseNewCode) {
+    MyThread* t = new MyThread((address)_patch_base, (address)_patch_end);
+    if (os::create_thread(t, os::gc_thread)) {
+      os::start_thread(t);
     }
   }
 }

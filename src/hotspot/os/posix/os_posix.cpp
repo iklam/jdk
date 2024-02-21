@@ -40,6 +40,7 @@
 #include "runtime/park.hpp"
 #include "runtime/perfMemory.hpp"
 #include "runtime/sharedRuntime.hpp"
+#include "runtime/timer.hpp"
 #include "services/attachListener.hpp"
 #include "utilities/align.hpp"
 #include "utilities/checkedCast.hpp"
@@ -2062,8 +2063,40 @@ char* os::pd_map_memory(int fd, const char* unused,
     flags |= MAP_FIXED;
   }
 
-  char* mapped_address = (char*)mmap(addr, (size_t)bytes, prot, flags,
+  if (UseNewCode3) {
+    flags |= MAP_POPULATE;
+  }
+
+  char* mapped_address;
+
+  if (ArchiveRelocationMode != 0 && UseNewCode2 && addr != nullptr && !read_only && !allow_exec) {
+    elapsedTimer t1;
+    t1.start();
+    char* temp = (char*)mmap(nullptr, bytes, PROT_READ, MAP_SHARED,
+                             fd, file_offset);
+    t1.stop();
+    if (temp == MAP_FAILED) {
+      return nullptr;
+    }
+    elapsedTimer t2;
+    t2.start();
+    os::commit_memory(addr, bytes, false); // don't allow exec
+    t2.stop();
+
+    elapsedTimer t3;
+    t3.start();
+    memcpy(addr, temp, bytes);
+    t3.stop();
+
+    log_info(cds)("mmap = %9d ns, commit = %9d ns, copy = %9d ns",
+                  (int)(t1.seconds() * 1000000),
+                  (int)(t2.seconds() * 1000000),
+                  (int)(t3.seconds() * 1000000));
+    mapped_address = addr;
+  } else {
+    mapped_address = (char*)mmap(addr, (size_t)bytes, prot, flags,
                                      fd, file_offset);
+  }
   if (mapped_address == MAP_FAILED) {
     return nullptr;
   }
