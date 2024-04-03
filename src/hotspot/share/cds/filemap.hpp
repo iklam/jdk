@@ -227,6 +227,7 @@ private:
   bool   _has_full_module_graph;        // Does this CDS archive contain the full archived module graph?
   size_t _ptrmap_size_in_bits;          // Size of pointer relocation bitmap
   size_t _rw_ptrmap_size_in_bits;       // Size of pointer relocation map for read-write region
+  size_t _rw_ptrmap_size_in_bytes;
   size_t _ro_ptrmap_size_in_bits;       // Size of pointer relocation map for read-only region
   size_t _heap_roots_offset;            // Offset of the HeapShared::roots() object, from the bottom
                                         // of the archived heap objects, in bytes.
@@ -271,6 +272,7 @@ public:
   bool has_non_jar_in_classpath()          const { return _has_non_jar_in_classpath; }
   size_t ptrmap_size_in_bits()             const { return _ptrmap_size_in_bits; }
   size_t rw_ptrmap_size_in_bits()             const { return _rw_ptrmap_size_in_bits; }
+  size_t rw_ptrmap_size_in_bytes()            const { return _rw_ptrmap_size_in_bytes; }
   size_t ro_ptrmap_size_in_bits()             const { return _ro_ptrmap_size_in_bits; }
   bool compressed_oops()                   const { return _compressed_oops; }
   bool compressed_class_pointers()         const { return _compressed_class_ptrs; }
@@ -288,6 +290,7 @@ public:
   void set_serialized_data(char* p)              { set_as_offset(p, &_serialized_data_offset); }
   void set_ptrmap_size_in_bits(size_t s)         { _ptrmap_size_in_bits = s; }
   void set_rw_ptrmap_size_in_bits(size_t s)      { _rw_ptrmap_size_in_bits = s; }
+  void set_rw_ptrmap_size_in_bytes(size_t s)     { _rw_ptrmap_size_in_bytes = s; }
   void set_ro_ptrmap_size_in_bits(size_t s)      { _ro_ptrmap_size_in_bits = s; }
   void set_mapped_base_address(char* p)          { _mapped_base_address = p; }
   void set_heap_roots_offset(size_t n)           { _heap_roots_offset = n; }

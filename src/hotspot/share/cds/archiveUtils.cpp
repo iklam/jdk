@@ -71,20 +71,74 @@ void ArchivePtrMarker::initialize(CHeapBitMap* ptrmap, VirtualSpace* vs) {
   _ptrmap->initialize(estimated_archive_size / sizeof(intptr_t));
 }
 
+/*
+
+This is the output with 
+
+open repo:    5698f7ad29c939b7e52882ace575dd7113bf41de
+closed repo:  8856fae26e6149ab2732ca6c2191666533172477
+
+Compacting ptrmap 1936406 -> 1910031
+rw_bottom = 0x7ffed298f000 (used 5837936 bytes)
+ro_bottom = 0x7ffed2f21000 (used 9439360 bytes)
+First bit in _ptrmap for ro region is at offset 730112 which marks the location 0x7ffed2f21000
+First non-zero bit in _ptrmap for ro region is at offset 968198 which marks the location 0x7ffed30f2030
+   This should be the 238086 bit in ro_ptrmap
+ro_start = 730112
+rw_ptrmap->size() = 729742 bits
+ro_ptrmap->size() = 1179919 bits
+First set: 968198(238086)
+
+*/
+
 void ArchivePtrMarker::initialize_rw_ro_maps(CHeapBitMap* rw_ptrmap, CHeapBitMap* ro_ptrmap, size_t rw_region_size, size_t ro_region_size) {
+  address* rw_bottom = (address*)ArchiveBuilder::current()->rw_region()->base();
+  address* ro_bottom = (address*)ArchiveBuilder::current()->ro_region()->base();
+
+  {
+    address* p = rw_bottom;
+
+    tty->print_cr("rw_bottom = %p (used %zu bytes)", rw_bottom, ArchiveBuilder::current()->rw_region()->used());
+    tty->print_cr("ro_bottom = %p (used %zu bytes)", ro_bottom, ArchiveBuilder::current()->ro_region()->used());
+
+    size_t first_bit_for_ro = INT_MAX;
+    bool seen_first_ro_nonzero = false;
+    for (size_t i = 0; i < _ptrmap->size(); i++, p++) {
+      if (p == ro_bottom) {
+        first_bit_for_ro = i;
+        tty->print_cr("First bit in _ptrmap for ro region is at offset %zu which marks the location %p", i, p);
+      }
+      if (!seen_first_ro_nonzero && i >= first_bit_for_ro && _ptrmap->at(i)) {
+        seen_first_ro_nonzero = true;
+        tty->print_cr("First non-zero bit in _ptrmap for ro region is at offset %zu which marks the location %p", i, p);
+        tty->print_cr("   This should be the %zu bit in ro_ptrmap", (i - first_bit_for_ro));
+      }
+    }
+  }
+
   _rw_ptrmap = rw_ptrmap;
   _ro_ptrmap = ro_ptrmap;
 
-  size_t offset = _ptrmap->size() - rw_region_size - ro_region_size;
+  //size_t offset = _ptrmap->size() - rw_region_size - ro_region_size;
 
-  _rw_ptrmap->initialize(rw_region_size + offset + 1);
-  _ro_ptrmap->initialize(ro_region_size);
+  // ro_start is the first bit in _ptrmap that covers the pointer that would sit at ro_bottom.
+  // E.g., if rw_bottom = (address*)100
+  //          ro_bottom = (address*)116
+  //     then ro_bottom - rw_bottom = (116 - 100) / sizeof(address) = 4;
+  size_t ro_start = ro_bottom - rw_bottom;
+  tty->print_cr("ro_start = %zu", ro_start);
+
+  // Note: ptrmap is big enough only to cover the last pointer in ro_region.
+  // See ArchivePtrMarker::compact() 
+  _rw_ptrmap->initialize(rw_region_size);
+  _ro_ptrmap->initialize(_ptrmap->size() - ro_start);
+
+  tty->print_cr("rw_ptrmap->size() = %zu bits", _rw_ptrmap->size());
+  tty->print_cr("ro_ptrmap->size() = %zu bits", _ro_ptrmap->size());
 
   for (size_t rw_bit = 0; rw_bit < _rw_ptrmap->size(); rw_bit++) {
     _rw_ptrmap->at_put(rw_bit, _ptrmap->at(rw_bit));
   }
-
-  size_t ro_start = _rw_ptrmap->size();
 
   bool found_first = false;
   size_t index = 0;
@@ -174,6 +228,7 @@ void ArchivePtrMarker::compact(address relocatable_base, address relocatable_end
 
 void ArchivePtrMarker::compact(size_t max_non_null_offset) {
   assert(!_compacted, "cannot compact again");
+  tty->print_cr("Compacting ptrmap %zu -> %zu", _ptrmap->size(), max_non_null_offset + 1);
   _ptrmap->resize(max_non_null_offset + 1);
   _compacted = true;
 }

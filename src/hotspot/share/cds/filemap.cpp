@@ -1611,6 +1611,7 @@ char* FileMapInfo::write_bitmap_region(const CHeapBitMap* rw_ptrmap, const CHeap
   size_t written = 0;
   written = write_bitmap(rw_ptrmap, buffer, written);
   header()->set_rw_ptrmap_size_in_bits(rw_ptrmap->size());
+  header()->set_rw_ptrmap_size_in_bytes(written);
   written = write_bitmap(ro_ptrmap, buffer, written);
   header()->set_ro_ptrmap_size_in_bits(ro_ptrmap->size());
 
@@ -1919,7 +1920,8 @@ bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
     size_t rw_ptrmap_size_in_bits = header()->rw_ptrmap_size_in_bits();
     size_t ro_ptrmap_size_in_bits = header()->ro_ptrmap_size_in_bits();
 
-    char* ro_bitmap_base = bitmap_base + region_at(MetaspaceShared::ro)->mapping_offset();
+  //char* ro_bitmap_base = bitmap_base + region_at(MetaspaceShared::ro)->mapping_offset();
+    char* ro_bitmap_base = bitmap_base + header()->rw_ptrmap_size_in_bytes();
 
     log_debug(cds, reloc)("mapped relocation rw bitmap @ " INTPTR_FORMAT " (" SIZE_FORMAT " bits)",
                           p2i(bitmap_base), rw_ptrmap_size_in_bits + ro_ptrmap_size_in_bits);
@@ -1928,6 +1930,18 @@ bool FileMapInfo::relocate_pointers_in_core_regions(intx addr_delta) {
     //BitMapView ptrmap((BitMap::bm_word_t*)bitmap_base, rw_ptrmap_size_in_bits + ro_ptrmap_size_in_bits);
     BitMapView rw_ptrmap((BitMap::bm_word_t*)bitmap_base, rw_ptrmap_size_in_bits);
     BitMapView ro_ptrmap((BitMap::bm_word_t*)ro_bitmap_base, ro_ptrmap_size_in_bits);
+
+    tty->print_cr("ro_ptrmap.size() = %zu ro_ptrmap.at(238086) = %d",
+                   ro_ptrmap.size(),      ro_ptrmap.at(238086));
+
+    {
+      for (size_t i = 0; i < ro_ptrmap.size(); i++) {
+        if (ro_ptrmap.at(i)) {
+          tty->print_cr("First non-zero bit in RO = %zu", i);
+          break;
+        }
+      }
+    }
 
     FileMapRegion* rw_region = first_core_region();
     FileMapRegion* ro_region = last_core_region();
