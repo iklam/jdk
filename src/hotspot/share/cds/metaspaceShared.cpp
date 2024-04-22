@@ -524,15 +524,19 @@ void VM_PopulateDumpSharedSpace::doit() {
   builder.dump_ro_metadata();
   builder.relocate_metaspaceobj_embedded_pointers();
 
+#if 0
   {
     ArchiveBuilder::OtherROAllocMark mark;
     _coleens_klasses = builder.new_ro_array<Klass*>(builder.klasses()->length());
     for (int i = 0; i < builder.klasses()->length(); i++) {
-      _coleens_klasses->at_put(i, builder.get_buffered_addr(builder.klasses()->at(i)));
+      Klass* buffered_klass = builder.get_buffered_addr(builder.klasses()->at(i));
+      _coleens_klasses->at_put(i, buffered_klass);
       ArchivePtrMarker::mark_pointer((address**)_coleens_klasses->adr_at(i));
       builder.set_coleens_index(builder.klasses()->at(i), i);
+      // add this line: buffered_klass->set_coleen_index(i);
     }
   }
+#endif
 
   dump_java_heap_objects(builder.klasses());
   dump_shared_symbol_table(builder.symbols());

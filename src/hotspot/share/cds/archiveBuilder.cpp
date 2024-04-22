@@ -212,6 +212,17 @@ int ArchiveBuilder::coleens_index(Klass* src_klass) const {
   return p->coleens_index();
 }
 
+void ArchiveBuilder::set_needs_coleens_index(Klass* src_klass) {
+  SourceObjInfo* p = _src_obj_table.get((address)src_klass);
+  assert(p != nullptr, "regenerated object should always be dumped");
+  p->set_needs_coleens_index(true);
+}
+
+bool ArchiveBuilder::needs_coleens_index(Klass* src_klass) const {
+  SourceObjInfo* p = _src_obj_table.get((address)src_klass);
+  return p->needs_coleens_index();
+}
+
 class GatherKlassesAndSymbols : public UniqueMetaspaceClosure {
   ArchiveBuilder* _builder;
 

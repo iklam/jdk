@@ -132,11 +132,12 @@ private:
     address _source_addr;    // The source object to be copied.
     address _buffered_addr;  // The copy of this object insider the buffer.
     int _coleens_index;
+    bool _needs_coleens_index;
   public:
     SourceObjInfo(MetaspaceClosure::Ref* ref, bool read_only, FollowMode follow_mode) :
       _ptrmap_start(0), _ptrmap_end(0), _read_only(read_only), _follow_mode(follow_mode),
       _size_in_bytes(ref->size() * BytesPerWord), _msotype(ref->msotype()),
-      _source_addr(ref->obj()), _coleens_index(-1) {
+      _source_addr(ref->obj()), _coleens_index(-1), _needs_coleens_index(false) {
       if (follow_mode == point_to_it) {
         _buffered_addr = ref->obj();
       } else {
@@ -180,6 +181,13 @@ private:
     int coleens_index() const {
       return _coleens_index;
     }
+    void set_needs_coleens_index(bool b) {
+      _needs_coleens_index = b;
+    }
+    bool needs_coleens_index() const {
+      return _needs_coleens_index;
+    }
+
   };
 
   class SourceObjList {
@@ -284,6 +292,9 @@ protected:
 public:
   void set_coleens_index(Klass* src_klass, int index);
   int coleens_index(Klass* src_klass) const;
+
+  void set_needs_coleens_index(Klass* src_klass);
+  bool needs_coleens_index(Klass* src_klass) const;
 
   address reserve_buffer();
 
