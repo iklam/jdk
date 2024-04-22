@@ -131,11 +131,12 @@ private:
     MetaspaceObj::Type _msotype;
     address _source_addr;    // The source object to be copied.
     address _buffered_addr;  // The copy of this object insider the buffer.
+    int _coleens_index;
   public:
     SourceObjInfo(MetaspaceClosure::Ref* ref, bool read_only, FollowMode follow_mode) :
       _ptrmap_start(0), _ptrmap_end(0), _read_only(read_only), _follow_mode(follow_mode),
       _size_in_bytes(ref->size() * BytesPerWord), _msotype(ref->msotype()),
-      _source_addr(ref->obj()) {
+      _source_addr(ref->obj()), _coleens_index(-1) {
       if (follow_mode == point_to_it) {
         _buffered_addr = ref->obj();
       } else {
@@ -173,6 +174,12 @@ private:
       return _buffered_addr;
     }
     MetaspaceObj::Type msotype() const { return _msotype; }
+    void set_coleens_index(int i) {
+      _coleens_index = i;
+    }
+    int coleens_index() const {
+      return _coleens_index;
+    }
   };
 
   class SourceObjList {
@@ -275,6 +282,9 @@ protected:
   void verify_estimate_size(size_t estimate, const char* which);
 
 public:
+  void set_coleens_index(Klass* src_klass, int index);
+  int coleens_index(Klass* src_klass) const;
+
   address reserve_buffer();
 
   address buffer_bottom()                    const { return _buffer_bottom;                       }

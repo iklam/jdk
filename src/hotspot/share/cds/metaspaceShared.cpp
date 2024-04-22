@@ -98,6 +98,8 @@ intx MetaspaceShared::_relocation_delta;
 char* MetaspaceShared::_requested_base_address;
 bool MetaspaceShared::_use_optimized_module_handling = true;
 
+static Array<Klass*>* _coleens_klasses = nullptr;
+
 // The CDS archive is divided into the following regions:
 //     rw  - read-write metadata
 //     ro  - read-only metadata and read-only tables
@@ -366,6 +368,11 @@ void MetaspaceShared::serialize(SerializeClosure* soc) {
   soc->do_tag(typeArrayOopDesc::base_offset_in_bytes(T_BYTE));
   soc->do_tag(sizeof(Symbol));
 
+  soc->do_ptr(&_coleens_klasses);
+  if (soc->reading()) {
+    // Set up the runtime table using _coleens_klasses
+  }
+
   // Need to do this first, as subsequent steps may call virtual functions
   // in archived Metadata objects.
   CppVtables::serialize(soc);
@@ -516,6 +523,16 @@ void VM_PopulateDumpSharedSpace::doit() {
   builder.dump_rw_metadata();
   builder.dump_ro_metadata();
   builder.relocate_metaspaceobj_embedded_pointers();
+
+  {
+    ArchiveBuilder::OtherROAllocMark mark;
+    _coleens_klasses = builder.new_ro_array<Klass*>(builder.klasses()->length());
+    for (int i = 0; i < builder.klasses()->length(); i++) {
+      _coleens_klasses->at_put(i, builder.get_buffered_addr(builder.klasses()->at(i)));
+      ArchivePtrMarker::mark_pointer((address**)_coleens_klasses->adr_at(i));
+      builder.set_coleens_index(builder.klasses()->at(i), i);
+    }
+  }
 
   dump_java_heap_objects(builder.klasses());
   dump_shared_symbol_table(builder.symbols());

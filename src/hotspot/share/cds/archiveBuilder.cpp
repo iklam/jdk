@@ -201,6 +201,17 @@ int ArchiveBuilder::entropy() {
   return static_cast<int>(_entropy_seed);
 }
 
+void ArchiveBuilder::set_coleens_index(Klass* src_klass, int index) {
+  SourceObjInfo* p = _src_obj_table.get((address)src_klass);
+  assert(p != nullptr, "regenerated object should always be dumped");
+  p->set_coleens_index(index);
+}
+
+int ArchiveBuilder::coleens_index(Klass* src_klass) const {
+  SourceObjInfo* p = _src_obj_table.get((address)src_klass);
+  return p->coleens_index();
+}
+
 class GatherKlassesAndSymbols : public UniqueMetaspaceClosure {
   ArchiveBuilder* _builder;
 

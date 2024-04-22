@@ -184,6 +184,16 @@ void ArchiveHeapWriter::ensure_buffer_space(size_t min_bytes) {
   _buffer->at_grow(to_array_index(min_bytes));
 }
 
+static void set_coleens_index(oop fake_oop, Klass* src_klass) {
+  if (log_is_enabled(Info, cds, logging)) {
+    ResourceMark rm;
+    int coleens_index = ArchiveBuilder::current()->coleens_index(src_klass);
+    assert(coleens_index >= 0, "must be");
+    log_info(cds, logging)("Setting coleen's index of archived heap object %p to %4d %s",
+                           cast_from_oop<address>(fake_oop), coleens_index, src_klass->external_name());
+  }
+}
+
 void ArchiveHeapWriter::copy_roots_to_buffer(GrowableArrayCHeap<oop, mtClassShared>* roots) {
   Klass* k = Universe::objectArrayKlass(); // already relocated to point to archived klass
   int length = roots->length();
@@ -205,6 +215,7 @@ void ArchiveHeapWriter::copy_roots_to_buffer(GrowableArrayCHeap<oop, mtClassShar
     // This is copied from MemAllocator::finish
     oopDesc::set_mark(mem, markWord::prototype());
     oopDesc::release_set_klass(mem, k);
+    set_coleens_index(cast_to_oop(mem), k);
   }
   {
     // This is copied from ObjArrayAllocator::initialize
@@ -328,6 +339,7 @@ HeapWord* ArchiveHeapWriter::init_filler_array_at_buffer_top(int array_length, s
   oopDesc::set_mark(mem, markWord::prototype());
   narrowKlass nk = ArchiveBuilder::current()->get_requested_narrow_klass(oak);
   cast_to_oop(mem)->set_narrow_klass(nk);
+  set_coleens_index(cast_to_oop(mem), oak);
   arrayOopDesc::set_length(mem, array_length);
   return mem;
 }
@@ -528,6 +540,7 @@ void ArchiveHeapWriter::update_header_for_requested_obj(oop requested_obj, oop s
 
   oop fake_oop = cast_to_oop(buffered_addr);
   fake_oop->set_narrow_klass(nk);
+  set_coleens_index(fake_oop, src_klass);
 
   // We need to retain the identity_hash, because it may have been used by some hashtables
   // in the shared heap. This also has the side effect of pre-initializing the
