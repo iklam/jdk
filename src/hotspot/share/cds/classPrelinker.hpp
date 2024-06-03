@@ -77,8 +77,7 @@ public:
   static void initialize();
   static void dispose();
 
-  static void preresolve_class_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list);
-  static void preresolve_field_and_method_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list);
+  static bool preresolve_constants(JavaThread* current, InstanceKlass* ik, GrowableArray<int>* preresolve_list);
 
   // Is this class resolved as part of vmClasses::resolve_all()? If so, these
   // classes are guatanteed to be loaded at runtime (and cannot be replaced by JVMTI)

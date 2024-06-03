@@ -805,46 +805,19 @@ void ClassListParser::parse_constant_pool_tag() {
 
   ResourceMark rm(THREAD);
   constantPoolHandle cp(THREAD, ik->constants());
-  GrowableArray<bool> preresolve_list(cp->length(), cp->length(), false);
-  bool preresolve_class = false;
-  bool preresolve_fmi = false;
-  bool preresolve_indy = false;
+  GrowableArray<int> preresolve_list;
 
   while (*_token) {
-    int cp_index;
+    int n;
     skip_whitespaces();
-    parse_uint(&cp_index);
-    if (cp_index < 1 || cp_index >= cp->length()) {
-      constant_pool_resolution_warning("Invalid constant pool index %d", cp_index);
-      return;
-    } else {
-      preresolve_list.at_put(cp_index, true);
-    }
-    constantTag cp_tag = cp->tag_at(cp_index);
-    switch (cp_tag.value()) {
-    case JVM_CONSTANT_UnresolvedClass:
-      preresolve_class = true;
-      break;
-    case JVM_CONSTANT_UnresolvedClassInError:
-    case JVM_CONSTANT_Class:
-      // ignore
-      break;
-    case JVM_CONSTANT_Fieldref:
-      preresolve_fmi = true;
-      break;
-      break;
-    default:
-      constant_pool_resolution_warning("Unsupported constant pool index %d: %s (type=%d)",
-                                       cp_index, cp_tag.internal_name(), cp_tag.value());
-      return;
-    }
+    parse_uint(&n);
+    preresolve_list.append(n);
   }
 
-  if (preresolve_class) {
-    ClassPrelinker::preresolve_class_cp_entries(THREAD, ik, &preresolve_list);
-  }
-  if (preresolve_fmi) {
-    ClassPrelinker::preresolve_field_and_method_cp_entries(THREAD, ik, &preresolve_list);
+  if (preresolve_list.length() > 0) {
+    if (!ClassPrelinker::preresolve_constants(THREAD, ik, &preresolve_list)) {
+      error("Malformed @cp line");
+    }
   }
 }
 

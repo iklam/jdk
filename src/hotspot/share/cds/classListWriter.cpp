@@ -216,6 +216,17 @@ void ClassListWriter::write_resolved_constants() {
   ClassLoaderDataGraph::loaded_cld_do(&closure);
 }
 
+template <typename T>
+void print_constant(GrowableArray<int>& list, int cp_tag, T* resolved_entry,
+                    int resolved_index, Bytecodes::Code code) {
+  if (resolved_entry->is_resolved(code)) {
+    list.append(cp_tag);
+    list.append(resolved_entry->constant_pool_index());
+    list.append(resolved_index);
+    list.append(code);
+  }
+}
+
 void ClassListWriter::write_resolved_constants_for(InstanceKlass* ik) {
   if (!SystemDictionaryShared::is_builtin_loader(ik->class_loader_data()) ||
       ik->is_hidden()) {
@@ -236,20 +247,15 @@ void ClassListWriter::write_resolved_constants_for(InstanceKlass* ik) {
 
   ResourceMark rm;
   ConstantPool* cp = ik->constants();
-  GrowableArray<bool> list(cp->length(), cp->length(), false);
-  bool print = false;
+  GrowableArray<int> list;
 
   for (int cp_index = 1; cp_index < cp->length(); cp_index++) { // Index 0 is unused
-    switch (cp->tag_at(cp_index).value()) {
-    case JVM_CONSTANT_Class:
-      {
-        Klass* k = cp->resolved_klass_at(cp_index);
-        if (k->is_instance_klass()) {
-          list.at_put(cp_index, true);
-          print = true;
-        }
+    if (cp->tag_at(cp_index).value() == JVM_CONSTANT_Class) {
+      Klass* k = cp->resolved_klass_at(cp_index);
+      if (k->is_instance_klass()) {
+        list.append(JVM_CONSTANT_Class);
+        list.append(cp_index);
       }
-      break;
     }
   }
 
@@ -258,27 +264,18 @@ void ClassListWriter::write_resolved_constants_for(InstanceKlass* ik) {
     if (field_entries != nullptr) {
       for (int i = 0; i < field_entries->length(); i++) {
         ResolvedFieldEntry* rfe = field_entries->adr_at(i);
-        if (rfe->is_resolved(Bytecodes::_getstatic) ||
-            rfe->is_resolved(Bytecodes::_putstatic) ||
-            rfe->is_resolved(Bytecodes::_getfield) ||
-            rfe->is_resolved(Bytecodes::_putfield)) {
-          list.at_put(rfe->constant_pool_index(), true);
-          print = true;
-        }
+        int cp_index = rfe->constant_pool_index();
+        print_constant<ResolvedFieldEntry>(list, JVM_CONSTANT_Fieldref, rfe, i, Bytecodes::_getfield);
+        print_constant<ResolvedFieldEntry>(list, JVM_CONSTANT_Fieldref, rfe, i, Bytecodes::_putfield);
       }
     }
   }
 
-  if (print) {
+  if (list.length() > 0) {
     outputStream* stream = _classlist_file;
     stream->print("@cp %s", ik->name()->as_C_string());
     for (int i = 0; i < list.length(); i++) {
-      if (list.at(i)) {
-        constantTag cp_tag = cp->tag_at(i).value();
-        assert(cp_tag.value() == JVM_CONSTANT_Class ||
-               cp_tag.value() == JVM_CONSTANT_Fieldref, "sanity");
-        stream->print(" %d", i);
-      }
+      stream->print(" %d", list.at(i));
     }
     stream->cr();
   }

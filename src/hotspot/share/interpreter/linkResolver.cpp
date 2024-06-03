@@ -1024,13 +1024,23 @@ void LinkResolver::resolve_field(fieldDescriptor& fd,
       jio_snprintf(msg, sizeof(msg), "Expected %s field %s.%s", is_static ? "static" : "non-static", resolved_klass->external_name(), fd.name()->as_C_string());
       THROW_MSG(vmSymbols::java_lang_IncompatibleClassChangeError(), msg);
     }
+    if (sel_klass->name()->equals("SetFinal")) {
+      fieldDescriptor fd2;
+      Klass* sel_klass = resolved_klass->find_field(field, sig, &fd2);
+      tty->print_cr("Got %d", fd2.has_initialized_final_update());
+    }
+
+    if (sel_klass->name()->equals("java/util/IdentityHashMap$IdentityHashMapIterator") && field->equals("this$0")) {
+      fieldDescriptor fd2;
+      Klass* sel_klass = resolved_klass->find_field(field, sig, &fd2);
+      tty->print_cr("Got2 %d", fd2.has_initialized_final_update());
+    }
 
     // A final field can be modified only
     // (1) by methods declared in the class declaring the field and
     // (2) by the <clinit> method (in case of a static field)
     //     or by the <init> method (in case of an instance field).
     if (is_put && fd.access_flags().is_final()) {
-
       if (sel_klass != current_klass) {
         ResourceMark rm(THREAD);
         stringStream ss;

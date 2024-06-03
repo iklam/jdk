@@ -214,14 +214,84 @@ void ClassPrelinker::resolve_string(constantPoolHandle cp, int cp_index, TRAPS) 
 }
 #endif
 
-void ClassPrelinker::preresolve_class_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
+bool ClassPrelinker::preresolve_constants(JavaThread* current, InstanceKlass* ik, GrowableArray<int>* preresolve_list) {
   if (!SystemDictionaryShared::is_builtin_loader(ik->class_loader_data())) {
-    return;
+    return true;
   }
 
   JavaThread* THREAD = current;
   constantPoolHandle cp(THREAD, ik->constants());
-  for (int cp_index = 1; cp_index < cp->length(); cp_index++) {
+  int len = preresolve_list->length();
+  for (int i = 0; i < len; ) {
+    int cp_tag = preresolve_list->at(i);
+    switch (cp_tag) {
+    case JVM_CONSTANT_Class:
+      {
+        if (i + 2 > len) {
+          log_error(cds, resolve)("@cp truncated at position %d: expected one more integer afterwards", i);
+          return false;
+        }
+        int cp_index = preresolve_list->at(i + 1);
+        if (find_loaded_class(current, cp(), cp_index) != nullptr) {
+          // Do not resolve any field/methods from a class that has not been loaded yet.
+          Klass* resolved_klass = cp->klass_at(cp_index, THREAD);
+          if (HAS_PENDING_EXCEPTION) {
+            CLEAR_PENDING_EXCEPTION; // just ignore
+          } else {
+            log_trace(cds, resolve)("Resolved class  [%3d] %s -> %s", cp_index, ik->external_name(),
+                                    resolved_klass->external_name());
+          }
+        }
+        i += 2;
+      }
+      break;
+    case JVM_CONSTANT_Fieldref: //
+      {
+        if (i + 4 > len) {
+          log_error(cds, resolve)("@cp truncated at position %d: expected three more integer afterwards", i);
+          return false;
+        }
+        int cp_index = preresolve_list->at(i + 1);
+        int resolved_index = preresolve_list->at(i + 2);
+        methodHandle mh(THREAD, nullptr);
+        Bytecodes::Code bc = (Bytecodes::Code)preresolve_list->at(i + 3);
+
+        int klass_cp_index = cp->uncached_klass_ref_index_at(cp_index);
+        if (find_loaded_class(THREAD, cp(), klass_cp_index) != nullptr) {
+          // Do not resolve any field/methods from a class that has not been loaded yet.
+          Klass* resolved_klass = cp->klass_ref_at(resolved_index, bc, THREAD); // FIXME
+          InterpreterRuntime::resolve_get_put(bc, resolved_index, mh, cp, false /*initialize_holder*/, THREAD);
+          if (HAS_PENDING_EXCEPTION) {
+            CLEAR_PENDING_EXCEPTION; // just ignore
+          } else {
+            if (log_is_enabled(Trace, cds, resolve)) {
+              ResourceMark rm(THREAD);
+              bool resolved = cp->is_resolved(resolved_index, bc);
+              Symbol* name = cp->name_ref_at(resolved_index, bc);
+              Symbol* signature = cp->signature_ref_at(resolved_index, bc);
+              log_trace(cds, resolve)("%s %s [%3d] %s -> %s.%s:%s",
+                                      (resolved ? "Resolved" : "Failed to resolve"),
+                                      Bytecodes::name(bc), cp_index, ik->external_name(),
+                                      resolved_klass->external_name(),
+                                      name->as_C_string(), signature->as_C_string());
+
+              log_trace(cds, resolve)("Resolved class  [%3d] %s -> %s", cp_index, ik->external_name(),
+                                      resolved_klass->external_name());
+            }
+          }
+        }
+        i += 4;
+      }
+      break;
+    default:
+      log_error(cds, resolve)("Unknown cp_tag in classlist %d at list position %d", cp_tag, i);
+      return false;
+    }
+  }
+
+  return true;
+
+#if 0
     if (cp->tag_at(cp_index).value() == JVM_CONSTANT_UnresolvedClass) {
       if (preresolve_list != nullptr && preresolve_list->at(cp_index) == false) {
         // This class was not resolved during trial run. Don't attempt to resolve it. Otherwise
@@ -241,8 +311,10 @@ void ClassPrelinker::preresolve_class_cp_entries(JavaThread* current, InstanceKl
       }
     }
   }
+#endif
 }
 
+#if 0
 void ClassPrelinker::preresolve_field_and_method_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
   JavaThread* THREAD = current;
   constantPoolHandle cp(THREAD, ik->constants());
@@ -269,6 +341,7 @@ void ClassPrelinker::preresolve_field_and_method_cp_entries(JavaThread* current,
     }
   }
 }
+#endif
 
 void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecodes::Code bc, int raw_index,
                                            GrowableArray<bool>* preresolve_list, TRAPS) {
