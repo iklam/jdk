@@ -2449,10 +2449,12 @@ bool FileMapInfo::validate_leyden_config() {
       log_error(cds)("CDS archive has preloaded classes. It cannot be used when JVMTI early vm start is in use.");
       return false;
     }
+#if 0 // TMP: work around JDK-8335735
     if (!CDSConfig::is_using_full_module_graph() && !CDSConfig::is_dumping_final_static_archive()) {
       log_error(cds)("CDS archive has preloaded classes. It cannot be used when archived full module graph is not used.");
       return false;
     }
+#endif
     if (header()->gc_kind() != (int)Universe::heap()->kind()) {
       log_error(cds)("CDS archive has preloaded classes. It cannot be used because GC used during dump time (%s) is not the same as runtime (%s)",
                      header()->gc_name(), Universe::heap()->name());

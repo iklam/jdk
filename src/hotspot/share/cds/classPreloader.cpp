@@ -273,6 +273,7 @@ class ClassPreloader::PreloadedKlassRecorder : StackObj {
       }
     }
 
+#if 0 // TMP: work around JDK-8335735
     if (!ik->is_hidden()) {
       // Do not preload any module classes that are not from the modules images,
       // since such classes may not be loadable at runtime
@@ -283,6 +284,7 @@ class ClassPreloader::PreloadedKlassRecorder : StackObj {
         return;
       }
     }
+#endif
 
     InstanceKlass* s = ik->java_super();
     if (s != nullptr) {
