@@ -91,8 +91,19 @@ class ModuleReferences {
                                         ModulePatcher patcher,
                                         Path file) {
         URI uri = file.toUri();
-        Supplier<ModuleReader> supplier = () -> new JarModuleReader(file, uri);
-        HashSupplier hasher = (a) -> ModuleHashes.computeHash(supplier, a);
+        Supplier<ModuleReader> supplier = new Supplier<>() {
+            @Override
+            public ModuleReader get() {
+                return new JarModuleReader(file, uri);
+            }
+        };
+        byte[] hash = ModuleHashes.computeHash(supplier, "SHA-256");
+        HashSupplier hasher = new HashSupplier() {
+            @Override
+            public byte[] generate(String algorithm) {
+                return hash;
+            }
+        };
         return newModule(attrs, uri, supplier, patcher, hasher);
     }
 

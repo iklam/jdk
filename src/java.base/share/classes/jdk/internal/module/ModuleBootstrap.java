@@ -139,9 +139,9 @@ public final class ModuleBootstrap {
      */
     private static boolean canUseArchivedBootLayer() {
         return getProperty("jdk.module.upgrade.path") == null &&
-               getProperty("jdk.module.path") == null &&
+               //getProperty("jdk.module.path") == null &&
                getProperty("jdk.module.patch.0") == null &&       // --patch-module
-               getProperty("jdk.module.addmods.0") == null  &&    // --add-modules
+               //getProperty("jdk.module.addmods.0") == null  &&    // --add-modules
                getProperty("jdk.module.limitmods") == null &&     // --limit-modules
                getProperty("jdk.module.addreads.0") == null &&    // --add-reads
                getProperty("jdk.module.addexports.0") == null &&  // --add-exports
@@ -191,6 +191,7 @@ public final class ModuleBootstrap {
         String trace = getAndRemoveProperty("jdk.module.showModuleResolution");
         if (trace != null && Boolean.parseBoolean(trace))
             traceOutput = System.out;
+        String debugBoot2 = getAndRemoveProperty("debug.boot2");
 
         Counters.add("jdk.module.boot.0.commandLineTime");
 
@@ -204,18 +205,24 @@ public final class ModuleBootstrap {
         ModuleFinder systemModuleFinder;
 
         boolean haveModulePath = (appModulePath != null || upgradeModulePath != null);
+        boolean haveUpgradeModulePath = (upgradeModulePath != null);
         boolean needResolution = true;
         boolean canArchive = false;
         boolean hasSplitPackages;
         boolean hasIncubatorModules;
+
+        if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+            System.out.println("    appModulePath " + appModulePath);
+            System.out.println("    jdk.module.path " + System.getProperty("jdk.module.path"));
+        }
 
         // If the java heap was archived at CDS dump time and the environment
         // at dump time matches the current environment then use the archived
         // system modules and finder.
         ArchivedModuleGraph archivedModuleGraph = ArchivedModuleGraph.get(mainModule);
         if (archivedModuleGraph != null
-                && !haveModulePath
-                && addModules.isEmpty()
+                && !haveUpgradeModulePath
+                //&& addModules.isEmpty()
                 && limitModules.isEmpty()
                 && !isPatched) {
             systemModuleFinder = archivedModuleGraph.finder();
@@ -223,21 +230,49 @@ public final class ModuleBootstrap {
             hasIncubatorModules = archivedModuleGraph.hasIncubatorModules();
             needResolution = (traceOutput != null);
         } else {
-            if (!haveModulePath && addModules.isEmpty() && limitModules.isEmpty()) {
-                systemModules = SystemModuleFinders.systemModules(mainModule);
-                if (systemModules != null && !isPatched) {
-                    needResolution = (traceOutput != null);
-                    if (CDS.isDumpingStaticArchive())
-                        canArchive = true;
+            if (!haveUpgradeModulePath /*&& addModules.isEmpty()*/ && limitModules.isEmpty()) {
+                if (appModulePath == null) {
+                    systemModules = SystemModuleFinders.systemModules(mainModule);
+                }
+                if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                    System.out.println("    after calling SystemModuleFinders.systemModules systemModules " + systemModules);
+                    System.out.println("    isPatched " +  isPatched);
+                }
+                if (!isPatched) {
+                    if (systemModules != null) {
+                        needResolution = (traceOutput != null);
+                    }
+                    if ((systemModules != null) || (appModulePath != null)) {
+                        if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                            System.out.println("    going to set canArchive");
+                        }
+                        if (CDS.isDumpingStaticArchive()) {
+                            if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                                System.out.println("    setting canArchive");
+                            }
+                            canArchive = true;
+                        }
+                    }
                 }
             }
+
+            if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                System.out.println("    canArchive " + canArchive);
+            }
+
             if (systemModules == null) {
                 // all system modules are observable
                 systemModules = SystemModuleFinders.allSystemModules();
+                if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                    System.out.println("    after calling SystemModuleFinders.allSystemModules systemModules " + systemModules);
+                }
             }
             if (systemModules != null) {
                 // images build
                 systemModuleFinder = SystemModuleFinders.of(systemModules);
+                if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                    System.out.println("    after calling SystemModuleFinders.of systemModules " + systemModuleFinder);
+                }
             } else {
                 // exploded build or testing
                 systemModules = new ExplodedSystemModules();
@@ -487,6 +522,9 @@ public final class ModuleBootstrap {
 
         // Archive module graph and boot layer can be archived at CDS dump time.
         if (canArchive) {
+            if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+                System.out.println("    hasSplitPackages " + hasSplitPackages + " hasIncubatorModules " + hasIncubatorModules);
+            }
             ArchivedModuleGraph.archive(hasSplitPackages,
                                         hasIncubatorModules,
                                         systemModuleFinder,
@@ -959,6 +997,7 @@ public final class ModuleBootstrap {
 
     static void warnUnknownModule(String option, String mn) {
         warn("Unknown module: " + mn + " specified to " + option);
+        Thread.dumpStack();
     }
 
     static String unableToParse(String option, String text, String value) {

@@ -845,6 +845,10 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
    CLEAR_PENDING_EXCEPTION;
   }
   if (record == nullptr) {
+    if (log_is_enabled(Info, cds, heap)) {
+      ResourceMark rm(THREAD);
+      log_info(cds, heap)("clear_archived_roots_of %s", k->external_name());
+    }
    clear_archived_roots_of(k);
   }
 }
@@ -945,6 +949,15 @@ void HeapShared::resolve_or_init(Klass* k, bool do_init, TRAPS) {
   if (!do_init) {
     if (k->class_loader_data() == nullptr) {
       Klass* resolved_k = SystemDictionary::resolve_or_null(k->name(), CHECK);
+      if (resolved_k != k) {
+        ResourceMark rm(THREAD);
+        if (resolved_k != nullptr) {
+          tty->print_cr("    resolved_k " PTR_FORMAT "%s", p2i(resolved_k), resolved_k->name()->as_C_string());
+        }
+        if (k != nullptr) {
+          tty->print_cr("    k " PTR_FORMAT " %s", p2i(k), k->name()->as_C_string());
+        }
+      }
       assert(resolved_k == k, "classes used by archived heap must not be replaced by JVMTI ClassFileLoadHook");
     }
   } else {
@@ -1103,6 +1116,7 @@ bool HeapShared::archive_reachable_objects_from(int level,
     // these objects that are referenced (directly or indirectly) by static fields.
     ResourceMark rm;
     log_error(cds, heap)("Cannot archive object of class %s", orig_obj->klass()->external_name());
+    CDSHeapVerifier::trace_to_root(tty, orig_obj);
     MetaspaceShared::unrecoverable_writing_error();
   }
 
