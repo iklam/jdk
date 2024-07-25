@@ -192,6 +192,7 @@ public final class ModuleBootstrap {
         if (trace != null && Boolean.parseBoolean(trace))
             traceOutput = System.out;
         String debugBoot2 = getAndRemoveProperty("debug.boot2");
+        String allowIncubators = getAndRemoveProperty("allow.incubators");
 
         Counters.add("jdk.module.boot.0.commandLineTime");
 
@@ -271,7 +272,7 @@ public final class ModuleBootstrap {
                 // images build
                 systemModuleFinder = SystemModuleFinders.of(systemModules);
                 if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
-                    System.out.println("    after calling SystemModuleFinders.of systemModules " + systemModuleFinder);
+                    System.out.println("    after calling SystemModuleFinders.of systemModuleFinder " + systemModuleFinder);
                 }
             } else {
                 // exploded build or testing
@@ -488,6 +489,10 @@ public final class ModuleBootstrap {
             checkIncubatingStatus(cf);
         }
 
+        if (debugBoot2 != null && Boolean.parseBoolean(debugBoot2)) {
+          System.out.println("    hasSplitPackages " + hasSplitPackages + " hasIncubatorModules " + hasIncubatorModules);
+        }
+
         // --add-reads, --add-exports/--add-opens
         addExtraReads(bootLayer);
         boolean extraExportsOrOpens = addExtraExportsAndOpens(bootLayer);
@@ -531,7 +536,7 @@ public final class ModuleBootstrap {
                                         cf,
                                         clf,
                                         mainModule);
-            if (!hasSplitPackages && !hasIncubatorModules) {
+            if (!hasSplitPackages && (!hasIncubatorModules || allowIncubators != null)) {
                 ArchivedBootLayer.archive(bootLayer);
             }
         }
