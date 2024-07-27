@@ -80,6 +80,8 @@ class ClassPreloader :  AllStatic {
   static void runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
   static void preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik,
                                             const char* loader_name, TRAPS);
+  static void post_module_init_impl(ClassPreloader::PreloadedKlasses* table, TRAPS);
+  static void maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS);
   static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
 
   static bool is_in_javabase(InstanceKlass* ik);
@@ -99,6 +101,8 @@ public:
   // Is this class resolved as part of vmClasses::resolve_all()?
   static bool is_vm_class(InstanceKlass* ik);
 
+  static bool is_non_javavase_preloaded_class(Klass* ik) NOT_CDS_RETURN_(false);
+
   // When CDS is enabled, is ik guatanteed to be loaded at deployment time (and
   // cannot be replaced by JVMTI)?
   // This is a necessary (not but sufficient) condition for keeping a direct pointer
@@ -112,7 +116,6 @@ public:
   static void runtime_preload(JavaThread* current, Handle loader) NOT_CDS_RETURN;
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void post_module_init(TRAPS) NOT_CDS_RETURN;
-  static bool fixup_non_javabase_module_field(Klass* k) NOT_CDS_RETURN_(false);
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static bool class_preloading_finished();
 

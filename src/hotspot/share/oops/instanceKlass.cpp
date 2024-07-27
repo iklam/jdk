@@ -27,6 +27,7 @@
 #include "cds/cdsConfig.hpp"
 #include "cds/cdsEnumKlass.hpp"
 #include "cds/classListWriter.hpp"
+#include "cds/classPreloader.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/classFileParser.hpp"
@@ -2803,7 +2804,9 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
   // sure the current state is <loaded.
   assert(!is_loaded(), "invalid init state");
   assert(!shared_loading_failed(), "Must not try to load failed class again");
-  set_package(loader_data, pkg_entry, CHECK);
+  if (!ClassPreloader::is_non_javavase_preloaded_class(this)) {
+    set_package(loader_data, pkg_entry, CHECK);
+  }
   Klass::restore_unshareable_info(loader_data, protection_domain, CHECK);
 
   Array<Method*>* methods = this->methods();

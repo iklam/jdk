@@ -33,6 +33,7 @@
 #include "cds/heapShared.hpp"
 #include "cds/lambdaFormInvokers.inline.hpp"
 #include "classfile/classLoader.hpp"
+#include "classfile/classLoaderExt.hpp"
 #include "classfile/dictionary.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
@@ -621,16 +622,8 @@ void ClassPreloader::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
       // FIXME assert - if FMG, package must be archived
     }
 
-    if (loader() != nullptr) { // FIXME .... this whole block should be moved ...
-      // The java.base classes needs to wait till ClassPreloader::init_javabase_preloaded_classes()
-      for (int i = 0; i < preloaded_classes->length(); i++) {
-        InstanceKlass* ik = preloaded_classes->at(i);
-        if (ik->has_preinitialized_mirror()) {
-          ik->initialize_from_cds(CHECK);
-        } else if (PrelinkSharedClasses && ik->verified_at_dump_time()) {
-          ik->link_class(CHECK);
-        }
-      }
+    if (loader() != nullptr) {
+      maybe_init_or_link(preloaded_classes, CHECK);
     }
   }
 
@@ -638,10 +631,13 @@ void ClassPreloader::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
     HeapShared::initialize_default_subgraph_classes(loader, CHECK); // TODO: boot2 - do it in catch up
   }
 
+#if 0
+  // Hmm, does JavacBench crash if this block is enabled??
   if (VerifyDuringStartup) {
     VM_Verify verify_op;
     VMThread::execute(&verify_op);
   }
+#endif
 }
 
 void ClassPreloader::preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik,
@@ -711,27 +707,76 @@ void ClassPreloader::jvmti_agent_error(InstanceKlass* expected, InstanceKlass* a
 }
 
 void ClassPreloader::init_javabase_preloaded_classes(TRAPS) {
-  Array<InstanceKlass*>* preloaded_classes = _static_preloaded_classes._boot;
-  if (preloaded_classes != nullptr) {
-    for (int i = 0; i < preloaded_classes->length(); i++) {
-      InstanceKlass* ik = preloaded_classes->at(i);
-      if (ik->has_preinitialized_mirror()) {
-        ik->initialize_from_cds(CHECK);
-      } else if (PrelinkSharedClasses && ik->verified_at_dump_time()) {
-        ik->link_class(CHECK);
-      }
-    }
-  }
+  maybe_init_or_link(_static_preloaded_classes._boot,  CHECK);
+  //maybe_init_or_link(_dynamic_preloaded_classes._boot, CHECK); // TODO
 
   // Initialize java.base classes in the default subgraph.
   HeapShared::initialize_default_subgraph_classes(Handle(), CHECK);
 }
 
+bool ClassPreloader::is_non_javavase_preloaded_class(Klass* k) {
+  if (CDSConfig::has_preloaded_classes() && k->is_shared() && !_preload_javabase_only) {
+    if (k->is_instance_klass()) {
+      InstanceKlass* ik = InstanceKlass::cast(k);
+      if (ik->is_shared_boot_class()) {
+        // FIXME - support platform and app loader as well
+        return true;
+      }
+    }
+    // TODO: what about array classes??
+  }
+
+  return false;
+}
+
 void ClassPreloader::post_module_init(TRAPS) {
+  if (!CDSConfig::has_preloaded_classes()) {
+    return;
+  }
+
+  post_module_init_impl(&_static_preloaded_classes, CHECK);
+  post_module_init_impl(&_dynamic_preloaded_classes, CHECK);
+}
+
+void ClassPreloader::post_module_init_impl(ClassPreloader::PreloadedKlasses* table, TRAPS) {
   // TODO: set the the packages, modules, protection domain, etc, of the
   // boot2 classes ... -- need test case for no -XX:+ArchiveProtectionDomains
 
-  Array<InstanceKlass*>* preloaded_classes = _static_preloaded_classes._boot2;
+  Array<InstanceKlass*>* preloaded_classes = table->_boot2;
+  if (preloaded_classes != nullptr) {
+    for (int i = 0; i < preloaded_classes->length(); i++) {
+      InstanceKlass* ik = preloaded_classes->at(i);
+      if (!CDSConfig::is_using_full_module_graph()) {
+        // A special case to handle non-FMG when dumping the final archive.
+        // We assume that the module graph is exact the same between preimage and final image runs.
+        assert(CDSConfig::is_dumping_final_static_archive(), "sanity");
+
+        ik->set_package(ik->class_loader_data(), nullptr, CHECK);
+
+        // See SystemDictionary::load_shared_class_misc
+        s2 path_index = ik->shared_classpath_index();
+        if (path_index >= 0) { // FIXME ... for lambda form classes
+          ik->set_classpath_index(path_index);
+
+          if (CDSConfig::is_dumping_final_static_archive()) {
+            if (path_index > ClassLoaderExt::max_used_path_index()) {
+              ClassLoaderExt::set_max_used_path_index(path_index);
+            }
+          }
+        }
+      }
+
+      ModuleEntry* module_entry = ik->module();
+      assert(module_entry != nullptr, "has been restored");
+      assert(ik->java_mirror() != nullptr, "has been restored");
+      java_lang_Class::set_module(ik->java_mirror(), module_entry->module());
+    }
+
+    maybe_init_or_link(preloaded_classes, CHECK);
+  }
+}
+
+void ClassPreloader::maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS) {
   if (preloaded_classes != nullptr) {
     for (int i = 0; i < preloaded_classes->length(); i++) {
       InstanceKlass* ik = preloaded_classes->at(i);
@@ -742,27 +787,6 @@ void ClassPreloader::post_module_init(TRAPS) {
       }
     }
   }
-}
-
-bool ClassPreloader::fixup_non_javabase_module_field(Klass* k) {
-  if (CDSConfig::has_preloaded_classes()
-      && k->class_loader() == nullptr // FIXME only implemented for boot classes so far
-      ) {
-    if (!CDSConfig::is_dumping_final_static_archive()) {
-      assert(CDSConfig::is_using_full_module_graph(), "FIXME: implement non FMG case");
-    }
-
-    assert(k->module() != nullptr, "has been archived");
-    assert(k->java_mirror() != nullptr, "has been restored");
-
-    ModuleEntry* module_entry = k->module();
-    assert(module_entry != nullptr, "has been restored");
-    java_lang_Class::set_module(k->java_mirror(), module_entry->module());
-
-    return true;
-  }
-
-  return false;
 }
 
 void ClassPreloader::replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) {

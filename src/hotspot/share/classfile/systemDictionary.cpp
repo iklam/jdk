@@ -1194,7 +1194,8 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
   // package was loaded.
   if (loader_data->is_the_null_class_loader_data()) {
     s2 path_index = ik->shared_classpath_index();
-    if (path_index >= 0) { // FIXME ... for lambda form classes
+    if (!ClassPreloader::is_non_javavase_preloaded_class(ik)) {
+     if (path_index >= 0) { // FIXME ... for lambda form classes
       ik->set_classpath_index(path_index);
 
       if (CDSConfig::is_dumping_final_static_archive()) {
@@ -1202,6 +1203,7 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
           ClassLoaderExt::set_max_used_path_index(path_index);
         }
       }
+     }
     }
   }
 
