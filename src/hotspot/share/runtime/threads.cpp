@@ -328,8 +328,8 @@ static void call_initPhase2(TRAPS) {
 
   universe_post_module_init();
 
-  // Preload all boot classes outside of java.base module
-  ClassPreloader::runtime_preload(THREAD, Handle());
+  ClassPreloader::post_module_init(CHECK); 
+
   if (CDSConfig::is_using_full_module_graph()) {
     // SystemDictionary::java_{platform,system}_loader are already assigned. We can spin
     // this up a little quicker.

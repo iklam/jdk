@@ -111,6 +111,8 @@ public:
 
   static void runtime_preload(JavaThread* current, Handle loader) NOT_CDS_RETURN;
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
+  static void post_module_init(TRAPS) NOT_CDS_RETURN;
+  static bool fixup_non_javabase_module_field(Klass* k) NOT_CDS_RETURN_(false);
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static bool class_preloading_finished();
 

@@ -240,7 +240,7 @@ public:
   static bool javabase_defined() { return ((_javabase_module != nullptr) &&
                                            (_javabase_module->module() != nullptr)); }
   static void finalize_javabase(Handle module_handle, Symbol* version, Symbol* location);
-  static void patch_javabase_entries(JavaThread* current, Handle module_handle);
+  static void patch_javabase_entries(JavaThread* current, Handle java_base_module);
 
   void modules_do(void f(ModuleEntry*));
   void modules_do(ModuleClosure* closure);

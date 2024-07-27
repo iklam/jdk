@@ -26,6 +26,7 @@
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/cdsConfig.hpp"
+#include "cds/classPreloader.hpp"
 #include "cds/filemap.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/classLoader.hpp"
@@ -682,22 +683,22 @@ void ModuleEntryTable::finalize_javabase(Handle module_handle, Symbol* version, 
 // be set with the defining module.  During startup, prior to java.base's definition,
 // classes needing their module field set are added to the fixup_module_list.
 // Their module field is set once java.base's java.lang.Module is known to the VM.
-void ModuleEntryTable::patch_javabase_entries(JavaThread* current, Handle module_handle) {
-  if (module_handle.is_null()) {
+void ModuleEntryTable::patch_javabase_entries(JavaThread* current, Handle java_base_module) {
+  if (java_base_module.is_null()) {
     fatal("Unable to patch the module field of classes loaded prior to "
           JAVA_BASE_NAME "'s definition, invalid java.lang.Module");
   }
 
   // Do the fixups for the basic primitive types
-  java_lang_Class::set_module(Universe::int_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::float_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::double_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::byte_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::bool_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::char_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::long_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::short_mirror(), module_handle());
-  java_lang_Class::set_module(Universe::void_mirror(), module_handle());
+  java_lang_Class::set_module(Universe::int_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::float_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::double_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::byte_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::bool_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::char_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::long_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::short_mirror(), java_base_module());
+  java_lang_Class::set_module(Universe::void_mirror(), java_base_module());
 
   // Do the fixups for classes that have already been created.
   GrowableArray <Klass*>* list = java_lang_Class::fixup_module_field_list();
@@ -715,7 +716,9 @@ void ModuleEntryTable::patch_javabase_entries(JavaThread* current, Handle module
     } else
 #endif
     {
-      java_lang_Class::fixup_module_field(k, module_handle);
+      if (!ClassPreloader::fixup_non_javabase_module_field(k)) {
+        java_lang_Class::fixup_module_field(k, java_base_module);
+      }
     }
     k->class_loader_data()->dec_keep_alive();
   }

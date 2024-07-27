@@ -621,7 +621,7 @@ void ClassPreloader::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
       // FIXME assert - if FMG, package must be archived
     }
 
-    if (!_preload_javabase_only) {
+    if (loader() != nullptr) { // FIXME .... this whole block should be moved ...
       // The java.base classes needs to wait till ClassPreloader::init_javabase_preloaded_classes()
       for (int i = 0; i < preloaded_classes->length(); i++) {
         InstanceKlass* ik = preloaded_classes->at(i);
@@ -634,17 +634,14 @@ void ClassPreloader::runtime_preload(PreloadedKlasses* table, Handle loader, TRA
     }
   }
 
-  if (!_preload_javabase_only) {
-    HeapShared::initialize_default_subgraph_classes(loader, CHECK);
+  if (!_preload_javabase_only && loader() != nullptr) {
+    HeapShared::initialize_default_subgraph_classes(loader, CHECK); // TODO: boot2 - do it in catch up
   }
 
-#if 0
-  // Hmm, does JavacBench crash if this block is enabled??
   if (VerifyDuringStartup) {
     VM_Verify verify_op;
     VMThread::execute(&verify_op);
   }
-#endif
 }
 
 void ClassPreloader::preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik,
@@ -685,7 +682,7 @@ void ClassPreloader::runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderD
   }
 #endif
 
-  ik->restore_unshareable_info(loader_data, domain, nullptr, CHECK);
+  ik->restore_unshareable_info(loader_data, domain, nullptr, CHECK); // TODO: should we use ik->package()?
   SystemDictionary::load_shared_class_misc(ik, loader_data);
 
   // We are adding to the dictionary but can get away without
@@ -720,12 +717,52 @@ void ClassPreloader::init_javabase_preloaded_classes(TRAPS) {
       InstanceKlass* ik = preloaded_classes->at(i);
       if (ik->has_preinitialized_mirror()) {
         ik->initialize_from_cds(CHECK);
+      } else if (PrelinkSharedClasses && ik->verified_at_dump_time()) {
+        ik->link_class(CHECK);
       }
     }
   }
 
   // Initialize java.base classes in the default subgraph.
   HeapShared::initialize_default_subgraph_classes(Handle(), CHECK);
+}
+
+void ClassPreloader::post_module_init(TRAPS) {
+  // TODO: set the the packages, modules, protection domain, etc, of the
+  // boot2 classes ... -- need test case for no -XX:+ArchiveProtectionDomains
+
+  Array<InstanceKlass*>* preloaded_classes = _static_preloaded_classes._boot2;
+  if (preloaded_classes != nullptr) {
+    for (int i = 0; i < preloaded_classes->length(); i++) {
+      InstanceKlass* ik = preloaded_classes->at(i);
+      if (ik->has_preinitialized_mirror()) {
+        ik->initialize_from_cds(CHECK);
+      } else if (PrelinkSharedClasses && ik->verified_at_dump_time()) {
+        ik->link_class(CHECK);
+      }
+    }
+  }
+}
+
+bool ClassPreloader::fixup_non_javabase_module_field(Klass* k) {
+  if (CDSConfig::has_preloaded_classes()
+      && k->class_loader() == nullptr // FIXME only implemented for boot classes so far
+      ) {
+    if (!CDSConfig::is_dumping_final_static_archive()) {
+      assert(CDSConfig::is_using_full_module_graph(), "FIXME: implement non FMG case");
+    }
+
+    assert(k->module() != nullptr, "has been archived");
+    assert(k->java_mirror() != nullptr, "has been restored");
+
+    ModuleEntry* module_entry = k->module();
+    assert(module_entry != nullptr, "has been restored");
+    java_lang_Class::set_module(k->java_mirror(), module_entry->module());
+
+    return true;
+  }
+
+  return false;
 }
 
 void ClassPreloader::replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) {
