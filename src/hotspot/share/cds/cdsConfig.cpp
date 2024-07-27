@@ -33,14 +33,17 @@
 #include "logging/log.hpp"
 #include "memory/universe.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/globals_extension.hpp"
 #include "runtime/java.hpp"
 #include "utilities/defaultStream.hpp"
+#include "utilities/formatBuffer.hpp"
 
 bool CDSConfig::_is_dumping_static_archive = false;
 bool CDSConfig::_is_dumping_dynamic_archive = false;
 bool CDSConfig::_is_using_optimized_module_handling = true;
 bool CDSConfig::_is_dumping_full_module_graph = true;
 bool CDSConfig::_is_using_full_module_graph = true;
+bool CDSConfig::_old_cds_flags_used = false;
 
 char* CDSConfig::_default_archive_path = nullptr;
 char* CDSConfig::_static_archive_path = nullptr;
@@ -325,7 +328,76 @@ bool CDSConfig::has_unsupported_runtime_module_options() {
   return false;
 }
 
+
+#define CHECK_ALIAS(f) check_flag_alias(FLAG_IS_DEFAULT(f), #f)
+
+void CDSConfig::check_flag_alias(bool alias_is_default, const char* alias_name) {
+  if (_old_cds_flags_used && !alias_is_default) {
+    vm_exit_during_initialization(err_msg("Option %s cannot be used at the same time with "
+                                          "-Xshare:on, -Xshare:auto, -Xshare:off, -Xshare:dump, "
+                                          "DumpLoadedClassList, SharedClassListFile, or SharedArchiveFile",
+                                          alias_name));
+  }
+}
+
+void CDSConfig::check_flag_aliases() {
+  if (!FLAG_IS_DEFAULT(DumpLoadedClassList) ||
+      !FLAG_IS_DEFAULT(SharedClassListFile) ||
+      !FLAG_IS_DEFAULT(SharedArchiveFile)) {
+    _old_cds_flags_used = true;
+  }
+
+  CHECK_ALIAS(AOTCache);
+  CHECK_ALIAS(AOTConfiguration);
+  CHECK_ALIAS(AOTMode);
+
+  if (FLAG_IS_DEFAULT(AOTMode)) {
+    if (!FLAG_IS_DEFAULT(AOTConfiguration)) {
+      vm_exit_during_initialization("AOTConfiguration cannot be used without setting AOTMode");
+    }
+
+    if (!FLAG_IS_DEFAULT(AOTCache)) {
+      // -XX:AOTCache=<value> (without AOTMode/AOTConfiguration) is alias for -Xshare:auto -XX:SharedArchiveFile=<value>
+      assert(FLAG_IS_DEFAULT(SharedArchiveFile), "already checked");
+      FLAG_SET_ERGO(SharedArchiveFile, AOTCache);
+      UseSharedSpaces = true;
+      RequireSharedSpaces = false;
+    }
+  } else {
+    // AOTMode has been set
+    if (FLAG_IS_DEFAULT(AOTConfiguration)) {
+      vm_exit_during_initialization("AOTMode cannot be used without setting AOTConfiguration");
+    }
+
+    if (strcmp(AOTMode, "record") == 0) {
+      if (!FLAG_IS_DEFAULT(AOTCache)) {
+        vm_exit_during_initialization("AOTCache must not be specified when using -XX:AOTMode=record");
+      }
+
+      assert(FLAG_IS_DEFAULT(DumpLoadedClassList), "already checked");
+      FLAG_SET_ERGO(DumpLoadedClassList, AOTConfiguration);
+      UseSharedSpaces = false;
+      RequireSharedSpaces = false;
+    } else if (strcmp(AOTMode, "create") == 0) {
+      if (FLAG_IS_DEFAULT(AOTCache)) {
+        vm_exit_during_initialization("AOTCache must be specified when using -XX:AOTMode=create");
+      }
+
+      assert(FLAG_IS_DEFAULT(SharedClassListFile), "already checked");
+      FLAG_SET_ERGO(SharedClassListFile, AOTConfiguration);
+      assert(FLAG_IS_DEFAULT(SharedArchiveFile), "already checked");
+      FLAG_SET_ERGO(SharedArchiveFile, AOTCache);
+
+      CDSConfig::enable_dumping_static_archive();
+    } else {
+      vm_exit_during_initialization(err_msg("Unrecognized AOTMode %s: must be record or create", AOTMode));
+    }
+  }
+}
+
 bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_flag_cmd_line) {
+  check_flag_aliases();
+
   if (is_dumping_static_archive()) {
     if (!mode_flag_cmd_line) {
       // By default, -Xshare:dump runs in interpreter-only mode, which is required for deterministic archive.
