@@ -221,8 +221,7 @@ void vmClasses::resolve_all(TRAPS) {
 #endif
 
   InstanceStackChunkKlass::init_offset_of_stack();
-  ClassPreloader::runtime_preload(THREAD, Handle()); // load only the remaining archived classes in java.base
-  ClassPreloader::runtime_preload(THREAD, Handle()); // load boot classes outside of java.base
+  ClassPreloader::runtime_preload(THREAD, Handle());
 }
 
 #if INCLUDE_CDS

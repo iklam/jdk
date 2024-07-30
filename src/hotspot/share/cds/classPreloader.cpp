@@ -52,6 +52,7 @@
 
 AOTLoadedClassRecorder::ClassesTable* AOTLoadedClassRecorder::_vm_classes = nullptr;
 AOTLoadedClassRecorder::ClassesTable* AOTLoadedClassRecorder::_candidates = nullptr;
+GrowableArrayCHeap<InstanceKlass*, mtClassShared>* AOTLoadedClassRecorder::_sorted_candidates = nullptr;
 
 AOTLoadedClasses AOTLoadedClasses::_for_static_archive(true);
 AOTLoadedClasses AOTLoadedClasses::_for_dynamic_archive(false);
@@ -72,21 +73,11 @@ void AOTLoadedClassRecorder::initialize() {
 
   _vm_classes = new (mtClass)ClassesTable();
   _candidates = new (mtClass)ClassesTable();
+  _sorted_candidates = new GrowableArrayCHeap<InstanceKlass*, mtClassShared>(1000);
 
   for (auto id : EnumRange<vmClassID>{}) {
-    add_one_vm_class(vmClasses::klass_at(id));
+    add_vm_class(vmClasses::klass_at(id));
   }
-
-#if 0
-  AOTLoadedClasses *list = AOTLoadedClasses::for_static_archive();
-  if (!list->is_empty() && !CDSConfig::is_dumping_final_static_archive()) {
-    assert(CDSConfig::is_dumping_dynamic_archive(), "must be");
-    add_candidates(list->boot());
-    add_candidates(list->boot2());
-    add_candidates(list->platform());
-    add_candidates(list->app());
-  }
-#endif
 
   assert(is_initialized(), "sanity");
 }
@@ -96,8 +87,10 @@ void AOTLoadedClassRecorder::dispose() {
 
   delete _vm_classes;
   delete _candidates;
+  delete _sorted_candidates;
   _vm_classes = nullptr;
   _candidates = nullptr;
+  _sorted_candidates = nullptr;
 
   assert(!is_initialized(), "sanity");
 }
@@ -107,19 +100,19 @@ bool AOTLoadedClassRecorder::is_vm_class(InstanceKlass* ik) {
   return (_vm_classes->get(ik) != nullptr);
 }
 
-void AOTLoadedClassRecorder::add_one_vm_class(InstanceKlass* ik) {
+void AOTLoadedClassRecorder::add_vm_class(InstanceKlass* ik) {
   assert(is_initialized(), "sanity");
   bool created;
   _vm_classes->put_if_absent(ik, &created);
   if (created) {
-    add_one_candidate(ik);
+    add_candidate(ik);
     InstanceKlass* super = ik->java_super();
     if (super != nullptr) {
-      add_one_vm_class(super);
+      add_vm_class(super);
     }
     Array<InstanceKlass*>* ifs = ik->local_interfaces();
     for (int i = 0; i < ifs->length(); i++) {
-      add_one_vm_class(ifs->at(i));
+      add_vm_class(ifs->at(i));
     }
   }
 }
@@ -128,16 +121,9 @@ bool AOTLoadedClassRecorder::is_candidate(InstanceKlass* ik) {
   return (_candidates->get(ik) != nullptr);
 }
 
-void AOTLoadedClassRecorder::add_one_candidate(InstanceKlass* ik) {
+void AOTLoadedClassRecorder::add_candidate(InstanceKlass* ik) {
   _candidates->put_when_absent(ik, true);
-}
-
-void AOTLoadedClassRecorder::add_candidates(Array<InstanceKlass*>* klasses) {
-  for (int i = 0; i < klasses->length(); i++) {
-    InstanceKlass* ik = klasses->at(i);
-    assert(ik->is_shared() && ik->is_loaded(), "must be");
-    _candidates->put_when_absent(ik, true);
-  }
+  _sorted_candidates->append(ik);
 }
 
 bool AOTLoadedClassRecorder::is_in_javabase(InstanceKlass* ik) {
@@ -219,7 +205,7 @@ bool AOTLoadedClassRecorder::try_add_candidate(InstanceKlass* ik) {
     }
   }
 
-  _candidates->put_when_absent(ik, true);
+  add_candidate(ik);
 
   if (log_is_enabled(Info, cds, preload)) {
     ResourceMark rm;
@@ -249,11 +235,35 @@ void AOTLoadedClassRecorder::write_to_archive() {
   table->set_boot(write_classes(nullptr, true));
   table->set_boot2(write_classes(nullptr, false));
   table->set_platform(write_classes(SystemDictionary::java_platform_loader(), false));
-  table->set_app(write_classes(SystemDictionary::java_platform_loader(), false));
+  table->set_app(write_classes(SystemDictionary::java_system_loader(), false));
 }
 
 Array<InstanceKlass*>* AOTLoadedClassRecorder::write_classes(oop class_loader, bool is_javabase) {
-  return nullptr;
+  ResourceMark rm;
+  GrowableArray<InstanceKlass*> list;
+
+  for (int i = 0; i < _sorted_candidates->length(); i++) {
+    InstanceKlass* ik = _sorted_candidates->at(i);
+    if (ik->name()->equals("HelloWorld")) {
+      tty->print_cr("xxx");
+    }
+    if (ik->class_loader() != class_loader) {
+      continue;
+    }
+    if ((ik->module() == ModuleEntryTable::javabase_moduleEntry()) != is_javabase) {
+      continue;
+    }
+
+    list.append(ArchiveBuilder::current()->get_buffered_addr(ik));
+  }
+
+  if (list.length() == 0) {
+    return nullptr;
+  } else {
+    const char* category = ArchiveUtils::class_category(ArchiveBuilder::current()->get_source_addr(list.at(0)));
+    log_info(cds, preload)("written %d class(es) for category %s", list.length(), category);
+    return ArchiveUtils::archive_array(&list);
+  }
 }
 
 void ClassPreloader::record_unregistered_classes() {
@@ -391,29 +401,31 @@ void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRA
   // ResourceMark is missing in the code below due to JDK-8307315
   ResourceMark rm(THREAD);
   if (loader() == nullptr) {
-    runtime_preload(table->boot(),  loader, CHECK);
+    runtime_preload(table->boot(), "boot ", loader, CHECK);
 
     _preloading_non_javavase_classes = true;
-    runtime_preload(table->boot2(), loader, CHECK);
+    runtime_preload(table->boot2(), "boot2", loader, CHECK);
     _preloading_non_javavase_classes = false;
 
   } else if (loader() == SystemDictionary::java_platform_loader()) {
-    load_initiated_classes(THREAD, loader, table->boot());
-    load_initiated_classes(THREAD, loader, table->boot2());
+    const char* category = "plat ";
+    load_initiated_classes(THREAD, category, loader, table->boot());
+    load_initiated_classes(THREAD, category, loader, table->boot2());
 
     //_preloading_non_javavase_classes = true;
-    runtime_preload(table->platform(), loader, CHECK);
+    runtime_preload(table->platform(), category, loader, CHECK);
     //_preloading_non_javavase_classes = false;
 
     maybe_init_or_link(table->platform(), CHECK);
   } else {
     assert(loader() == SystemDictionary::java_system_loader(), "must be");
-    load_initiated_classes(THREAD, loader, table->boot());
-    load_initiated_classes(THREAD, loader, table->boot2());
-    load_initiated_classes(THREAD, loader, table->platform());
+    const char* category = "app  ";
+    load_initiated_classes(THREAD, category, loader, table->boot());
+    load_initiated_classes(THREAD, category, loader, table->boot2());
+    load_initiated_classes(THREAD, category, loader, table->platform());
 
     //_preloading_non_javavase_classes = true;
-    runtime_preload(table->app(), loader, CHECK);
+    runtime_preload(table->app(), category, loader, CHECK);
     //_preloading_non_javavase_classes = false;
 
     maybe_init_or_link(table->app(), CHECK);
@@ -432,7 +444,7 @@ void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRA
 #endif
 }
 
-void ClassPreloader::runtime_preload(  Array<InstanceKlass*>* preloaded_classes, Handle loader, TRAPS) {
+void ClassPreloader::runtime_preload(Array<InstanceKlass*>* preloaded_classes, const char* category, Handle loader, TRAPS) {
   if (preloaded_classes == nullptr) {
     return;
   }
@@ -445,7 +457,7 @@ void ClassPreloader::runtime_preload(  Array<InstanceKlass*>* preloaded_classes,
     InstanceKlass* ik = preloaded_classes->at(i);
     if (log_is_enabled(Info, cds, preload)) {
       ResourceMark rm;
-      log_info(cds, preload)("%s %s%s", ArchiveUtils::class_category(ik), ik->external_name(),
+      log_info(cds, preload)("%s %s%s", category, ik->external_name(),
                              ik->is_loaded() ? " (already loaded)" : "");
     }
     // FIXME Do not load proxy classes if FMG is disabled.
@@ -479,7 +491,7 @@ void ClassPreloader::runtime_preload(  Array<InstanceKlass*>* preloaded_classes,
   }
 }
 
-void ClassPreloader::load_initiated_classes(JavaThread* current, Handle loader, Array<InstanceKlass*>* preloaded_classes) {
+void ClassPreloader::load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* preloaded_classes) {
   if (preloaded_classes == nullptr) {
     return;
   }
@@ -493,7 +505,7 @@ void ClassPreloader::load_initiated_classes(JavaThread* current, Handle loader, 
       if (log_is_enabled(Info, cds, preload)) {
         ResourceMark rm;
         const char* defining_loader = (ik->class_loader() == nullptr ? "boot" : "plat");
-        log_info(cds, preload)("%s %s (initiated, defined by %s)", ArchiveUtils::class_category(ik), ik->external_name(),
+        log_info(cds, preload)("%s %s (initiated, defined by %s)", category, ik->external_name(),
                                defining_loader);
       }
       SystemDictionary::preload_class(current, ik, loader_data);

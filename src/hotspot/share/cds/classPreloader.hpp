@@ -32,6 +32,7 @@
 #include "runtime/handles.hpp"
 #include "utilities/exceptions.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/growableArray.hpp"
 #include "utilities/resourceHash.hpp"
 
 class InstanceKlass;
@@ -93,9 +94,11 @@ class AOTLoadedClassRecorder :  AllStatic {
   // Classes that should be automatically loaded into system dictionary at VM start-up
   static ClassesTable* _candidates;
 
-  static void add_one_vm_class(InstanceKlass* ik);
-  static void add_one_candidate(InstanceKlass* klasses);
-  static void add_candidates(Array<InstanceKlass*>* klasses);
+  // Sorted list such that super types come first.
+  static GrowableArrayCHeap<InstanceKlass*, mtClassShared>* _sorted_candidates;
+
+  static void add_vm_class(InstanceKlass* ik);
+  static void add_candidate(InstanceKlass* klasses);
   static Array<InstanceKlass*>* record_preloaded_classes(int loader_type);
 
   static bool is_in_javabase(InstanceKlass* ik);
@@ -130,9 +133,9 @@ class ClassPreloader :  AllStatic {
   static bool _preloading_non_javavase_classes;
   static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
 
-  static void load_initiated_classes(JavaThread* current, Handle loader, Array<InstanceKlass*>* preloaded_list);
+  static void load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* preloaded_list);
   static void runtime_preload(AOTLoadedClasses* table, Handle loader, TRAPS);
-  static void runtime_preload(  Array<InstanceKlass*>* preloaded_classes, Handle loader, TRAPS);
+  static void runtime_preload(Array<InstanceKlass*>* preloaded_classes, const char* category, Handle loader, TRAPS);
   static void runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
   static void preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS);
   static void post_module_init_impl(AOTLoadedClasses* table, TRAPS);
