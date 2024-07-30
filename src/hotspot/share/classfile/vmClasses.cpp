@@ -25,7 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/classPreloader.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/dictionary.hpp"
@@ -221,7 +221,7 @@ void vmClasses::resolve_all(TRAPS) {
 #endif
 
   InstanceStackChunkKlass::init_offset_of_stack();
-  ClassPreloader::load(THREAD, Handle());
+  AOTLinkedClassBulkLoader::load(THREAD, Handle());
 }
 
 #if INCLUDE_CDS

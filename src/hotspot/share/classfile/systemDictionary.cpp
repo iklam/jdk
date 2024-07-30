@@ -23,8 +23,8 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/classPreloader.hpp"
 #include "cds/heapShared.hpp"
 #include "classfile/classFileParser.hpp"
 #include "classfile/classFileStream.hpp"
@@ -140,7 +140,7 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
   if (_java_platform_loader.is_empty()) {
     oop platform_loader = get_platform_class_loader_impl(CHECK);
     _java_platform_loader = OopHandle(Universe::vm_global(), platform_loader);
-    ClassPreloader::load(THREAD, Handle(THREAD, java_platform_loader()));
+    AOTLinkedClassBulkLoader::load(THREAD, Handle(THREAD, java_platform_loader()));
   } else {
     // It must have been restored from the archived module graph
     assert(CDSConfig::is_using_archive(), "must be");
@@ -154,7 +154,7 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
   if (_java_system_loader.is_empty()) {
     oop system_loader = get_system_class_loader_impl(CHECK);
     _java_system_loader = OopHandle(Universe::vm_global(), system_loader);
-    ClassPreloader::load(THREAD, Handle(THREAD, java_system_loader()));
+    AOTLinkedClassBulkLoader::load(THREAD, Handle(THREAD, java_system_loader()));
   } else {
     // It must have been restored from the archived module graph
     assert(CDSConfig::is_using_archive(), "must be");
@@ -1194,8 +1194,8 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
   // package was loaded.
   if (loader_data->is_the_null_class_loader_data()) {
     s2 path_index = ik->shared_classpath_index();
-    if (ClassPreloader::is_preloading_non_javavase_classes()) {
-      // The classpath_index, etc, will be fixed later up by ClassPreloader
+    if (AOTLinkedClassBulkLoader::is_preloading_non_javavase_classes()) {
+      // The classpath_index, etc, will be fixed later up by AOTLinkedClassBulkLoader
     } else {
       if (path_index >= 0) { // FIXME ... for lambda form classes
         ik->set_classpath_index(path_index);

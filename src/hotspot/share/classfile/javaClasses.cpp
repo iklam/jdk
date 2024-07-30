@@ -23,10 +23,10 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/classPreloader.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "classfile/altHashing.hpp"
@@ -945,8 +945,8 @@ void java_lang_Class::set_mirror_module_field(JavaThread* current, Klass* k, Han
       if (!ModuleEntryTable::javabase_defined()) {
         assert(k->java_mirror() != nullptr, "Class's mirror is null");
         k->class_loader_data()->inc_keep_alive();
-        if (ClassPreloader::is_preloading_non_javavase_classes()) {
-          // The module field will be fixed up later by ClassPreloader
+        if (AOTLinkedClassBulkLoader::is_preloading_non_javavase_classes()) {
+          // The module field will be fixed up later by AOTLinkedClassBulkLoader
         } else {
           assert(fixup_module_field_list() != nullptr, "fixup_module_field_list not initialized");
           fixup_module_field_list()->push(k);

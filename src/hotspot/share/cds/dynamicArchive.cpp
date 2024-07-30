@@ -23,13 +23,12 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotClassLinker.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapWriter.hpp"
 #include "cds/archiveUtils.inline.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/classPrelinker.hpp"
-#include "cds/classPreloader.hpp"
 #include "cds/dynamicArchive.hpp"
 #include "cds/metaspaceShared.hpp"
 #include "cds/regeneratedClasses.hpp"
@@ -155,7 +154,7 @@ public:
       SystemDictionaryShared::write_to_archive(false);
 
       DynamicArchive::dump_array_klasses();
-      AOTLoadedClassRecorder::write_to_archive();
+      AOTClassLinker::write_to_archive();
       TrainingData::dump_training_data();
 
       serialized_data = ro_region()->top();
@@ -246,8 +245,7 @@ void DynamicArchiveBuilder::release_header() {
 
 void DynamicArchiveBuilder::post_dump() {
   ArchivePtrMarker::reset_map_and_vs();
-  AOTLoadedClassRecorder::dispose();
-  ClassPrelinker::dispose();
+  AOTClassLinker::dispose();
 }
 
 void DynamicArchiveBuilder::sort_methods() {
