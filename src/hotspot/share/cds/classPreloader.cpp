@@ -50,12 +50,50 @@
 #include "runtime/timer.hpp"
 #include "services/management.hpp"
 
+// List of classes to be loaded at VM bootstrap.
+class AOTLoadedClassTable {
+  static AOTLoadedClassTable _for_static_archive;
+  static AOTLoadedClassTable _for_dynamic_archive;
+
+  bool _is_static_archive; // Used for debugging (FIXME TODO....)
+
+  Array<InstanceKlass*>* _boot;  // only java.base classes
+  Array<InstanceKlass*>* _boot2; // boot classes in other modules
+  Array<InstanceKlass*>* _platform;
+  Array<InstanceKlass*>* _app;
+
+public:
+  AOTLoadedClassTable(bool is_static_archive) :
+    _is_static_archive(is_static_archive),
+    _boot(nullptr), _boot2(nullptr),
+    _platform(nullptr), _app(nullptr) {}
+
+  static AOTLoadedClassTable* for_static_archive()  { return &_for_static_archive; }
+  static AOTLoadedClassTable* for_dynamic_archive() { return &_for_dynamic_archive; }
+
+  static AOTLoadedClassTable* get(bool is_static_archive) {
+    return is_static_archive ? for_static_archive() : for_dynamic_archive();
+  }
+
+  Array<InstanceKlass*>* boot()     const { return _boot;     }
+  Array<InstanceKlass*>* boot2()    const { return _boot2;    }
+  Array<InstanceKlass*>* platform() const { return _platform; }
+  Array<InstanceKlass*>* app()      const { return _app;      }
+
+  void set_boot    (Array<InstanceKlass*>* value) { _boot     = value; }
+  void set_boot2   (Array<InstanceKlass*>* value) { _boot2    = value; }
+  void set_platform(Array<InstanceKlass*>* value) { _platform = value; }
+  void set_app     (Array<InstanceKlass*>* value) { _app      = value; }
+
+  void serialize(SerializeClosure* soc);
+};
+
 AOTLoadedClassRecorder::ClassesTable* AOTLoadedClassRecorder::_vm_classes = nullptr;
 AOTLoadedClassRecorder::ClassesTable* AOTLoadedClassRecorder::_candidates = nullptr;
 GrowableArrayCHeap<InstanceKlass*, mtClassShared>* AOTLoadedClassRecorder::_sorted_candidates = nullptr;
 
-AOTLoadedClasses AOTLoadedClasses::_for_static_archive(true);
-AOTLoadedClasses AOTLoadedClasses::_for_dynamic_archive(false);
+AOTLoadedClassTable AOTLoadedClassTable::_for_static_archive(true);
+AOTLoadedClassTable AOTLoadedClassTable::_for_dynamic_archive(false);
 
 Array<InstanceKlass*>* ClassPreloader::_unregistered_classes_from_preimage = nullptr;
 bool ClassPreloader::_preloading_non_javavase_classes = false;
@@ -125,24 +163,6 @@ void AOTLoadedClassRecorder::add_candidate(InstanceKlass* ik) {
   _candidates->put_when_absent(ik, true);
   _sorted_candidates->append(ik);
 }
-
-bool AOTLoadedClassRecorder::is_in_javabase(InstanceKlass* ik) {
-  if (ik->is_hidden() && HeapShared::is_lambda_form_klass(ik)) {
-    return true;
-  }
-
-  return (ik->module() != nullptr &&
-          ik->module()->name() != nullptr &&
-          ik->module()->name()->equals("java.base"));
-}
-
-#if 0
-  bool loader_type_matches(InstanceKlass* ik) {
-    InstanceKlass* buffered_ik = ArchiveBuilder::current()->get_buffered_addr(ik);
-    return buffered_ik->shared_class_loader_type() == _loader_type;
-  }
-#endif
-
 
 bool AOTLoadedClassRecorder::try_add_candidate(InstanceKlass* ik) {
   assert(is_initialized(), "sanity");
@@ -231,7 +251,7 @@ void AOTLoadedClassRecorder::write_to_archive() {
     }
   }
 
-  AOTLoadedClasses* table = AOTLoadedClasses::get(CDSConfig::is_dumping_static_archive());
+  AOTLoadedClassTable* table = AOTLoadedClassTable::get(CDSConfig::is_dumping_static_archive());
   table->set_boot(write_classes(nullptr, true));
   table->set_boot2(write_classes(nullptr, false));
   table->set_platform(write_classes(SystemDictionary::java_platform_loader(), false));
@@ -285,7 +305,7 @@ void ClassPreloader::record_unregistered_classes() {
   }
 }
 
-void AOTLoadedClasses::serialize(SerializeClosure* soc) {
+void AOTLoadedClassTable::serialize(SerializeClosure* soc) {
   soc->do_ptr((void**)&_boot);
   soc->do_ptr((void**)&_boot2);
   soc->do_ptr((void**)&_platform);
@@ -297,7 +317,7 @@ void AOTLoadedClasses::serialize(SerializeClosure* soc) {
 }
 
 void ClassPreloader::serialize(SerializeClosure* soc, bool is_static_archive) {
-  AOTLoadedClasses::get(is_static_archive)->serialize(soc);
+  AOTLoadedClassTable::get(is_static_archive)->serialize(soc);
 
   if (is_static_archive) {
     soc->do_ptr((void**)&_unregistered_classes_from_preimage);
@@ -340,7 +360,7 @@ bool ClassPreloader::is_preloading_non_javavase_classes() { // FIXME -- need a b
 // preload boot classes outside of java.base
 // preload classes for platform loader
 // preload classes for app loader
-void ClassPreloader::runtime_preload(JavaThread* current, Handle loader) {
+void ClassPreloader::load(JavaThread* current, Handle loader) {
 #ifdef ASSERT
   if (loader() == nullptr) {
     static bool first_time = true;
@@ -364,10 +384,9 @@ void ClassPreloader::runtime_preload(JavaThread* current, Handle loader) {
     }
     ResourceMark rm(current);
     ExceptionMark em(current);
-    runtime_preload(AOTLoadedClasses::for_static_archive(), loader, current);
-    if (!current->has_pending_exception()) {
-      runtime_preload(AOTLoadedClasses::for_dynamic_archive(), loader, current);
-    }
+    load_table(AOTLoadedClassTable::for_static_archive(),  loader, current); // cannot throw
+    load_table(AOTLoadedClassTable::for_dynamic_archive(), loader, current); // cannot throw
+
     if (loader() != nullptr && loader() == SystemDictionary::java_system_loader()) {
       Atomic::release_store(&_class_preloading_finished, true);
     }
@@ -395,16 +414,16 @@ void ClassPreloader::runtime_preload(JavaThread* current, Handle loader) {
   }
 }
 
-void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRAPS) {
+void ClassPreloader::load_table(AOTLoadedClassTable* table, Handle loader, TRAPS) {
   PerfTraceTime timer(_perf_class_preload_counters);
 
   // ResourceMark is missing in the code below due to JDK-8307315
   ResourceMark rm(THREAD);
   if (loader() == nullptr) {
-    runtime_preload(table->boot(), "boot ", loader, CHECK);
+    load_classes(table->boot(), "boot ", loader, CHECK);
 
     _preloading_non_javavase_classes = true;
-    runtime_preload(table->boot2(), "boot2", loader, CHECK);
+    load_classes(table->boot2(), "boot2", loader, CHECK);
     _preloading_non_javavase_classes = false;
 
   } else if (loader() == SystemDictionary::java_platform_loader()) {
@@ -413,7 +432,7 @@ void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRA
     load_initiated_classes(THREAD, category, loader, table->boot2());
 
     //_preloading_non_javavase_classes = true;
-    runtime_preload(table->platform(), category, loader, CHECK);
+    load_classes(table->platform(), category, loader, CHECK);
     //_preloading_non_javavase_classes = false;
 
     maybe_init_or_link(table->platform(), CHECK);
@@ -425,7 +444,7 @@ void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRA
     load_initiated_classes(THREAD, category, loader, table->platform());
 
     //_preloading_non_javavase_classes = true;
-    runtime_preload(table->app(), category, loader, CHECK);
+    load_classes(table->app(), category, loader, CHECK);
     //_preloading_non_javavase_classes = false;
 
     maybe_init_or_link(table->app(), CHECK);
@@ -444,17 +463,17 @@ void ClassPreloader::runtime_preload(AOTLoadedClasses* table, Handle loader, TRA
 #endif
 }
 
-void ClassPreloader::runtime_preload(Array<InstanceKlass*>* preloaded_classes, const char* category, Handle loader, TRAPS) {
-  if (preloaded_classes == nullptr) {
+void ClassPreloader::load_classes(Array<InstanceKlass*>* classes, const char* category, Handle loader, TRAPS) {
+  if (classes == nullptr) {
     return;
   }
 
   ClassLoaderData* loader_data = ClassLoaderData::class_loader_data(loader());
-  for (int i = 0; i < preloaded_classes->length(); i++) {
+  for (int i = 0; i < classes->length(); i++) {
     if (UsePerfData) {
       _perf_classes_preloaded->inc();
     }
-    InstanceKlass* ik = preloaded_classes->at(i);
+    InstanceKlass* ik = classes->at(i);
     if (log_is_enabled(Info, cds, preload)) {
       ResourceMark rm;
       log_info(cds, preload)("%s %s%s", category, ik->external_name(),
@@ -464,12 +483,12 @@ void ClassPreloader::runtime_preload(Array<InstanceKlass*>* preloaded_classes, c
 
     if (!ik->is_loaded()) {
       if (ik->is_hidden()) {
-        preload_archived_hidden_class(loader, ik, CHECK);
+        load_hidden_class(loader, ik, CHECK);
       } else {
         InstanceKlass* actual;
         if (loader() == nullptr) {
           if (!Universe::is_fully_initialized()) {
-            runtime_preload_class_quick(ik, loader_data, Handle(), CHECK);
+            load_class_quick(ik, loader_data, Handle(), CHECK);
             actual = ik;
           } else {
             actual = SystemDictionary::load_instance_class(ik->name(), loader, CHECK);
@@ -491,15 +510,15 @@ void ClassPreloader::runtime_preload(Array<InstanceKlass*>* preloaded_classes, c
   }
 }
 
-void ClassPreloader::load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* preloaded_classes) {
-  if (preloaded_classes == nullptr) {
+void ClassPreloader::load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* classes) {
+  if (classes == nullptr) {
     return;
   }
 
   ClassLoaderData* loader_data = ClassLoaderData::class_loader_data(loader());
   MonitorLocker mu1(SystemDictionary_lock);
-  for (int i = 0; i < preloaded_classes->length(); i++) {
-    InstanceKlass* ik = preloaded_classes->at(i);
+  for (int i = 0; i < classes->length(); i++) {
+    InstanceKlass* ik = classes->at(i);
     assert(ik->is_loaded(), "must have already been loaded by a parent loader");
     if (ik->is_public()) {
       if (log_is_enabled(Info, cds, preload)) {
@@ -514,8 +533,7 @@ void ClassPreloader::load_initiated_classes(JavaThread* current, const char* cat
 }
 
 // FIXME -- is this really correct? Do we need a special ClassLoaderData for each hidden class?
-void ClassPreloader::preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik,
-                                                   TRAPS) {
+void ClassPreloader::load_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS) {
   DEBUG_ONLY({
       assert(ik->super() == vmClasses::Object_klass(), "must be");
       for (int i = 0; i < ik->local_interfaces()->length(); i++) {
@@ -536,7 +554,7 @@ void ClassPreloader::preload_archived_hidden_class(Handle class_loader, Instance
   ik->add_to_hierarchy(THREAD);
 }
 
-void ClassPreloader::runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS) {
+void ClassPreloader::load_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS) {
   assert(!ik->is_loaded(), "sanity");
 
 #ifdef ASSERT
@@ -581,7 +599,7 @@ void ClassPreloader::jvmti_agent_error(InstanceKlass* expected, InstanceKlass* a
 }
 
 void ClassPreloader::init_javabase_preloaded_classes(TRAPS) {
-  maybe_init_or_link(AOTLoadedClasses::for_static_archive()->boot(),  CHECK);
+  maybe_init_or_link(AOTLoadedClassTable::for_static_archive()->boot(),  CHECK);
   //maybe_init_or_link(_dynamic_aot_loading_list._boot, CHECK); // TODO
 
   // Initialize java.base classes in the default subgraph.
@@ -593,18 +611,18 @@ void ClassPreloader::post_module_init(TRAPS) {
     return;
   }
 
-  post_module_init_impl(AOTLoadedClasses::for_static_archive(), CHECK);
-  post_module_init_impl(AOTLoadedClasses::for_dynamic_archive(), CHECK);
+  post_module_init_impl(AOTLoadedClassTable::for_static_archive(), CHECK);
+  post_module_init_impl(AOTLoadedClassTable::for_dynamic_archive(), CHECK);
 }
 
-void ClassPreloader::post_module_init_impl(AOTLoadedClasses* table, TRAPS) {
+void ClassPreloader::post_module_init_impl(AOTLoadedClassTable* table, TRAPS) {
   // TODO: set the the packages, modules, protection domain, etc, of the
   // boot2 classes ... -- need test case for no -XX:+ArchiveProtectionDomains
 
-  Array<InstanceKlass*>* preloaded_classes = table->boot2();
-  if (preloaded_classes != nullptr) {
-    for (int i = 0; i < preloaded_classes->length(); i++) {
-      InstanceKlass* ik = preloaded_classes->at(i);
+  Array<InstanceKlass*>* classes = table->boot2();
+  if (classes != nullptr) {
+    for (int i = 0; i < classes->length(); i++) {
+      InstanceKlass* ik = classes->at(i);
       if (!CDSConfig::is_using_full_module_graph()) {
         // A special case to handle non-FMG when dumping the final archive.
         // We assume that the module graph is exact the same between preimage and final image runs.
@@ -631,14 +649,14 @@ void ClassPreloader::post_module_init_impl(AOTLoadedClasses* table, TRAPS) {
       java_lang_Class::set_module(ik->java_mirror(), module_entry->module());
     }
 
-    maybe_init_or_link(preloaded_classes, CHECK);
+    maybe_init_or_link(classes, CHECK);
   }
 }
 
-void ClassPreloader::maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS) {
-  if (preloaded_classes != nullptr) {
-    for (int i = 0; i < preloaded_classes->length(); i++) {
-      InstanceKlass* ik = preloaded_classes->at(i);
+void ClassPreloader::maybe_init_or_link(Array<InstanceKlass*>* classes, TRAPS) {
+  if (classes != nullptr) {
+    for (int i = 0; i < classes->length(); i++) {
+      InstanceKlass* ik = classes->at(i);
       if (ik->has_preinitialized_mirror()) {
         ik->initialize_from_cds(CHECK);
       } else if (PrelinkSharedClasses && ik->verified_at_dump_time()) {
@@ -648,10 +666,10 @@ void ClassPreloader::maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes
   }
 }
 
-void ClassPreloader::replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) {
-  if (preloaded_classes != nullptr) {
-    for (int i = 0; i < preloaded_classes->length(); i++) {
-      InstanceKlass* ik = preloaded_classes->at(i);
+void ClassPreloader::replay_training_at_init(Array<InstanceKlass*>* classes, TRAPS) {
+  if (classes != nullptr) {
+    for (int i = 0; i < classes->length(); i++) {
+      InstanceKlass* ik = classes->at(i);
       if (ik->has_preinitialized_mirror() && ik->is_initialized() && !ik->has_init_deps_processed()) {
         CompilationPolicy::replay_training_at_init(ik, CHECK);
       }
@@ -661,7 +679,7 @@ void ClassPreloader::replay_training_at_init(Array<InstanceKlass*>* preloaded_cl
 
 void ClassPreloader::replay_training_at_init_for_preloaded_classes(TRAPS) {
   if (CDSConfig::has_preloaded_classes() && TrainingData::have_data()) {
-    AOTLoadedClasses* table = AOTLoadedClasses::for_static_archive(); // not applicable for dynamic archive (?? why??)
+    AOTLoadedClassTable* table = AOTLoadedClassTable::for_static_archive(); // not applicable for dynamic archive (?? why??)
     replay_training_at_init(table->boot(),     CHECK);
     replay_training_at_init(table->boot2(),    CHECK);
     replay_training_at_init(table->platform(), CHECK);

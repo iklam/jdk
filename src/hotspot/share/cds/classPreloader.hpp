@@ -40,48 +40,9 @@ class Klass;
 class SerializeClosure;
 template <typename T> class Array;
 
-// List of classes to be loaded at VM bootstrap.
-class AOTLoadedClasses {
-  static AOTLoadedClasses _for_static_archive;
-  static AOTLoadedClasses _for_dynamic_archive;
-
-  bool _is_static_archive;
-  Array<InstanceKlass*>* _boot;  // only java.base classes
-  Array<InstanceKlass*>* _boot2; // boot classes in other modules
-  Array<InstanceKlass*>* _platform;
-  Array<InstanceKlass*>* _app;
-
-public:
-  AOTLoadedClasses(bool is_static_archive) :
-    _is_static_archive(is_static_archive),
-    _boot(nullptr), _boot2(nullptr),
-    _platform(nullptr), _app(nullptr) {}
-
-  static AOTLoadedClasses* for_static_archive()  { return &_for_static_archive; }
-  static AOTLoadedClasses* for_dynamic_archive() { return &_for_dynamic_archive; }
-
-  static AOTLoadedClasses* get(bool is_static_archive) {
-    return is_static_archive ? for_static_archive() : for_dynamic_archive();
-  }
-
-  Array<InstanceKlass*>* boot()     const { return _boot;     }
-  Array<InstanceKlass*>* boot2()    const { return _boot2;    }
-  Array<InstanceKlass*>* platform() const { return _platform; }
-  Array<InstanceKlass*>* app()      const { return _app;      }
-
-  void set_boot    (Array<InstanceKlass*>* value) { _boot     = value; }
-  void set_boot2   (Array<InstanceKlass*>* value) { _boot2    = value; }
-  void set_platform(Array<InstanceKlass*>* value) { _platform = value; }
-  void set_app     (Array<InstanceKlass*>* value) { _app      = value; }
-
-#if 0
-  bool is_empty() const {
-    return _boot == nullptr && _boot2 == nullptr && _platform == nullptr && _app == nullptr;
-  }
-#endif
-
-  void serialize(SerializeClosure* soc);
-};
+// Table of classes to be loaded at VM bootstrap. A JVM could use up to
+// two such tables (one for static archive, one for dynamic archive)/
+class AOTLoadedClassTable;
 
 // Decides which classes should be loaded at VM bootstrap.
 // (Used only when dumping CDS archive)
@@ -97,15 +58,13 @@ class AOTLoadedClassRecorder :  AllStatic {
   // Sorted list such that super types come first.
   static GrowableArrayCHeap<InstanceKlass*, mtClassShared>* _sorted_candidates;
 
+  static bool is_initialized(); // for debugging
+
   static void add_vm_class(InstanceKlass* ik);
-  static void add_candidate(InstanceKlass* klasses);
-  static Array<InstanceKlass*>* record_preloaded_classes(int loader_type);
-
-  static bool is_in_javabase(InstanceKlass* ik);
-
-  static bool is_initialized();
+  static void add_candidate(InstanceKlass* ik);
 
   static Array<InstanceKlass*>* write_classes(oop class_loader, bool is_javabase);
+
 public:
   static void initialize();
   static void write_to_archive();
@@ -125,32 +84,30 @@ public:
   // ik is allowed to be aot-loaded.
   static bool try_add_candidate(InstanceKlass* ik);
 
-  static int  num_app_initiated_classes();
-  static int  num_platform_initiated_classes();
+  static int num_app_initiated_classes();
+  static int num_platform_initiated_classes();
 };
 
 class ClassPreloader :  AllStatic {
   static bool _preloading_non_javavase_classes;
   static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
 
-  static void load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* preloaded_list);
-  static void runtime_preload(AOTLoadedClasses* table, Handle loader, TRAPS);
-  static void runtime_preload(Array<InstanceKlass*>* preloaded_classes, const char* category, Handle loader, TRAPS);
-  static void runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
-  static void preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS);
-  static void post_module_init_impl(AOTLoadedClasses* table, TRAPS);
-  static void maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS);
+  static void load_table(AOTLoadedClassTable* table, Handle loader, TRAPS);
+  static void load_classes(Array<InstanceKlass*>* classes, const char* category, Handle loader, TRAPS);
+  static void load_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
+  static void load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* classes);
+  static void load_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS);
+  static void post_module_init_impl(AOTLoadedClassTable* table, TRAPS);
+  static void maybe_init_or_link(Array<InstanceKlass*>* classes, TRAPS);
   static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
 
-  static bool is_in_javabase(InstanceKlass* ik);
-
-  static void replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) NOT_CDS_RETURN;
+  static void replay_training_at_init(Array<InstanceKlass*>* classes, TRAPS) NOT_CDS_RETURN;
 
 public:
   static void serialize(SerializeClosure* soc, bool is_static_archive);
   static void record_unregistered_classes();
 
-  static void runtime_preload(JavaThread* current, Handle loader) NOT_CDS_RETURN;
+  static void load(JavaThread* current, Handle loader) NOT_CDS_RETURN;
   static bool is_preloading_non_javavase_classes() NOT_CDS_RETURN_(false);
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void post_module_init(TRAPS) NOT_CDS_RETURN;
