@@ -139,11 +139,6 @@ public:
 
     sort_methods();
 
-    {
-      ArchiveBuilder::OtherROAllocMark mark;
-      ClassPreloader::record_preloaded_classes(false);
-    }
-
     log_info(cds)("Make classes shareable");
     make_klasses_shareable();
 
@@ -160,7 +155,7 @@ public:
       SystemDictionaryShared::write_to_archive(false);
 
       DynamicArchive::dump_array_klasses();
-      ClassPreloader::record_initiated_classes(false);
+      AOTLoadedClassRecorder::write_to_archive();
       TrainingData::dump_training_data();
 
       serialized_data = ro_region()->top();
@@ -251,7 +246,7 @@ void DynamicArchiveBuilder::release_header() {
 
 void DynamicArchiveBuilder::post_dump() {
   ArchivePtrMarker::reset_map_and_vs();
-  ClassPreloader::dispose();
+  AOTLoadedClassRecorder::dispose();
   ClassPrelinker::dispose();
 }
 
