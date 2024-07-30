@@ -125,7 +125,7 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       return true;
     }
 
-    if (!PreloadSharedClasses && ClassPreloader::is_vm_class(ik)) {
+    if (!PreloadSharedClasses && AOTLoadedClassRecorder::is_vm_class(ik)) {
       if (ik->class_loader() != cp_holder->class_loader()) {
         // At runtime, cp_holder() may not be able to resolve to the same
         // ik. For example, a different version of ik may be defined in
@@ -134,19 +134,8 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       } else {
         return true;
       }
-    } else if (PreloadSharedClasses && ClassPreloader::is_preloaded_class(ik)) {
-      if (cp_holder->is_shared_platform_class()) {
-        ClassPreloader::add_initiated_class(cp_holder, ik);
-        return true;
-      } else if (cp_holder->is_shared_app_class()) {
-        ClassPreloader::add_initiated_class(cp_holder, ik);
-        return true;
-      } else if (cp_holder->is_shared_boot_class()) {
-        assert(ik->class_loader() == nullptr, "a boot class can reference only boot classes");
-        return true;
-      } else if (cp_holder->is_hidden() && cp_holder->class_loader() == nullptr) { // FIXME -- use better checks!
-        return true;
-      }
+    } else if (PreloadSharedClasses && AOTLoadedClassRecorder::try_add_candidate(ik)) {
+      return true;
     }
   } else if (resolved_class->is_objArray_klass()) {
     Klass* elem = ObjArrayKlass::cast(resolved_class)->bottom_klass();

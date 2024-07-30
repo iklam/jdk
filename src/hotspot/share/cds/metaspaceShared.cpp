@@ -543,7 +543,10 @@ char* VM_PopulateDumpSharedSpace::dump_read_only_tables() {
   ArchiveBuilder::OtherROAllocMark mark;
 
   SystemDictionaryShared::write_to_archive();
-  ClassPreloader::record_initiated_classes(true);
+  AOTLoadedClassRecorder::write_to_archive();
+  if (CDSConfig::is_dumping_preimage_static_archive()) {
+    FinalImageRecipes::record_recipes();
+  }
   ClassPreloader::record_unregistered_classes();
   TrainingData::dump_training_data();
   MetaspaceShared::write_method_handle_intrinsics();
@@ -590,10 +593,7 @@ void VM_PopulateDumpSharedSpace::doit() {
 
   {
     ArchiveBuilder::OtherROAllocMark mark;
-    ClassPreloader::record_preloaded_classes(true);
-    if (CDSConfig::is_dumping_preimage_static_archive()) {
-      FinalImageRecipes::record_recipes();
-    }
+
   }
 
   log_info(cds)("Make classes shareable");
@@ -677,7 +677,7 @@ bool MetaspaceShared::may_be_eagerly_linked(InstanceKlass* ik) {
 }
 
 void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
-  ClassPreloader::initialize();
+  AOTLoadedClassRecorder::initialize();
   ClassPrelinker::initialize();
 
   if (!jcmd_request && !CDSConfig::is_dumping_dynamic_archive()

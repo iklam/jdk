@@ -936,12 +936,14 @@ void java_lang_Class::set_mirror_module_field(JavaThread* current, Klass* k, Han
       MutexLocker m1(current, Module_lock);
       // Keep list of classes needing java.base module fixup
       if (!ModuleEntryTable::javabase_defined()) {
-       if (!ClassPreloader::is_non_javavase_preloaded_class(k)) {
         assert(k->java_mirror() != nullptr, "Class's mirror is null");
         k->class_loader_data()->inc_keep_alive();
-        assert(fixup_module_field_list() != nullptr, "fixup_module_field_list not initialized");
-        fixup_module_field_list()->push(k);
-       }
+        if (ClassPreloader::is_preloading_non_javavase_classes()) {
+          // The module field will be fixed up later by ClassPreloader
+        } else {
+          assert(fixup_module_field_list() != nullptr, "fixup_module_field_list not initialized");
+          fixup_module_field_list()->push(k);
+        }
       } else {
         javabase_was_defined = true;
       }

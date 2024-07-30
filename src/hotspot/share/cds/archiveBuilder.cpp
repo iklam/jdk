@@ -879,7 +879,7 @@ void ArchiveBuilder::make_klasses_shareable() {
       assert(k->is_instance_klass(), " must be");
       InstanceKlass* ik = InstanceKlass::cast(k);
       InstanceKlass* src_ik = get_source_addr(ik);
-      int preloaded = ClassPreloader::is_preloaded_class(src_ik);
+      int preloaded = AOTLoadedClassRecorder::is_candidate(src_ik);
       int inited = ik->has_preinitialized_mirror();
       ADD_COUNT(num_instance_klasses);
       if (CDSConfig::is_dumping_dynamic_archive()) {
@@ -916,7 +916,7 @@ void ArchiveBuilder::make_klasses_shareable() {
         ADD_COUNT(num_unregistered_klasses);
       }
 
-      if (ClassPreloader::is_vm_class(src_ik)) {
+      if (AOTLoadedClassRecorder::is_vm_class(src_ik)) {
         ADD_COUNT(num_vm_klasses);
       }
 

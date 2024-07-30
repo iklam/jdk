@@ -39,88 +39,121 @@ class Klass;
 class SerializeClosure;
 template <typename T> class Array;
 
-class ClassPreloader :  AllStatic {
-  class PreloadedKlassRecorder;
+// List of classes to be loaded at VM bootstrap.
+class AOTLoadedClasses {
+  static AOTLoadedClasses _for_static_archive;
+  static AOTLoadedClasses _for_dynamic_archive;
+
+  bool _is_static_archive;
+  Array<InstanceKlass*>* _boot;  // only java.base classes
+  Array<InstanceKlass*>* _boot2; // boot classes in other modules
+  Array<InstanceKlass*>* _platform;
+  Array<InstanceKlass*>* _app;
+
+public:
+  AOTLoadedClasses(bool is_static_archive) :
+    _is_static_archive(is_static_archive),
+    _boot(nullptr), _boot2(nullptr),
+    _platform(nullptr), _app(nullptr) {}
+
+  static AOTLoadedClasses* for_static_archive()  { return &_for_static_archive; }
+  static AOTLoadedClasses* for_dynamic_archive() { return &_for_dynamic_archive; }
+
+  static AOTLoadedClasses* get(bool is_static_archive) {
+    return is_static_archive ? for_static_archive() : for_dynamic_archive();
+  }
+
+  Array<InstanceKlass*>* boot()     const { return _boot;     }
+  Array<InstanceKlass*>* boot2()    const { return _boot2;    }
+  Array<InstanceKlass*>* platform() const { return _platform; }
+  Array<InstanceKlass*>* app()      const { return _app;      }
+
+  void set_boot    (Array<InstanceKlass*>* value) { _boot     = value; }
+  void set_boot2   (Array<InstanceKlass*>* value) { _boot2    = value; }
+  void set_platform(Array<InstanceKlass*>* value) { _platform = value; }
+  void set_app     (Array<InstanceKlass*>* value) { _app      = value; }
+
+#if 0
+  bool is_empty() const {
+    return _boot == nullptr && _boot2 == nullptr && _platform == nullptr && _app == nullptr;
+  }
+#endif
+
+  void serialize(SerializeClosure* soc);
+};
+
+// Decides which classes should be loaded at VM bootstrap.
+// (Used only when dumping CDS archive)
+class AOTLoadedClassRecorder :  AllStatic {
   using ClassesTable = ResourceHashtable<InstanceKlass*, bool, 15889, AnyObj::C_HEAP, mtClassShared>;
 
   // Classes loaded inside vmClasses::resolve_all()
   static ClassesTable* _vm_classes;
 
-  // Classes that will be automatically loaded into system dictionary at
-  // VM start-up (this is a superset of _vm_classes)
-  static ClassesTable* _preloaded_classes;
-  static ClassesTable* _platform_initiated_classes; // classes initiated but not loaded by platform loader
-  static ClassesTable* _app_initiated_classes;      // classes initiated but not loaded by app loader
-
-  static bool _record_javabase_only;
-  static bool _preload_javabase_only;
-  struct PreloadedKlasses {
-    Array<InstanceKlass*>* _boot;  // only java.base classes
-    Array<InstanceKlass*>* _boot2; // boot classes in other modules
-    Array<InstanceKlass*>* _platform;
-    Array<InstanceKlass*>* _platform_initiated;
-    Array<InstanceKlass*>* _app;
-    Array<InstanceKlass*>* _app_initiated;
-    PreloadedKlasses() : _boot(nullptr), _boot2(nullptr), _platform(nullptr), _app(nullptr) {}
-  };
-
-  static PreloadedKlasses _static_preloaded_classes;
-  static PreloadedKlasses _dynamic_preloaded_classes;
-  static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
+  // Classes that should be automatically loaded into system dictionary at VM start-up
+  static ClassesTable* _candidates;
 
   static void add_one_vm_class(InstanceKlass* ik);
-  static void add_preloaded_classes(Array<InstanceKlass*>* klasses);
-  static void add_unrecorded_initiated_classes(ClassesTable* table, Array<InstanceKlass*>* klasses);
-  static void add_extra_initiated_classes(PreloadedKlasses* table);
-  static void add_initiated_classes_for_loader(ClassLoaderData* loader_data, const char* loader_name, ClassesTable* table);
-  static void add_initiated_class(ClassesTable* initiated_classes, const char* loader_name, InstanceKlass* target);
+  static void add_one_candidate(InstanceKlass* klasses);
+  static void add_candidates(Array<InstanceKlass*>* klasses);
   static Array<InstanceKlass*>* record_preloaded_classes(int loader_type);
-  static Array<InstanceKlass*>* record_initiated_classes(ClassesTable* table);
-  static void runtime_preload(PreloadedKlasses* table, Handle loader, TRAPS);
-  static void runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
-  static void preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik,
-                                            const char* loader_name, TRAPS);
-  static void post_module_init_impl(ClassPreloader::PreloadedKlasses* table, TRAPS);
-  static void maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS);
-  static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
 
   static bool is_in_javabase(InstanceKlass* ik);
-  class RecordInitiatedClassesClosure;
 
-  static void replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) NOT_CDS_RETURN;
+  static bool is_initialized();
 
+  static Array<InstanceKlass*>* write_classes(oop class_loader, bool is_javabase);
 public:
   static void initialize();
+  static void write_to_archive();
   static void dispose();
-
-  static void record_preloaded_classes(bool is_static_archive);
-  static void record_initiated_classes(bool is_static_archive);
-  static void record_unregistered_classes();
-  static void serialize(SerializeClosure* soc, bool is_static_archive);
 
   // Is this class resolved as part of vmClasses::resolve_all()?
   static bool is_vm_class(InstanceKlass* ik);
 
-  static bool is_non_javavase_preloaded_class(Klass* ik) NOT_CDS_RETURN_(false);
-
   // When CDS is enabled, is ik guatanteed to be loaded at deployment time (and
-  // cannot be replaced by JVMTI)?
+  // cannot be replaced by JVMTI, etc)?
   // This is a necessary (not but sufficient) condition for keeping a direct pointer
   // to ik in precomputed data (such as ConstantPool entries in archived classes,
   // or in AOT-compiled code).
-  static bool is_preloaded_class(InstanceKlass* ik);
+  static bool is_candidate(InstanceKlass* ik);
 
-  static void add_preloaded_class(InstanceKlass* ik);
-  static void add_initiated_class(InstanceKlass* ik, InstanceKlass* target);
+  // Request that ik to be added to the candidates table. This will return succeed only if
+  // ik is allowed to be aot-loaded.
+  static bool try_add_candidate(InstanceKlass* ik);
+
+  static int  num_app_initiated_classes();
+  static int  num_platform_initiated_classes();
+};
+
+class ClassPreloader :  AllStatic {
+  static bool _preloading_non_javavase_classes;
+  static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
+
+  static void load_initiated_classes(JavaThread* current, Handle loader, Array<InstanceKlass*>* preloaded_list);
+  static void runtime_preload(AOTLoadedClasses* table, Handle loader, TRAPS);
+  static void runtime_preload(  Array<InstanceKlass*>* preloaded_classes, Handle loader, TRAPS);
+  static void runtime_preload_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
+  static void preload_archived_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS);
+  static void post_module_init_impl(AOTLoadedClasses* table, TRAPS);
+  static void maybe_init_or_link(Array<InstanceKlass*>* preloaded_classes, TRAPS);
+  static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
+
+  static bool is_in_javabase(InstanceKlass* ik);
+
+  static void replay_training_at_init(Array<InstanceKlass*>* preloaded_classes, TRAPS) NOT_CDS_RETURN;
+
+public:
+  static void serialize(SerializeClosure* soc, bool is_static_archive);
+  static void record_unregistered_classes();
 
   static void runtime_preload(JavaThread* current, Handle loader) NOT_CDS_RETURN;
+  static bool is_preloading_non_javavase_classes() NOT_CDS_RETURN_(false);
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void post_module_init(TRAPS) NOT_CDS_RETURN;
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static bool class_preloading_finished();
 
-  static int  num_platform_initiated_classes();
-  static int  num_app_initiated_classes();
   static void print_counters() NOT_CDS_RETURN;
 };
 

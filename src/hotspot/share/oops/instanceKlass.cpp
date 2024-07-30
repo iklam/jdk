@@ -2804,7 +2804,9 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
   // sure the current state is <loaded.
   assert(!is_loaded(), "invalid init state");
   assert(!shared_loading_failed(), "Must not try to load failed class again");
-  if (!ClassPreloader::is_non_javavase_preloaded_class(this)) {
+  if (ClassPreloader::is_preloading_non_javavase_classes()) {
+    // set_package will be called later by ClassPreloader
+  } else {
     set_package(loader_data, pkg_entry, CHECK);
   }
   Klass::restore_unshareable_info(loader_data, protection_domain, CHECK);
