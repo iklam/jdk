@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
@@ -1292,7 +1293,7 @@ void HeapShared::initialize_default_subgraph_classes(Handle loader, TRAPS) {
     for (int pass = 0; pass < 2; pass ++) {
       for (int i = 0; i < klasses->length(); i++) {
         Klass* k = klasses->at(i);
-        if (k->class_loader_data() == nullptr) {
+        if (k->class_loader_data() == nullptr || AOTLinkedClassBulkLoader::is_not_loaded(k)) {
           // This class is not yet loaded. We will initialize it in a later phase.
           continue;
         }

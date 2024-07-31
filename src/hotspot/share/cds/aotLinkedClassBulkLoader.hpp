@@ -49,7 +49,6 @@ class AOTLinkedClassBulkLoader :  AllStatic {
     APP
   };
 
-  static bool _preloading_non_javavase_classes;
   static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
 
   static void load_impl(JavaThread* current, LoaderKind loader_kind, oop class_loader_oop);
@@ -58,9 +57,10 @@ class AOTLinkedClassBulkLoader :  AllStatic {
   static void load_classes(LoaderKind loader_kind, Array<InstanceKlass*>* classes, const char* category, Handle loader, TRAPS);
   static void load_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
   static void load_hidden_class(ClassLoaderData* loader_data, InstanceKlass* ik, TRAPS);
+
+  static void install_dummy_class_loader_data(Array<InstanceKlass*>* classes);
   static void maybe_init_or_link(Array<InstanceKlass*>* classes, TRAPS);
   static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
-
   static void replay_training_at_init(Array<InstanceKlass*>* classes, TRAPS) NOT_CDS_RETURN;
 
 public:
@@ -72,6 +72,8 @@ public:
   static void load_non_javabase_boot_classes(JavaThread* current);
   static void load_platform_classes(JavaThread* current);
   static void load_app_classes(JavaThread* current);
+
+  static bool is_not_loaded(Klass* k);
 
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;

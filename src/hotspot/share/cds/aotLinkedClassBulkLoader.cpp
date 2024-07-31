@@ -54,6 +54,7 @@
 #include "services/management.hpp"
 
 Array<InstanceKlass*>* AOTLinkedClassBulkLoader::_unregistered_classes_from_preimage = nullptr;
+static ClassLoaderData* _dummy_class_loader_data = nullptr;
 volatile bool _class_preloading_finished = false;
 
 static PerfCounter* _perf_classes_preloaded = nullptr;
@@ -103,8 +104,34 @@ bool AOTLinkedClassBulkLoader::class_preloading_finished() {
   }
 }
 
+void AOTLinkedClassBulkLoader::install_dummy_class_loader_data(Array<InstanceKlass*>* classes) {
+  if (classes != nullptr) {
+    for (int i = 0; i < classes->length(); i++) {
+      InstanceKlass* ik = classes->at(i);
+      ik->set_class_loader_data(_dummy_class_loader_data);
+    }
+  }
+}
+
+bool AOTLinkedClassBulkLoader::is_not_loaded(Klass* k) {
+  ClassLoaderData* cld = k->class_loader_data();
+  return (cld == nullptr || cld == _dummy_class_loader_data);
+}
+
 void AOTLinkedClassBulkLoader::load_javabase_boot_classes(JavaThread* current) {
   load_impl(current, LoaderKind::BOOT, nullptr);
+
+  // After this function returns, but before all the aot-linked classes are loaded, a GC
+  // may happen. Some archived heap objects may be an instance of a class K in the
+  // static archive that's not yet loaded. The GC may be confused if K->class_loader_data()
+  // is nullptr.
+  //
+  // We'll install dummy class loader data to make the GC happy. This will be reverted
+  // when the class is loaded for real.
+  _dummy_class_loader_data = ClassLoaderDataGraph::create_dummy_for_aot_linked_classes();
+  install_dummy_class_loader_data(AOTLinkedClassTable::for_static_archive()->boot2());
+  install_dummy_class_loader_data(AOTLinkedClassTable::for_static_archive()->platform());
+  install_dummy_class_loader_data(AOTLinkedClassTable::for_static_archive()->app());
 }
 
 void AOTLinkedClassBulkLoader::load_non_javabase_boot_classes(JavaThread* current) {
@@ -226,6 +253,7 @@ void AOTLinkedClassBulkLoader::load_classes(LoaderKind loader_kind, Array<Instan
     }
 
     if (!ik->is_loaded()) {
+      ik->set_class_loader_data(nullptr); // revert install_dummy_class_loader_data()
       if (ik->is_hidden()) {
         load_hidden_class(loader_data, ik, CHECK);
       } else {

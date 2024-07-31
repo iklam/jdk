@@ -183,6 +183,10 @@ ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool has_class_mirror_
   return loader_data;
 }
 
+ClassLoaderData* ClassLoaderDataGraph::create_dummy_for_aot_linked_classes() {
+  return new ClassLoaderData(Handle(), false);
+}
+
 inline void assert_is_safepoint_or_gc() {
   assert(SafepointSynchronize::is_at_safepoint() ||
          Thread::current()->is_ConcurrentGC_thread() ||

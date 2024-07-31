@@ -642,7 +642,7 @@ const int _default_loader_dictionary_size = 107;
 Dictionary* ClassLoaderData::create_dictionary() {
   assert(!has_class_mirror_holder(), "class mirror holder cld does not have a dictionary");
   int size;
-  if (_the_null_class_loader_data == nullptr) {
+  if (_the_null_class_loader_data == nullptr || class_loader() == nullptr) {
     size = _boot_loader_dictionary_size;
   } else if (class_loader()->is_a(vmClasses::reflect_DelegatingClassLoader_klass())) {
     size = 1;  // there's only one class in relection class loader and no initiated classes
