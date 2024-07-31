@@ -23,6 +23,7 @@
 */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/metaspaceShared.hpp"
@@ -313,6 +314,10 @@ void Modules::define_module(Handle module, jboolean is_open, jstring version,
               "Class loader is an invalid delegating class loader");
   }
   Handle h_loader = Handle(THREAD, loader);
+  if (h_loader() != nullptr && CDSConfig::is_dumping_final_static_archive()) {
+    // Leyden only -- don't upstream as part of JDK-8315737
+    AOTLinkedClassBulkLoader::restore_class_loader_data(h_loader);
+  }
   // define_module can be called during start-up, before the class loader's ClassLoaderData
   // has been created.  SystemDictionary::register_loader ensures creation, if needed.
   ClassLoaderData* loader_data = SystemDictionary::register_loader(h_loader);
@@ -625,17 +630,31 @@ void Modules::define_archived_modules(Handle h_platform_loader, Handle h_system_
     THROW_MSG(vmSymbols::java_lang_NullPointerException(), "Null system loader object");
   }
 
+  assert(!CDSConfig::is_dumping_final_static_archive(),
+         "archived FMG should not be loaded when dumping final image");
+
   ClassLoaderData* platform_loader_data = SystemDictionary::register_loader(h_platform_loader);
-  SystemDictionary::set_platform_loader(platform_loader_data);
+  if (SystemDictionary::java_platform_loader() != nullptr) {
+    // Already initialized by AOTLinkedClassBulkLoader (which requires FMG, so it must
+    // have restored the same platform/system loaders that are also recorded by the FMG).
+    assert(SystemDictionary::java_platform_loader() == h_platform_loader(), "must be");
+  } else {
+    SystemDictionary::set_platform_loader(platform_loader_data);
+  }
   ClassLoaderDataShared::restore_java_platform_loader_from_archive(platform_loader_data);
 
   ClassLoaderData* system_loader_data = SystemDictionary::register_loader(h_system_loader);
-  SystemDictionary::set_system_loader(system_loader_data);
+  if (SystemDictionary::java_system_loader() != nullptr) {
+    // Ditto
+    assert(SystemDictionary::java_system_loader() == h_system_loader(), "must be");
+  } else {
+    SystemDictionary::set_system_loader(system_loader_data);
+  }
   // system_loader_data here is always an instance of jdk.internal.loader.ClassLoader$AppClassLoader.
   // However, if -Djava.system.class.loader=xxx is specified, java_platform_loader() would
   // be an instance of a user-defined class, so make sure this never happens.
   assert(Arguments::get_property("java.system.class.loader") == nullptr,
-           "archived full module should have been disabled if -Djava.system.class.loader is specified");
+         "archived full module should have been disabled if -Djava.system.class.loader is specified");
   ClassLoaderDataShared::restore_java_system_loader_from_archive(system_loader_data);
 }
 

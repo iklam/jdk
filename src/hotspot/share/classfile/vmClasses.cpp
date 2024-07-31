@@ -221,7 +221,7 @@ void vmClasses::resolve_all(TRAPS) {
 #endif
 
   InstanceStackChunkKlass::init_offset_of_stack();
-  AOTLinkedClassBulkLoader::load(THREAD, Handle());
+  AOTLinkedClassBulkLoader::load(THREAD);
 }
 
 #if INCLUDE_CDS

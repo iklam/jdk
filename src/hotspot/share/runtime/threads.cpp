@@ -335,8 +335,6 @@ static void call_initPhase2(TRAPS) {
     // this up a little quicker.
     assert(SystemDictionary::java_platform_loader() != nullptr, "must be");
     assert(SystemDictionary::java_system_loader() != nullptr,   "must be");
-    AOTLinkedClassBulkLoader::load(THREAD, Handle(THREAD, SystemDictionary::java_platform_loader()));
-    AOTLinkedClassBulkLoader::load(THREAD, Handle(THREAD, SystemDictionary::java_system_loader()));
   }
 }
 

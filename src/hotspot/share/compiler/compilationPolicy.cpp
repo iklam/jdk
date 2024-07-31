@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/aotLinkedClassBulkLoader.hpp"
+#include "cds/cdsConfig.hpp"
 #include "code/scopeDesc.hpp"
 #include "code/SCCache.hpp"
 #include "compiler/compilationPolicy.hpp"
@@ -1036,6 +1037,10 @@ nmethod* CompilationPolicy::event(const methodHandle& method, const methodHandle
 // Check if the method can be compiled, change level if necessary
 void CompilationPolicy::compile(const methodHandle& mh, int bci, CompLevel level, TRAPS) {
   assert(verify_level(level), "Invalid compilation level requested: %d", level);
+
+  if (CDSConfig::is_dumping_final_static_archive() && !AOTLinkedClassBulkLoader::class_preloading_finished()) {
+    return;
+  }
 
   if (level == CompLevel_none) {
     if (mh->has_compiled_code()) {

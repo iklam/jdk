@@ -603,6 +603,8 @@ protected:
   vtableEntry* start_of_vtable() const;
 #if INCLUDE_CDS
   void restore_unshareable_info(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
+public:
+  void restore_java_mirror(ClassLoaderData* loader_data, Handle protection_domain, TRAPS);
 #endif
  public:
   Method* method_at_vtable(int index);

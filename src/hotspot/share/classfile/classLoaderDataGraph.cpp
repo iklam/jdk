@@ -177,6 +177,17 @@ ClassLoaderData* ClassLoaderDataGraph::add_to_graph(Handle loader, bool has_clas
   return cld;
 }
 
+// Leyden only -- don't upstream as part of JDK-8315737
+ClassLoaderData* ClassLoaderDataGraph::add_for_leyden() {
+  MutexLocker lock(ClassLoaderDataGraph_lock);
+  NoSafepointVerifier no_safepoints;
+  ClassLoaderData* cld = new ClassLoaderData(Handle(), false);
+  cld->set_next(_head);
+  Atomic::release_store(&_head, cld);
+
+  return cld;
+}
+
 ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool has_class_mirror_holder) {
   MutexLocker ml(ClassLoaderDataGraph_lock);
   ClassLoaderData* loader_data = add_to_graph(loader, has_class_mirror_holder);

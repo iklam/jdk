@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/heapShared.hpp"
@@ -807,6 +808,14 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
     loader_data->add_class(this);
   }
 
+  if (AOTLinkedClassBulkLoader::is_preloading_non_javavase_classes()) {
+    // restore_java_mirror will be called later by AOTLinkedClassBulkLoader
+  } else {
+    restore_java_mirror(loader_data, protection_domain, CHECK);
+  }
+}
+
+void Klass::restore_java_mirror(ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
   Handle loader(THREAD, loader_data->class_loader());
   ModuleEntry* module_entry = nullptr;
   Klass* k = this;

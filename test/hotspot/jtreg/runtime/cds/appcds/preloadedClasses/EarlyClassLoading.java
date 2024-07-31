@@ -122,6 +122,9 @@ public class EarlyClassLoading {
     }
 }
 
+// FIXME -- test hidden classes in boot2 (with a lambda expr in boot classpath)
+// FIXME -- test hidden classes in app (with a lambda expr in app classpath)
+
 class EarlyClassLoadingApp {
     static String allPerms = "null.*<no principals>.*java.security.Permissions.*,*java.security.AllPermission.*<all permissions>.*<all actions>";
 

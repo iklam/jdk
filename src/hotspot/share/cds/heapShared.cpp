@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
@@ -900,6 +901,7 @@ void HeapShared::copy_objects() {
   if (CDSConfig::is_dumping_full_module_graph()) {
     archive_object_subgraphs(fmg_archive_subgraph_entry_fields,
                              true /* is_full_module_graph */);
+    AOTLinkedClassBulkLoader::record_heap_roots();
     Modules::verify_archived_modules();
   }
 }

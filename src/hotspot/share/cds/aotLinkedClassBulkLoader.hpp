@@ -42,15 +42,28 @@ template <typename T> class Array;
 // in the JVM bootstrap stage, way before any application code is executed.
 //
 class AOTLinkedClassBulkLoader :  AllStatic {
+  enum class LoaderKind : int {
+    BOOT,
+    PLATFORM,
+    APP
+  };
+
   static bool _preloading_non_javavase_classes;
   static Array<InstanceKlass*>* _unregistered_classes_from_preimage;
 
-  static void load_table(AOTLinkedClassTable* table, Handle loader, TRAPS);
-  static void load_classes(Array<InstanceKlass*>* classes, const char* category, Handle loader, TRAPS);
+  static ClassLoaderData* _platform_class_loader_data;
+  static ClassLoaderData* _app_class_loader_data;
+
+  static Handle init_platform_loader(JavaThread* current);
+  static Handle init_app_loader(JavaThread* current);
+
+  static void load_impl(LoaderKind loader_kind, ClassLoaderData* loader_data, TRAPS);
+  static void load_table(AOTLinkedClassTable* table, LoaderKind loader_kind, ClassLoaderData* loader_data, TRAPS);
+  static void load_classes(Array<InstanceKlass*>* classes, const char* category, ClassLoaderData *loader_data, TRAPS);
   static void load_class_quick(InstanceKlass* ik, ClassLoaderData* loader_data, Handle domain, TRAPS);
-  static void load_initiated_classes(JavaThread* current, const char* category, Handle loader, Array<InstanceKlass*>* classes);
-  static void load_hidden_class(Handle class_loader, InstanceKlass* ik, TRAPS);
-  static void post_module_init_impl(AOTLinkedClassTable* table, TRAPS);
+  static void load_initiated_classes(JavaThread* current, const char* category, ClassLoaderData* loader_data, Array<InstanceKlass*>* classes);
+  static void load_hidden_class(ClassLoaderData* loader_data, InstanceKlass* ik, TRAPS);
+  static void post_module_init_impl(Array<InstanceKlass*>* classes, TRAPS);
   static void maybe_init_or_link(Array<InstanceKlass*>* classes, TRAPS);
   static void jvmti_agent_error(InstanceKlass* expected, InstanceKlass* actual, const char* type);
 
@@ -59,13 +72,18 @@ class AOTLinkedClassBulkLoader :  AllStatic {
 public:
   static void serialize(SerializeClosure* soc, bool is_static_archive);
   static void record_unregistered_classes();
+  static void record_heap_roots() NOT_CDS_JAVA_HEAP_RETURN;
 
-  static void load(JavaThread* current, Handle loader) NOT_CDS_RETURN;
+  static void load(JavaThread* current) NOT_CDS_RETURN;
   static bool is_preloading_non_javavase_classes() NOT_CDS_RETURN_(false);
   static void init_javabase_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static void post_module_init(TRAPS) NOT_CDS_RETURN;
   static void replay_training_at_init_for_preloaded_classes(TRAPS) NOT_CDS_RETURN;
   static bool class_preloading_finished();
+
+  // Temp functions for supporting CDSConfig::is_dumping_final_static_archive()
+  // Leyden only -- don't upstream as part of JDK-8315737
+  static void restore_class_loader_data(Handle loader);
 
   static void print_counters() NOT_CDS_RETURN;
 };

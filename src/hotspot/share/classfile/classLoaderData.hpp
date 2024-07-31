@@ -191,6 +191,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
 public:
   ~ClassLoaderData();
 
+  void update_class_loader(Handle h_class_loader);
   void set_unloading_next(ClassLoaderData* unloading_next);
   ClassLoaderData* unloading_next() const;
   void unload();

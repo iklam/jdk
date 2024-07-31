@@ -47,6 +47,7 @@
 // the singleton class the_null_class_loader_data().
 
 #include "precompiled.hpp"
+#include "cds/cdsConfig.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataGraph.inline.hpp"
 #include "classfile/dictionary.hpp"
@@ -178,6 +179,15 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool has_class_mirror_ho
   NOT_PRODUCT(_dependency_count = 0); // number of class loader dependencies
 
   JFR_ONLY(INIT_ID(this);)
+}
+
+// Leyden only -- don't upstream as part of JDK-8315737
+void ClassLoaderData::update_class_loader(Handle h_class_loader) {
+  // assert CDS Config
+  assert(_class_loader.is_empty(), "must be");
+  _class_loader = _handles.add(h_class_loader());
+  _class_loader_klass = h_class_loader->klass();
+  initialize_name(h_class_loader);
 }
 
 ClassLoaderData::ChunkedHandleList::~ChunkedHandleList() {
@@ -644,6 +654,9 @@ Dictionary* ClassLoaderData::create_dictionary() {
   int size;
   if (_the_null_class_loader_data == nullptr) {
     size = _boot_loader_dictionary_size;
+  } else if (CDSConfig::is_dumping_final_static_archive() && class_loader() == nullptr) {
+    // Leyden 
+    size = _boot_loader_dictionary_size; // for final image dump only, doesn't matter
   } else if (class_loader()->is_a(vmClasses::reflect_DelegatingClassLoader_klass())) {
     size = 1;  // there's only one class in relection class loader and no initiated classes
   } else if (is_system_class_loader_data()) {
