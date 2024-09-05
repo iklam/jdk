@@ -491,7 +491,12 @@ void HeapShared::copy_preinitialized_mirror(Klass* orig_k, oop orig_mirror, oop 
 
 static void copy_java_mirror_hashcode(oop orig_mirror, oop scratch_m) {
   int src_hash = orig_mirror->identity_hash();
-  scratch_m->set_mark(markWord::prototype().copy_set_hash(src_hash));
+  if (UseCompactObjectHeaders) {
+    narrowKlass nk = CompressedKlassPointers::encode_not_null(orig_mirror->klass());
+    scratch_m->set_mark(markWord::prototype().set_narrow_klass(nk).copy_set_hash(src_hash));
+  } else {
+    scratch_m->set_mark(markWord::prototype().copy_set_hash(src_hash));
+  }
   assert(scratch_m->mark().is_unlocked(), "sanity");
 
   DEBUG_ONLY(int archived_hash = scratch_m->identity_hash());
