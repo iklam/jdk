@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,25 +22,35 @@
  *
  */
 
-#ifndef SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
-#define SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
-
-#include "runtime/flags/jvmFlag.hpp"
-
 /*
- * Here we have runtime arguments constraints functions, which are called automatically
- * whenever flag's value changes. If the constraint fails the function should return
- * an appropriate error value.
- */
 
-#define RUNTIME_CONSTRAINTS(f)                        \
-  f(ccstr,  AOTModeConstraintFunc)                    \
-  f(int,    ObjectAlignmentInBytesConstraintFunc)     \
-  f(int,    ContendedPaddingWidthConstraintFunc)      \
-  f(int,    PerfDataSamplingIntervalFunc)             \
-  f(uintx,  VMPageSizeConstraintFunc)                 \
-  f(size_t, NUMAInterleaveGranularityConstraintFunc)
 
-RUNTIME_CONSTRAINTS(DECLARE_CONSTRAINT)
+class InitiatingLoaderTester {
+    public static Object tryAccess() {
+        return jdk.internal.misc.Unsafe.getUnsafe();
+    }
+}
 
-#endif // SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
+
+
+*/
+
+
+super class InitiatingLoaderTester
+    version 66:0
+{
+  Method "<init>":"()V"
+    stack 1 locals 1
+  {
+        aload_0;
+        invokespecial    Method java/lang/Object."<init>":"()V";
+        return;
+  }
+  public static Method tryAccess:"()Ljava/lang/Object;"
+    stack 2 locals 0
+  {
+        invokestatic    Method jdk/internal/misc/Unsafe."getUnsafe":"()Ljdk/internal/misc/Unsafe;";
+        areturn;
+  }
+
+} // end Class InitiatingLoaderTester

@@ -23,10 +23,10 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotClassLinker.hpp"
+#include "cds/aotConstantPoolResolver.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/cdsConfig.hpp"
-#include "cds/classPrelinker.hpp"
-#include "cds/regeneratedClasses.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
@@ -38,42 +38,16 @@
 #include "oops/klass.inline.hpp"
 #include "runtime/handles.inline.hpp"
 
-ClassPrelinker::ClassesTable* ClassPrelinker::_processed_classes = nullptr;
-ClassPrelinker::ClassesTable* ClassPrelinker::_vm_classes = nullptr;
+AOTConstantPoolResolver::ClassesTable* AOTConstantPoolResolver::_processed_classes = nullptr;
 
-bool ClassPrelinker::is_vm_class(InstanceKlass* ik) {
-  return (_vm_classes->get(ik) != nullptr);
-}
-
-void ClassPrelinker::add_one_vm_class(InstanceKlass* ik) {
-  bool created;
-  _vm_classes->put_if_absent(ik, &created);
-  if (created) {
-    InstanceKlass* super = ik->java_super();
-    if (super != nullptr) {
-      add_one_vm_class(super);
-    }
-    Array<InstanceKlass*>* ifs = ik->local_interfaces();
-    for (int i = 0; i < ifs->length(); i++) {
-      add_one_vm_class(ifs->at(i));
-    }
-  }
-}
-
-void ClassPrelinker::initialize() {
-  assert(_vm_classes == nullptr, "must be");
-  _vm_classes = new (mtClass)ClassesTable();
+void AOTConstantPoolResolver::initialize() {
+  assert(_processed_classes == nullptr, "must be");
   _processed_classes = new (mtClass)ClassesTable();
-  for (auto id : EnumRange<vmClassID>{}) {
-    add_one_vm_class(vmClasses::klass_at(id));
-  }
 }
 
-void ClassPrelinker::dispose() {
-  assert(_vm_classes != nullptr, "must be");
-  delete _vm_classes;
+void AOTConstantPoolResolver::dispose() {
+  assert(_processed_classes != nullptr, "must be");
   delete _processed_classes;
-  _vm_classes = nullptr;
   _processed_classes = nullptr;
 }
 
@@ -81,7 +55,7 @@ void ClassPrelinker::dispose() {
 // the same information at both dump time and run time. This is a
 // necessary (but not sufficient) condition for pre-resolving cp_index
 // during CDS archive assembly.
-bool ClassPrelinker::is_resolution_deterministic(ConstantPool* cp, int cp_index) {
+bool AOTConstantPoolResolver::is_resolution_deterministic(ConstantPool* cp, int cp_index) {
   assert(!is_in_archivebuilder_buffer(cp), "sanity");
 
   if (cp->tag_at(cp_index).is_klass()) {
@@ -89,6 +63,8 @@ bool ClassPrelinker::is_resolution_deterministic(ConstantPool* cp, int cp_index)
     // currently archive only CP entries that are already resolved.
     Klass* resolved_klass = cp->resolved_klass_at(cp_index);
     return resolved_klass != nullptr && is_class_resolution_deterministic(cp->pool_holder(), resolved_klass);
+  } else if (cp->tag_at(cp_index).is_invoke_dynamic()) {
+    return is_indy_resolution_deterministic(cp, cp_index);
   } else if (cp->tag_at(cp_index).is_field() ||
              cp->tag_at(cp_index).is_method() ||
              cp->tag_at(cp_index).is_interface_method()) {
@@ -116,7 +92,7 @@ bool ClassPrelinker::is_resolution_deterministic(ConstantPool* cp, int cp_index)
   }
 }
 
-bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder, Klass* resolved_class) {
+bool AOTConstantPoolResolver::is_class_resolution_deterministic(InstanceKlass* cp_holder, Klass* resolved_class) {
   assert(!is_in_archivebuilder_buffer(cp_holder), "sanity");
   assert(!is_in_archivebuilder_buffer(resolved_class), "sanity");
 
@@ -133,7 +109,13 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       return true;
     }
 
-    if (is_vm_class(ik)) {
+    if (CDSConfig::is_dumping_aot_linked_classes()) {
+      if (AOTClassLinker::try_add_candidate(ik)) {
+        return true;
+      } else {
+        return false;
+      }
+    } else if (AOTClassLinker::is_vm_class(ik)) {
       if (ik->class_loader() != cp_holder->class_loader()) {
         // At runtime, cp_holder() may not be able to resolve to the same
         // ik. For example, a different version of ik may be defined in
@@ -142,6 +124,8 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       } else {
         return true;
       }
+    } else {
+      return false;
     }
   } else if (resolved_class->is_objArray_klass()) {
     Klass* elem = ObjArrayKlass::cast(resolved_class)->bottom_klass();
@@ -149,15 +133,17 @@ bool ClassPrelinker::is_class_resolution_deterministic(InstanceKlass* cp_holder,
       return is_class_resolution_deterministic(cp_holder, InstanceKlass::cast(elem));
     } else if (elem->is_typeArray_klass()) {
       return true;
+    } else {
+      return false;
     }
   } else if (resolved_class->is_typeArray_klass()) {
     return true;
+  } else {
+    return false;
   }
-
-  return false;
 }
 
-void ClassPrelinker::dumptime_resolve_constants(InstanceKlass* ik, TRAPS) {
+void AOTConstantPoolResolver::dumptime_resolve_constants(InstanceKlass* ik, TRAPS) {
   if (!ik->is_linked()) {
     return;
   }
@@ -179,7 +165,7 @@ void ClassPrelinker::dumptime_resolve_constants(InstanceKlass* ik, TRAPS) {
 }
 
 // This works only for the boot/platform/app loaders
-Klass* ClassPrelinker::find_loaded_class(Thread* current, oop class_loader, Symbol* name) {
+Klass* AOTConstantPoolResolver::find_loaded_class(Thread* current, oop class_loader, Symbol* name) {
   HandleMark hm(current);
   Handle h_loader(current, class_loader);
   Klass* k = SystemDictionary::find_instance_or_array_klass(current, name,
@@ -202,13 +188,13 @@ Klass* ClassPrelinker::find_loaded_class(Thread* current, oop class_loader, Symb
   return nullptr;
 }
 
-Klass* ClassPrelinker::find_loaded_class(Thread* current, ConstantPool* cp, int class_cp_index) {
+Klass* AOTConstantPoolResolver::find_loaded_class(Thread* current, ConstantPool* cp, int class_cp_index) {
   Symbol* name = cp->klass_name_at(class_cp_index);
   return find_loaded_class(current, cp->pool_holder()->class_loader(), name);
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
-void ClassPrelinker::resolve_string(constantPoolHandle cp, int cp_index, TRAPS) {
+void AOTConstantPoolResolver::resolve_string(constantPoolHandle cp, int cp_index, TRAPS) {
   if (CDSConfig::is_dumping_heap()) {
     int cache_index = cp->cp_to_object_index(cp_index);
     ConstantPool::string_at_impl(cp, cp_index, cache_index, CHECK);
@@ -216,7 +202,7 @@ void ClassPrelinker::resolve_string(constantPoolHandle cp, int cp_index, TRAPS) 
 }
 #endif
 
-void ClassPrelinker::preresolve_class_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
+void AOTConstantPoolResolver::preresolve_class_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
   if (!SystemDictionaryShared::is_builtin_loader(ik->class_loader_data())) {
     return;
   }
@@ -245,7 +231,7 @@ void ClassPrelinker::preresolve_class_cp_entries(JavaThread* current, InstanceKl
   }
 }
 
-void ClassPrelinker::preresolve_field_and_method_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
+void AOTConstantPoolResolver::preresolve_field_and_method_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
   JavaThread* THREAD = current;
   constantPoolHandle cp(THREAD, ik->constants());
   if (cp->cache() == nullptr) {
@@ -265,6 +251,7 @@ void ClassPrelinker::preresolve_field_and_method_cp_entries(JavaThread* current,
           CLEAR_PENDING_EXCEPTION; // just ignore
         }
         break;
+      case Bytecodes::_invokehandle:
       case Bytecodes::_invokespecial:
       case Bytecodes::_invokevirtual:
       case Bytecodes::_invokeinterface:
@@ -280,7 +267,7 @@ void ClassPrelinker::preresolve_field_and_method_cp_entries(JavaThread* current,
   }
 }
 
-void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecodes::Code bc, int raw_index,
+void AOTConstantPoolResolver::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecodes::Code bc, int raw_index,
                                            GrowableArray<bool>* preresolve_list, TRAPS) {
   methodHandle mh(THREAD, m);
   constantPoolHandle cp(THREAD, ik->constants());
@@ -317,6 +304,10 @@ void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecod
     InterpreterRuntime::cds_resolve_invoke(bc, raw_index, cp, CHECK);
     break;
 
+  case Bytecodes::_invokehandle:
+    InterpreterRuntime::cds_resolve_invokehandle(raw_index, cp, CHECK);
+    break;
+
   default:
     ShouldNotReachHere();
   }
@@ -334,8 +325,107 @@ void ClassPrelinker::maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecod
   }
 }
 
+void AOTConstantPoolResolver::preresolve_indy_cp_entries(JavaThread* current, InstanceKlass* ik, GrowableArray<bool>* preresolve_list) {
+  JavaThread* THREAD = current;
+  constantPoolHandle cp(THREAD, ik->constants());
+  if (!CDSConfig::is_dumping_invokedynamic() || cp->cache() == nullptr) {
+    return;
+  }
+
+  assert(preresolve_list != nullptr, "preresolve_indy_cp_entries() should not be called for "
+         "regenerated LambdaForm Invoker classes, which should not have indys anyway.");
+
+  Array<ResolvedIndyEntry>* indy_entries = cp->cache()->resolved_indy_entries();
+  for (int i = 0; i < indy_entries->length(); i++) {
+    ResolvedIndyEntry* rie = indy_entries->adr_at(i);
+    int cp_index = rie->constant_pool_index();
+    if (preresolve_list->at(cp_index) == true && !rie->is_resolved() && is_indy_resolution_deterministic(cp(), cp_index)) {
+      InterpreterRuntime::cds_resolve_invokedynamic(i, cp, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        CLEAR_PENDING_EXCEPTION; // just ignore
+      }
+    }
+  }
+}
+
+static GrowableArrayCHeap<char*, mtClassShared>* _invokedynamic_filter = nullptr;
+
+static bool has_clinit(InstanceKlass* ik) {
+  if (ik->class_initializer() != nullptr) {
+    return true;
+  }
+  InstanceKlass* super = ik->java_super();
+  if (super != nullptr && has_clinit(super)) {
+    return true;
+  }
+  Array<InstanceKlass*>* interfaces = ik->local_interfaces();
+  int num_interfaces = interfaces->length();
+  for (int index = 0; index < num_interfaces; index++) {
+    InstanceKlass* intf = interfaces->at(index);
+    if (has_clinit(intf)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool AOTConstantPoolResolver::is_indy_resolution_deterministic(ConstantPool* cp, int cp_index) {
+  assert(cp->tag_at(cp_index).is_invoke_dynamic(), "sanity");
+  if (!CDSConfig::is_dumping_invokedynamic()) {
+    return false;
+  }
+
+  if (!SystemDictionaryShared::is_builtin(cp->pool_holder())) {
+    return false;
+  }
+
+  int bsm = cp->bootstrap_method_ref_index_at(cp_index);
+  int bsm_ref = cp->method_handle_index_at(bsm);
+  Symbol* bsm_name = cp->uncached_name_ref_at(bsm_ref);
+  Symbol* bsm_signature = cp->uncached_signature_ref_at(bsm_ref);
+  Symbol* bsm_klass = cp->klass_name_at(cp->uncached_klass_ref_index_at(bsm_ref));
+
+  // We currently support only string concat and LambdaMetafactory::metafactory()
+
+  if (bsm_klass->equals("java/lang/invoke/StringConcatFactory") &&
+      bsm_name->equals("makeConcatWithConstants")) {
+    return true;
+  }
+
+  if (bsm_klass->equals("java/lang/invoke/LambdaMetafactory") &&
+      ((bsm_name->equals("metafactory")    && bsm_signature->equals("(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;")) ||
+       (bsm_name->equals("altMetafactory") && bsm_signature->equals("(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;")))) {
+    SignatureStream ss(cp->uncached_signature_ref_at(cp_index));
+    ss.skip_to_return_type();
+    Symbol* type = ss.as_symbol(); // This is the interface type implemented by the lambda proxy
+    InstanceKlass* holder = cp->pool_holder();
+    Klass* k = find_loaded_class(Thread::current(), holder->class_loader(), type);
+    if (k == nullptr) {
+      return false;
+    }
+    if (!k->is_interface()) {
+      // Might be a class not generated by javac
+      return false;
+    }
+
+    if (has_clinit(InstanceKlass::cast(k))) {
+      // We initialize the class of the archived lambda proxy at VM start-up, which will also initialize
+      // the interface that it implements. If that interface has a clinit method, we can potentially
+      // change program execution order. See test/hotspot/jtreg/runtime/cds/appcds/indy/IndyMiscTests.java
+      if (log_is_enabled(Debug, cds, resolve)) {
+        ResourceMark rm;
+        log_debug(cds, resolve)("Cannot resolve Lambda proxy of interface type %s", k->external_name());
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
+}
 #ifdef ASSERT
-bool ClassPrelinker::is_in_archivebuilder_buffer(address p) {
+bool AOTConstantPoolResolver::is_in_archivebuilder_buffer(address p) {
   if (!Thread::current()->is_VM_thread() || ArchiveBuilder::current() == nullptr) {
     return false;
   } else {

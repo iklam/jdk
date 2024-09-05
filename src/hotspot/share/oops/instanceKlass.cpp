@@ -779,6 +779,74 @@ void InstanceKlass::initialize(TRAPS) {
   }
 }
 
+static bool are_super_types_initialized(InstanceKlass* ik) {
+  InstanceKlass* s = ik->java_super();
+  if (s != nullptr && !s->is_initialized()) {
+    if (log_is_enabled(Info, cds, init)) {
+      ResourceMark rm;
+      log_info(cds, init)("%s takes slow path because super class %s is not initialized",
+                          ik->external_name(), s->external_name());
+    }
+    return false;
+  }
+
+  if (ik->has_nonstatic_concrete_methods()) {
+    // Only need to recurse if has_nonstatic_concrete_methods which includes declaring and
+    // having a superinterface that declares, non-static, concrete methods
+    Array<InstanceKlass*>* interfaces = ik->local_interfaces();
+    int len = interfaces->length();
+    for (int i = 0; i < len; i++) {
+      InstanceKlass* intf = interfaces->at(i);
+      if (!intf->is_initialized()) {
+        if (log_is_enabled(Info, cds, init)) {
+          ResourceMark rm;
+          log_info(cds, init)("%s takes slow path because interface %s is not initialized",
+                              ik->external_name(), intf->external_name());
+        }
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+void InstanceKlass::initialize_from_cds(TRAPS) {
+  if (is_initialized()) {
+    return;
+  }
+
+  if (has_preinitialized_mirror() && CDSConfig::is_loading_heap() &&
+      are_super_types_initialized(this)) {
+    // TODO: also check for events listeners such as JVMTI, JFR, etc
+    if (log_is_enabled(Info, cds, init)) {
+      ResourceMark rm;
+      log_info(cds, init)("%s (quickest)", external_name());
+    }
+
+    link_class(CHECK);
+
+#ifdef AZZERT
+    {
+      MonitorLocker ml(THREAD, _init_monitor);
+      assert(!initialized(), "sanity");
+      assert(!is_being_initialized(), "sanity");
+      assert(!is_in_error_state(), "sanity");
+    }
+#endif
+
+    set_init_thread(THREAD);
+    set_initialization_state_and_notify(fully_initialized, CHECK);
+    return;
+  }
+
+  if (log_is_enabled(Info, cds, init)) {
+    ResourceMark rm;
+    log_info(cds, init)("%s%s", external_name(),
+                        (has_preinitialized_mirror() && CDSConfig::is_loading_heap()) ? " (quicker)" : "");
+  }
+  initialize(THREAD);
+}
 
 bool InstanceKlass::verify_code(TRAPS) {
   // 1) Verify the bytecodes
@@ -1247,7 +1315,6 @@ void InstanceKlass::initialize_impl(TRAPS) {
   DTRACE_CLASSINIT_PROBE_WAIT(end, -1, wait);
 }
 
-
 void InstanceKlass::set_initialization_state_and_notify(ClassState state, TRAPS) {
   Handle h_init_lock(THREAD, init_lock());
   if (h_init_lock() != nullptr) {
@@ -1581,6 +1648,8 @@ void InstanceKlass::call_class_initializer(TRAPS) {
     if (initialized) {
       return;
     }
+  } else if (has_preinitialized_mirror() && CDSConfig::is_loading_heap()) {
+    return;
   }
 #endif
 
@@ -2493,6 +2562,7 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
     }
   }
 
+  it->push(&_nest_host);
   it->push(&_nest_members);
   it->push(&_permitted_subclasses);
   it->push(&_record_components);
@@ -2500,7 +2570,6 @@ void InstanceKlass::metaspace_pointers_do(MetaspaceClosure* it) {
 
 #if INCLUDE_CDS
 void InstanceKlass::remove_unshareable_info() {
-
   if (is_linked()) {
     assert(can_be_verified_at_dumptime(), "must be");
     // Remember this so we can avoid walking the hierarchy at runtime.
@@ -2556,8 +2625,12 @@ void InstanceKlass::remove_unshareable_info() {
   _methods_jmethod_ids = nullptr;
   _jni_ids = nullptr;
   _oop_map_cache = nullptr;
-  // clear _nest_host to ensure re-load at runtime
-  _nest_host = nullptr;
+  if (CDSConfig::is_dumping_invokedynamic() && HeapShared::is_lambda_proxy_klass(this)) {
+    // keep _nest_host
+  } else {
+    // clear _nest_host to ensure re-load at runtime
+    _nest_host = nullptr;
+  }
   init_shared_package_entry();
   _dep_context_last_cleaned = 0;
 
@@ -2705,6 +2778,18 @@ bool InstanceKlass::methods_contain_jsr_bytecode() const {
     }
   }
   return false;
+}
+
+int InstanceKlass::shared_class_loader_type() const {
+  if (is_shared_boot_class()) {
+    return ClassLoader::BOOT_LOADER;
+  } else if (is_shared_platform_class()) {
+    return ClassLoader::PLATFORM_LOADER;
+  } else if (is_shared_app_class()) {
+    return ClassLoader::APP_LOADER;
+  } else {
+    return ClassLoader::OTHER;
+  }
 }
 #endif // INCLUDE_CDS
 

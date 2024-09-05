@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,25 +22,19 @@
  *
  */
 
-#ifndef SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
-#define SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
+#ifndef SHARE_CDS_AOTCLASSINITIALIZER_HPP
+#define SHARE_CDS_AOTCLASSINITIALIZER_HPP
 
-#include "runtime/flags/jvmFlag.hpp"
+#include "memory/allStatic.hpp"
+#include "utilities/exceptions.hpp"
 
-/*
- * Here we have runtime arguments constraints functions, which are called automatically
- * whenever flag's value changes. If the constraint fails the function should return
- * an appropriate error value.
- */
+class InstanceKlass;
 
-#define RUNTIME_CONSTRAINTS(f)                        \
-  f(ccstr,  AOTModeConstraintFunc)                    \
-  f(int,    ObjectAlignmentInBytesConstraintFunc)     \
-  f(int,    ContendedPaddingWidthConstraintFunc)      \
-  f(int,    PerfDataSamplingIntervalFunc)             \
-  f(uintx,  VMPageSizeConstraintFunc)                 \
-  f(size_t, NUMAInterleaveGranularityConstraintFunc)
+class AOTClassInitializer : AllStatic {
+public:
+  // Called by heapShared.cpp to see if src_ik->java_mirror() can be archived in
+  // the initialized state.
+  static bool can_archive_preinitialized_mirror(InstanceKlass* src_ik);
+};
 
-RUNTIME_CONSTRAINTS(DECLARE_CONSTRAINT)
-
-#endif // SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
+#endif // SHARE_CDS_AOTCLASSINITIALIZER_HPP

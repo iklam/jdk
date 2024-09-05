@@ -23,6 +23,9 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotClassLinker.hpp"
+#include "cds/aotConstantPoolResolver.hpp"
+#include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/archiveHeapLoader.hpp"
 #include "cds/archiveHeapWriter.hpp"
@@ -32,7 +35,6 @@
 #include "cds/cds_globals.hpp"
 #include "cds/classListParser.hpp"
 #include "cds/classListWriter.hpp"
-#include "cds/classPrelinker.hpp"
 #include "cds/cppVtables.hpp"
 #include "cds/dumpAllocStats.hpp"
 #include "cds/dynamicArchive.hpp"
@@ -77,6 +79,7 @@
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/os.inline.hpp"
 #include "runtime/safepointVerifiers.hpp"
 #include "runtime/sharedRuntime.hpp"
@@ -97,6 +100,7 @@ bool MetaspaceShared::_remapped_readwrite = false;
 void* MetaspaceShared::_shared_metaspace_static_top = nullptr;
 intx MetaspaceShared::_relocation_delta;
 char* MetaspaceShared::_requested_base_address;
+Array<Method*>* MetaspaceShared::_archived_method_handle_intrinsics = nullptr;
 bool MetaspaceShared::_use_optimized_module_handling = true;
 
 // The CDS archive is divided into the following regions:
@@ -306,8 +310,12 @@ void MetaspaceShared::post_initialize(TRAPS) {
   }
 }
 
+// Extra java.lang.Strings to be added to the archive
 static GrowableArrayCHeap<OopHandle, mtClassShared>* _extra_interned_strings = nullptr;
+// Extra Symbols to be added to the archive
 static GrowableArrayCHeap<Symbol*, mtClassShared>* _extra_symbols = nullptr;
+// Methods managed by SystemDictionary::find_method_handle_intrinsic() to be added to the archive
+static GrowableArray<Method*>* _pending_method_handle_intrinsics = NULL;
 
 void MetaspaceShared::read_extra_data(JavaThread* current, const char* filename) {
   _extra_interned_strings = new GrowableArrayCHeap<OopHandle, mtClassShared>(10000);
@@ -358,6 +366,25 @@ void MetaspaceShared::read_extra_data(JavaThread* current, const char* filename)
   }
 }
 
+void MetaspaceShared::make_method_handle_intrinsics_shareable() {
+  for (int i = 0; i < _pending_method_handle_intrinsics->length(); i++) {
+    Method* m = ArchiveBuilder::current()->get_buffered_addr(_pending_method_handle_intrinsics->at(i));
+    m->remove_unshareable_info();
+    // Each method has its own constant pool (which is distinct from m->method_holder()->constants());
+    m->constants()->remove_unshareable_info();
+  }
+}
+
+void MetaspaceShared::write_method_handle_intrinsics() {
+  int len = _pending_method_handle_intrinsics->length();
+  _archived_method_handle_intrinsics = ArchiveBuilder::new_ro_array<Method*>(len);
+  for (int i = 0; i < len; i++) {
+    ArchiveBuilder::current()->write_pointer_in_buffer(_archived_method_handle_intrinsics->adr_at(i),
+                                                       _pending_method_handle_intrinsics->at(i));
+  }
+  log_info(cds)("Archived %d method handle intrinsics", len);
+}
+
 // Read/write a data stream for restoring/preserving metadata pointers and
 // miscellaneous data from/to the shared archive file.
 
@@ -394,7 +421,7 @@ void MetaspaceShared::serialize(SerializeClosure* soc) {
   StringTable::serialize_shared_table_header(soc);
   HeapShared::serialize_tables(soc);
   SystemDictionaryShared::serialize_dictionary_headers(soc);
-
+  AOTLinkedClassBulkLoader::serialize(soc, true);
   InstanceMirrorKlass::serialize_offsets(soc);
 
   // Dump/restore well known classes (pointers)
@@ -403,6 +430,8 @@ void MetaspaceShared::serialize(SerializeClosure* soc) {
 
   CDS_JAVA_HEAP_ONLY(Modules::serialize(soc);)
   CDS_JAVA_HEAP_ONLY(ClassLoaderDataShared::serialize(soc);)
+  soc->do_ptr((void**)&_archived_method_handle_intrinsics);
+
 
   LambdaFormInvokers::serialize(soc);
   soc->do_tag(666);
@@ -489,6 +518,10 @@ public:
         it->push(_extra_symbols->adr_at(i));
       }
     }
+
+    for (int i = 0; i < _pending_method_handle_intrinsics->length(); i++) {
+      it->push(_pending_method_handle_intrinsics->adr_at(i));
+    }
   }
 };
 
@@ -496,6 +529,8 @@ char* VM_PopulateDumpSharedSpace::dump_read_only_tables() {
   ArchiveBuilder::OtherROAllocMark mark;
 
   SystemDictionaryShared::write_to_archive();
+  AOTClassLinker::write_to_archive();
+  MetaspaceShared::write_method_handle_intrinsics();
 
   // Write lambform lines into archive
   LambdaFormInvokers::dump_static_archive_invokers();
@@ -515,13 +550,21 @@ void VM_PopulateDumpSharedSpace::doit() {
 
   DEBUG_ONLY(SystemDictionaryShared::NoClassLoadingMark nclm);
 
+  _pending_method_handle_intrinsics = new (mtClassShared) GrowableArray<Method*>(256, mtClassShared);
+  if (CDSConfig::is_dumping_aot_linked_classes()) {
+    SystemDictionary::get_all_method_handle_intrinsics(_pending_method_handle_intrinsics);
+  }
+
   FileMapInfo::check_nonempty_dir_in_shared_path_table();
 
   NOT_PRODUCT(SystemDictionary::verify();)
 
   // Block concurrent class unloading from changing the _dumptime_table
   MutexLocker ml(DumpTimeTable_lock, Mutex::_no_safepoint_check_flag);
+
+  HeapShared::start_finding_archivable_hidden_classes();
   SystemDictionaryShared::check_excluded_classes();
+  HeapShared::end_finding_archivable_hidden_classes();
 
   _builder.gather_source_objs();
   _builder.reserve_buffer();
@@ -538,6 +581,7 @@ void VM_PopulateDumpSharedSpace::doit() {
 
   log_info(cds)("Make classes shareable");
   _builder.make_klasses_shareable();
+  MetaspaceShared::make_method_handle_intrinsics_shareable();
 
   char* serialized_data = dump_read_only_tables();
 
@@ -603,12 +647,12 @@ bool MetaspaceShared::link_class_for_cds(InstanceKlass* ik, TRAPS) {
   // cpcache to be created. Class verification is done according
   // to -Xverify setting.
   bool res = MetaspaceShared::try_link_class(THREAD, ik);
-  ClassPrelinker::dumptime_resolve_constants(ik, CHECK_(false));
+  AOTConstantPoolResolver::dumptime_resolve_constants(ik, CHECK_(false));
   return res;
 }
 
 void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
-  ClassPrelinker::initialize();
+  AOTClassLinker::initialize();
 
   if (!jcmd_request) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
@@ -669,6 +713,13 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
                      java_lang_String::as_utf8_string(java_lang_Throwable::message(PENDING_EXCEPTION)));
       MetaspaceShared::writing_error("Unexpected exception, use -Xlog:cds,exceptions=trace for detail");
     }
+  }
+
+  if (AOTMode != nullptr && strcmp(AOTMode, "create") == 0) {
+    // We can't return to the JLI launcher, as it will try to run the main class, but
+    // the main class is not specified when -XX:AOTMode=create is used.
+    tty->print_cr("AOTCache creation is complete: %s", AOTCache);
+    vm_exit(0);
   }
 }
 
@@ -766,6 +817,20 @@ void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS
     read_extra_data(THREAD, SharedArchiveConfigFile);
     log_info(cds)("Reading extra data: done.");
   }
+
+#if INCLUDE_CDS_JAVA_HEAP
+  if (CDSConfig::is_dumping_invokedynamic()) {
+    // This makes sure that the MethodType and MethodTypeForm tables won't be updated
+    // concurrently when we are saving their contents into a side table.
+    assert(CDSConfig::allow_only_single_java_thread(), "Required");
+
+    JavaValue result(T_VOID);
+    JavaCalls::call_static(&result, vmClasses::MethodType_klass(),
+                           vmSymbols::createArchivedObjects(),
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+  }
+#endif
 
   // Rewrite and link classes
   log_info(cds)("Rewriting and linking classes ...");
@@ -1443,6 +1508,10 @@ MapArchiveResult MetaspaceShared::map_archive(FileMapInfo* mapinfo, char* mapped
     return MAP_ARCHIVE_SUCCESS; // The dynamic archive has not been specified. No error has happened -- trivially succeeded.
   }
 
+  if (!mapinfo->validate_aot_class_linking()) {
+    return MAP_ARCHIVE_OTHER_FAILURE;
+  }
+
   mapinfo->set_is_mapped(false);
   if (mapinfo->core_region_alignment() != (size_t)core_region_alignment()) {
     log_info(cds)("Unable to map CDS archive -- core_region_alignment() expected: " SIZE_FORMAT
@@ -1522,6 +1591,12 @@ void MetaspaceShared::initialize_shared_spaces() {
     dynamic_mapinfo->close();
     dynamic_mapinfo->unmap_region(MetaspaceShared::bm);
   }
+
+  log_info(cds)("Using AOT-linked classes: %s (%s%s)",
+                CDSConfig::is_using_aot_linked_classes() ? "true" : "false",
+                static_mapinfo->header()->has_aot_linked_classes() ? "static archive: true" : "static archive: false",
+                (dynamic_mapinfo == nullptr) ? "" :
+                   (dynamic_mapinfo->header()->has_aot_linked_classes() ? ", dynamic archive: true" : ", dynamic archive: false"));
 
   // Set up LambdaFormInvokers::_lambdaform_lines for dynamic dump
   if (CDSConfig::is_dumping_dynamic_archive()) {

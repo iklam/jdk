@@ -259,6 +259,7 @@ private:
   void sort_klasses();
   static int compare_symbols_by_address(Symbol** a, Symbol** b);
   static int compare_klass_by_name(Klass** a, Klass** b);
+  void update_hidden_class_loader_type(InstanceKlass* ik) NOT_CDS_JAVA_HEAP_RETURN;
 
   void make_shallow_copies(DumpRegion *dump_region, const SourceObjList* src_objs);
   void make_shallow_copy(DumpRegion *dump_region, SourceObjInfo* src_info);
@@ -292,7 +293,7 @@ public:
   intx buffer_to_requested_delta()           const { return _buffer_to_requested_delta;            }
 
   bool is_in_buffer_space(address p) const {
-    return (buffer_bottom() <= p && p < buffer_top());
+    return (buffer_bottom() != nullptr && buffer_bottom() <= p && p < buffer_top());
   }
 
   template <typename T> bool is_in_requested_static_archive(T p) const {

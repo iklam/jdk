@@ -320,6 +320,7 @@ class InstanceKlass: public Klass {
   void set_shared_loading_failed() { _misc_flags.set_shared_loading_failed(true); }
 
 #if INCLUDE_CDS
+  int  shared_class_loader_type() const;
   void set_shared_class_loader_type(s2 loader_type) { _misc_flags.set_shared_class_loader_type(loader_type); }
   void assign_class_loader_type() { _misc_flags.assign_class_loader_type(_class_loader_data); }
 #endif
@@ -528,6 +529,7 @@ public:
 
   // initialization (virtuals from Klass)
   bool should_be_initialized() const;  // means that initialize should be called
+  void initialize_from_cds(TRAPS);
   void initialize(TRAPS);
   void link_class(TRAPS);
   bool link_class_or_fail(TRAPS); // returns false on failure

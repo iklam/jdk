@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2022, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/aotClassInitializer.hpp"
 #include "cds/archiveBuilder.hpp"
 #include "cds/cdsHeapVerifier.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
@@ -123,6 +124,24 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
   ADD_EXCL("sun/invoke/util/ValueConversions",           "ONE_INT",                // E
                                                          "ZERO_INT");              // E
 
+ if (CDSConfig::is_dumping_invokedynamic()) {
+  ADD_EXCL("java/lang/invoke/DirectMethodHandle",        "LONG_OBJ_TYPE",
+                                                         "OBJ_OBJ_TYPE");
+
+  ADD_EXCL("sun/invoke/util/Wrapper",                    "FLOAT_ZERO",
+                                                         "DOUBLE_ZERO");
+
+  ADD_EXCL("java/lang/invoke/BoundMethodHandle$Specializer",   "BMH_TRANSFORMS",
+                                                               "SPECIES_DATA_ACCESSOR");
+  ADD_EXCL("java/lang/invoke/BoundMethodHandle",               "SPECIALIZER");
+  ADD_EXCL("java/lang/invoke/DelegatingMethodHandle",          "NF_getTarget");
+  ADD_EXCL("java/lang/invoke/MethodHandleImpl$ArrayAccessor",  "OBJECT_ARRAY_GETTER",
+                                                               "OBJECT_ARRAY_SETTER");
+  ADD_EXCL("java/lang/invoke/SimpleMethodHandle",              "BMH_SPECIES");
+
+  ADD_EXCL("java/lang/invoke/StringConcatFactory",             "NEW_ARRAY");
+ }
+
 # undef ADD_EXCL
 
   ClassLoaderDataGraph::classes_do(this);
@@ -179,6 +198,16 @@ public:
         // See HeapShared::initialize_enum_klass().
         return;
       }
+      if (klass->is_instance_klass()) {
+        if (InstanceKlass::cast(klass)->is_initialized() &&
+            AOTClassInitializer::can_archive_preinitialized_mirror(InstanceKlass::cast(klass))) {
+          return;
+        }
+      }
+
+      if (AOTClassInitializer::can_archive_preinitialized_mirror(_ik)) {
+        return;
+      }
 
       // This field *may* be initialized to a different value at runtime. Remember it
       // and check later if it appears in the archived object graph.
@@ -200,12 +229,23 @@ void CDSHeapVerifier::do_klass(Klass* k) {
       return;
     }
 
+    if (HeapShared::is_lambda_form_klass(ik)) {
+      // Archived lambda forms have preinitialized mirrors, so <clinit> won't run.
+      return;
+    }
+
     CheckStaticFields csf(this, ik);
     ik->do_local_static_fields(&csf);
   }
 }
 
 void CDSHeapVerifier::add_static_obj_field(InstanceKlass* ik, oop field, Symbol* name) {
+  if (field->klass() == vmClasses::MethodType_klass() ||
+      field->klass() == vmClasses::LambdaForm_klass()) {
+    // LambdaForm and MethodType are non-modifiable and are not tested for object equality, so
+    // it's OK if the static fields are reinitialized at runtime with alternative instances.
+    return;
+  }
   StaticFieldInfo info = {ik, name};
   _table.put(field, info);
 }
@@ -221,10 +261,19 @@ inline bool CDSHeapVerifier::do_entry(oop& orig_obj, HeapShared::CachedOopInfo& 
       // should be flagged by CDSHeapVerifier.
       return true; /* keep on iterating */
     }
+    if (info->_holder->is_hidden()) {
+      return true;
+    }
     ResourceMark rm;
+    char* class_name = info->_holder->name()->as_C_string();
+    char* field_name = info->_name->as_C_string();
+    if (strstr(class_name, "java/lang/invoke/BoundMethodHandle$Species_") == class_name &&
+        strcmp(field_name, "BMH_SPECIES") == 0) {
+      return true;
+    }
     LogStream ls(Log(cds, heap)::warning());
     ls.print_cr("Archive heap points to a static field that may be reinitialized at runtime:");
-    ls.print_cr("Field: %s::%s", info->_holder->name()->as_C_string(), info->_name->as_C_string());
+    ls.print_cr("Field: %s::%s", class_name, field_name);
     ls.print("Value: ");
     orig_obj->print_on(&ls);
     ls.print_cr("--- trace begin ---");
@@ -280,6 +329,9 @@ int CDSHeapVerifier::trace_to_root(outputStream* st, oop orig_obj, oop orig_fiel
   st->print("[%2d] ", level);
   orig_obj->print_address_on(st);
   st->print(" %s", k->internal_name());
+  if (java_lang_Class::is_instance(orig_obj)) {
+    st->print(" (%s)", java_lang_Class::as_Klass(orig_obj)->external_name());
+  }
   if (orig_field != nullptr) {
     if (k->is_instance_klass()) {
       TraceFields clo(orig_obj, orig_field, st);

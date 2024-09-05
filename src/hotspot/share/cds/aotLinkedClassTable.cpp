@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,25 +22,19 @@
  *
  */
 
-#ifndef SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
-#define SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP
+#include "precompiled.hpp"
+#include "cds/aotLinkedClassTable.hpp"
+#include "cds/cdsConfig.hpp"
+#include "cds/serializeClosure.hpp"
+#include "oops/array.hpp"
 
-#include "runtime/flags/jvmFlag.hpp"
+AOTLinkedClassTable AOTLinkedClassTable::_for_static_archive;
+AOTLinkedClassTable AOTLinkedClassTable::_for_dynamic_archive;
 
-/*
- * Here we have runtime arguments constraints functions, which are called automatically
- * whenever flag's value changes. If the constraint fails the function should return
- * an appropriate error value.
- */
+void AOTLinkedClassTable::serialize(SerializeClosure* soc) {
+  soc->do_ptr((void**)&_boot);
+  soc->do_ptr((void**)&_boot2);
+  soc->do_ptr((void**)&_platform);
+  soc->do_ptr((void**)&_app);
+}
 
-#define RUNTIME_CONSTRAINTS(f)                        \
-  f(ccstr,  AOTModeConstraintFunc)                    \
-  f(int,    ObjectAlignmentInBytesConstraintFunc)     \
-  f(int,    ContendedPaddingWidthConstraintFunc)      \
-  f(int,    PerfDataSamplingIntervalFunc)             \
-  f(uintx,  VMPageSizeConstraintFunc)                 \
-  f(size_t, NUMAInterleaveGranularityConstraintFunc)
-
-RUNTIME_CONSTRAINTS(DECLARE_CONSTRAINT)
-
-#endif // SHARE_RUNTIME_FLAGS_JVMFLAGCONSTRAINTSRUNTIME_HPP

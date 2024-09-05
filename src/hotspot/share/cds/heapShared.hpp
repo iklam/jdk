@@ -161,9 +161,14 @@ public:
   static bool is_subgraph_root_class(InstanceKlass* ik);
 
   // Scratch objects for archiving Klass::java_mirror()
-  static oop scratch_java_mirror(BasicType t) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
-  static oop scratch_java_mirror(Klass* k)    NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(BasicType t)     NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(Klass* k)        NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
+  static oop scratch_java_mirror(oop java_mirror) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
   static bool is_archived_boot_layer_available(JavaThread* current) NOT_CDS_JAVA_HEAP_RETURN_(false);
+
+  static void start_finding_archivable_hidden_classes() NOT_CDS_JAVA_HEAP_RETURN;
+  static void find_archivable_hidden_classes_in_object(oop o) NOT_CDS_JAVA_HEAP_RETURN;
+  static void end_finding_archivable_hidden_classes() NOT_CDS_JAVA_HEAP_RETURN;
 
 private:
 #if INCLUDE_CDS_JAVA_HEAP
@@ -179,11 +184,14 @@ private:
 
   static void count_allocation(size_t size);
   static void print_stats();
+  static void debug_trace();
 public:
   static unsigned oop_hash(oop const& p);
   static unsigned string_oop_hash(oop const& string) {
     return java_lang_String::hash_code(string);
   }
+
+  class CopyKlassSubGraphInfoToArchive;
 
   class CachedOopInfo {
     // Used by CDSHeapVerifier.
@@ -246,7 +254,11 @@ private:
   static DumpTimeKlassSubGraphInfoTable* _dump_time_subgraph_info_table;
   static RunTimeKlassSubGraphInfoTable _run_time_subgraph_info_table;
 
+  class FindHiddenClassesOopClosure;
+  static void find_archivable_hidden_classes_helper(ArchivableStaticFieldInfo fields[]);
+
   static CachedOopInfo make_cached_oop_info(oop obj);
+  static ArchivedKlassSubGraphInfoRecord* archive_subgraph_info(KlassSubGraphInfo* info);
   static void archive_object_subgraphs(ArchivableStaticFieldInfo fields[],
                                        bool is_full_module_graph);
 
@@ -288,6 +300,7 @@ private:
   //    - Klass::java_mirror()
   //    - ConstantPool::resolved_references()
   static KlassSubGraphInfo* _default_subgraph_info;
+  static ArchivedKlassSubGraphInfoRecord* _runtime_default_subgraph_info;
 
   static GrowableArrayCHeap<oop, mtClassShared>* _pending_roots;
   static OopHandle _roots;
@@ -324,7 +337,7 @@ private:
   static bool has_been_seen_during_subgraph_recording(oop obj);
   static void set_has_been_seen_during_subgraph_recording(oop obj);
   static bool archive_object(oop obj);
-
+  static void copy_preinitialized_mirror(Klass* orig_k, oop orig_mirror, oop m);
   static void copy_interned_strings();
 
   static void resolve_classes_for_subgraphs(JavaThread* current, ArchivableStaticFieldInfo fields[]);
@@ -332,6 +345,7 @@ private:
   static void clear_archived_roots_of(Klass* k);
   static const ArchivedKlassSubGraphInfoRecord*
                resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAPS);
+  static void resolve_or_init(const char* klass_name, bool do_init, TRAPS);
   static void resolve_or_init(Klass* k, bool do_init, TRAPS);
   static void init_archived_fields_for(Klass* k, const ArchivedKlassSubGraphInfoRecord* record);
 
@@ -346,6 +360,7 @@ private:
   static void fill_failed_loaded_region();
   static void mark_native_pointers(oop orig_obj);
   static bool has_been_archived(oop orig_obj);
+  static bool can_mirror_be_used_in_subgraph(oop orig_java_mirror);
   static void archive_java_mirrors();
   static void archive_strings();
  public:
@@ -412,6 +427,7 @@ private:
   static objArrayOop scratch_resolved_references(ConstantPool* src);
   static void add_scratch_resolved_references(ConstantPool* src, objArrayOop dest) NOT_CDS_JAVA_HEAP_RETURN;
   static void init_scratch_objects(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static void init_box_classes(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static bool is_heap_region(int idx) {
     CDS_JAVA_HEAP_ONLY(return (idx == MetaspaceShared::hp);)
     NOT_CDS_JAVA_HEAP_RETURN_(false);
@@ -427,7 +443,15 @@ private:
 
 #ifndef PRODUCT
   static bool is_a_test_class_in_unnamed_module(Klass* ik) NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static void initialize_test_class_from_archive(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
 #endif
+
+  static void initialize_java_lang_invoke(TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+  static void initialize_default_subgraph_classes(Handle loader, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
+
+  static bool is_lambda_form_klass(InstanceKlass* ik) NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static bool is_lambda_proxy_klass(InstanceKlass* ik) NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static bool is_archivable_hidden_klass(InstanceKlass* ik) NOT_CDS_JAVA_HEAP_RETURN_(false);
 };
 
 #if INCLUDE_CDS_JAVA_HEAP
