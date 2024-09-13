@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/cds_globals.hpp"
+#include "cds/metaspaceShared.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/classLoaderHierarchyDCmd.hpp"
 #include "classfile/classLoaderStats.hpp"
@@ -1007,6 +1008,17 @@ DumpSharedArchiveDCmd::DumpSharedArchiveDCmd(outputStream* output, bool heap) :
 void DumpSharedArchiveDCmd::execute(DCmdSource source, TRAPS) {
   jboolean is_static;
   const char* scmd = _suboption.value();
+
+  if (strcmp(scmd, "premain_dump") == 0) {
+    if (!CDSConfig::is_dumping_preimage_static_archive()) {
+      output()->print_cr("Must be in training run");
+    } else {
+      MetaspaceShared::preload_and_dump(THREAD);
+      assert(!THREAD->has_pending_exception(), "must be");
+      output()->print_cr("Dumped info %s", CacheDataStore);
+    }
+    return;
+  }
 
   // The check for _filename.is_set() is because we don't want to use
   // DEFAULT_CDS_ARCHIVE_FILENAME, since it is meant as a description

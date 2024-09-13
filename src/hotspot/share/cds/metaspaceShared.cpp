@@ -872,6 +872,15 @@ void MetaspaceShared::preload_classes(TRAPS) {
 }
 
 void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS) {
+  if (CDSConfig::is_dumping_preimage_static_archive()) {
+    static bool dumped = false;
+    if (dumped) {
+      return;
+    } else {
+      dumped = true;
+    }
+  }
+
   if (CDSConfig::is_dumping_classic_static_archive()) {
     // We are running with -Xshare:dump
     preload_classes(CHECK);
