@@ -463,7 +463,7 @@ public final class ModuleBootstrap {
 
         // Step 8: CDS dump phase
 
-        if (CDS.isDumpingStaticArchive() && !haveUpgradeModulePath && addModules.isEmpty()) {
+        if (CDS.isDumpingStaticArchive() && !haveUpgradeModulePath && addModules.isEmpty() && !ModuleReferences.hasExplodedReferences()) {
             assert !isPatched;
 
             // Archive module graph and maybe boot layer

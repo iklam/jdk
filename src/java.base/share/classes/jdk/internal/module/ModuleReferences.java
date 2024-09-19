@@ -39,6 +39,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -60,6 +61,13 @@ import sun.net.www.ParseUtil;
  */
 
 class ModuleReferences {
+    static volatile boolean hasExploded;
+
+    // Exploded modules cannot be stored into CDS
+    static boolean hasExplodedReferences() {
+        return hasExploded;
+    }
+
     private ModuleReferences() { }
 
     /**
@@ -98,11 +106,10 @@ class ModuleReferences {
                 return new JarModuleReader(fileString, uri);
             }
         };
-        byte[] hash = ModuleHashes.computeHash(supplier);
         HashSupplier hasher = new HashSupplier() {
             @Override
             public byte[] generate(String algorithm) {
-                return hash;
+              return ModuleHashes.computeHash(supplier, algorithm);
             }
         };
         return newModule(attrs, uri, supplier, patcher, hasher);
@@ -124,6 +131,7 @@ class ModuleReferences {
     static ModuleReference newExplodedModule(ModuleInfo.Attributes attrs,
                                              ModulePatcher patcher,
                                              Path dir) {
+        hasExploded = true;
         Supplier<ModuleReader> supplier = () -> new ExplodedModuleReader(dir);
         return newModule(attrs, dir.toUri(), supplier, patcher, null);
     }
