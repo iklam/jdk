@@ -39,7 +39,7 @@
 // This is a hard-coded list of classes that are safe to preinitialize at dump time. It needs
 // to be updated if the Java source code changes.
 bool AOTClassInitializer::is_forced_preinit_class(InstanceKlass* ik) {
-  if (!CDSConfig::is_dumping_invokedynamic()) {
+  if (!CDSConfig::is_dumping_invokedynamic() || 1) {
     return false;
   }
 
@@ -254,23 +254,52 @@ bool AOTClassInitializer::can_archive_preinitialized_mirror(InstanceKlass* ik) {
 
   if (ik->is_hidden()) {
     return HeapShared::is_archivable_hidden_klass(ik);
-  } else if (ik->is_initialized()) {
-    if (ik->java_super() == vmClasses::Enum_klass()) {
+  }
+
+  if (ik->is_initialized() && ik->java_super() == vmClasses::Enum_klass()) {
+    return true;
+  }
+
+  Symbol* name = ik->name();
+  if (name->equals("jdk/internal/constant/PrimitiveClassDescImpl") ||
+      name->equals("jdk/internal/constant/ReferenceClassDescImpl") ||
+      name->equals("java/lang/constant/ConstantDescs")) {
+    assert(ik->is_initialized(), "must be");
+    // The above 3 classes are special cases needed to support the aot-caching of
+    // java.lang.invoke.MethodType instances:
+    // - MethodType points to sun.invoke.util.Wrapper enums
+    // - The Wrapper enums point to static final fields in the above 3 classes.
+    //   E.g., ConstantDescs.CD_Boolean.
+    // - If we re-run the <clinit> of these 3 classes again during the production
+    //   run, ConstantDescs.CD_Boolean will get a new value that has a different
+    //   object identity than the value referenced by the the Wrapper enums.
+    // - However, Wrapper requires object identity (it allows the use of == to
+    //   test the equality of ClassDesc, etc).
+    // Therefore, we must preserve the static fields of these 3 classes from
+    // the assembly phase.
+    return true;
+  }
+  if (CDSConfig::is_dumping_invokedynamic()) {
+    if (name->equals("java/lang/Boolean$AOTHolder") ||
+        name->equals("java/lang/Character$CharacterCache") ||
+        name->equals("java/lang/invoke/BoundMethodHandle$Specializer") ||
+        name->equals("java/lang/invoke/ClassSpecializer") ||
+        name->equals("java/lang/invoke/DelegatingMethodHandle") ||
+        name->equals("java/lang/invoke/DelegatingMethodHandle$Holder") ||
+        name->equals("java/lang/invoke/DirectMethodHandle") ||
+        name->equals("java/lang/invoke/DirectMethodHandle$AOTHolder") ||
+        name->equals("java/lang/invoke/DirectMethodHandle$Holder") ||
+        name->equals("java/lang/invoke/Invokers") ||
+        name->equals("java/lang/invoke/Invokers$Holder") ||
+        name->equals("java/lang/invoke/LambdaForm") ||
+        name->equals("java/lang/invoke/LambdaForm$NamedFunction") ||
+        name->equals("java/lang/invoke/LambdaForm$NamedFunction$AOTHolder") ||
+        name->equals("java/lang/invoke/MethodHandle") ||
+        name->equals("java/lang/invoke/MethodHandles$Lookup") ||
+        name->equals("java/lang/invoke/MethodType$AOTHolder") ||
+        name->starts_with("java/lang/invoke/ClassSpecializer$")) {
+      assert(ik->is_initialized(), "must be");
       return true;
-    }
-    Symbol* name = ik->name();
-    if (name->equals("jdk/internal/constant/PrimitiveClassDescImpl") ||
-        name->equals("jdk/internal/constant/ReferenceClassDescImpl") ||
-        name->equals("java/lang/constant/ConstantDescs") ||
-        name->equals("sun/invoke/util/Wrapper")) {
-      return true;
-    }
-    if (CDSConfig::is_dumping_invokedynamic()) {
-      if (name->equals("java/lang/invoke/DirectMethodHandle$AOTHolder") ||
-          name->equals("java/lang/invoke/LambdaForm$NamedFunction$AOTHolder") ||
-          name->equals("java/lang/invoke/MethodType$AOTHolder")) {
-        return true;
-      }
     }
   }
 
