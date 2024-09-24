@@ -43,6 +43,11 @@ public class LambdaWithUseImplMethodHandle {
 
     // See pkg2/Child.jcod for details about the condition that triggers JDK-8290417
     public static void main(String[] args) throws Exception {
+        test(false);
+        test(true);
+    }
+
+    static void test(boolean aotClassLinking) throws Exception {
         String appJar = ClassFileInstaller.getJarPath("test.jar");
         String mainClass = "LambdaWithUseImplMethodHandleApp";
         String expectedMsg = "Called BaseWithProtectedMethod::protectedMethod";
@@ -57,6 +62,9 @@ public class LambdaWithUseImplMethodHandle {
             .addPrefix("-XX:ExtraSharedClassListFile=" + classList,
                        "-cp", appJar)
             .setArchiveName(archiveName);
+        if (aotClassLinking) {
+            opts.addPrefix("-XX:+AOTClassLinking");
+        }
         CDSTestUtils.createArchiveAndCheck(opts);
 
         // run with archive
