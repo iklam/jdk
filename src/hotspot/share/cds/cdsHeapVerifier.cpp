@@ -28,6 +28,7 @@
 #include "cds/cdsHeapVerifier.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/javaClasses.inline.hpp"
+#include "classfile/systemDictionaryShared.hpp"
 #include "classfile/moduleEntry.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "logging/log.hpp"
@@ -41,9 +42,10 @@
 #if INCLUDE_CDS_JAVA_HEAP
 
 // CDSHeapVerifier is used to check for problems where an archived object references a
-// static field that may be reinitialized at runtime. In the following example,
+// static field that may be get a different value at runtime. In the following example,
 //      Foo.get.test()
-// correctly returns true when CDS disabled, but incorrectly returns false when CDS is enabled.
+// correctly returns true when CDS disabled, but incorrectly returns false when CDS is enabled,
+// because the archived archivedFoo.bar value is different than Bar.bar.
 //
 // class Foo {
 //     final Foo archivedFoo; // this field is archived by CDS
@@ -127,8 +129,6 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
                                                          "ZERO_INT");              // E
 
   if (CDSConfig::is_dumping_invokedynamic()) {
-    ADD_EXCL("java/lang/invoke/MethodHandles",            "IMPL_NAMES");           // D
-    ADD_EXCL("java/lang/invoke/MemberName$Factory",       "INSTANCE");             // D
     ADD_EXCL("java/lang/invoke/InvokerBytecodeGenerator", "MEMBERNAME_FACTORY",    // D
                                                           "INVOKER_SUPER_DESC");   // E same as java.lang.constant.ConstantDescs::CD_Object
   }
@@ -140,9 +140,10 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
 
 CDSHeapVerifier::~CDSHeapVerifier() {
   if (_problems > 0) {
-    log_warning(cds, heap)("Scanned %d objects. Found %d case(s) where "
-                           "an object points to a static field that may be "
-                           "reinitialized at runtime.", _archived_objs, _problems);
+    log_error(cds, heap)("Scanned %d objects. Found %d case(s) where "
+                         "an object points to a static field that "
+                         "may hold a different value at runtime.", _archived_objs, _problems);
+    MetaspaceShared::unrecoverable_writing_error();
   }
 }
 
@@ -150,6 +151,14 @@ class CDSHeapVerifier::CheckStaticFields : public FieldClosure {
   CDSHeapVerifier* _verifier;
   InstanceKlass* _ik; // The class whose static fields are being checked.
   const char** _exclusions;
+
+  bool has_aot_initialized_mirror(InstanceKlass* src_ik) {
+    if (SystemDictionaryShared::is_excluded_class(src_ik)) {
+      return false;
+    }
+    return ArchiveBuilder::current()->get_buffered_addr(src_ik)->has_aot_initialized_mirror();
+  }
+
 public:
   CheckStaticFields(CDSHeapVerifier* verifier, InstanceKlass* ik)
     : _verifier(verifier), _ik(ik) {
@@ -186,15 +195,16 @@ public:
 
       if (field_type->is_instance_klass()) {
         InstanceKlass* field_ik = InstanceKlass::cast(field_type);
+
         if (field_ik->java_super() == vmClasses::Enum_klass()) {
-          if (field_ik->has_archived_enum_objs() || AOTClassInitializer::can_archive_initialized_mirror(field_ik)) {
+          if (field_ik->has_archived_enum_objs() || has_aot_initialized_mirror(field_ik)) {
             // This field is an Enum. If any instance of this Enum has been archived, we will archive
             // all static fields of this Enum as well.
             return;
           }
         }
 
-        if (field_ik->is_hidden() && AOTClassInitializer::can_archive_initialized_mirror(field_ik)) {
+        if (field_ik->is_hidden() && has_aot_initialized_mirror(field_ik)) {
           // We have a static field in a core-library class that points to a method reference
           // E.g., SharedSecrets::javaSecuritySpecAccess => EncodedKeySpec::clear(). These are safe
           // to archive.
@@ -203,7 +213,7 @@ public:
         }
       }
 
-      if (AOTClassInitializer::can_archive_initialized_mirror(_ik)) {
+      if (has_aot_initialized_mirror(_ik)) {
         return;
       }
 
@@ -243,12 +253,6 @@ void CDSHeapVerifier::add_static_obj_field(InstanceKlass* ik, oop field, Symbol*
     // (by MethodType::AOTHolder::archivedMethodTypes). No need to check.
     return;
   }
-  if (field->klass() == vmClasses::LambdaForm_klass()) {
-    // LambdaForms are non-modifiable and are not tested for object equality, so
-    // it's OK if static fields of the LambdaForm type are reinitialized at runtime with
-    // alternative instances. No need to check.
-    return;
-  }
 
   StaticFieldInfo info = {ik, name};
   _table.put(field, info);
@@ -276,7 +280,7 @@ inline bool CDSHeapVerifier::do_entry(oop& orig_obj, HeapShared::CachedOopInfo& 
       return true;
     }
     LogStream ls(Log(cds, heap)::warning());
-    ls.print_cr("Archive heap points to a static field that may be reinitialized at runtime:");
+    ls.print_cr("Archive heap points to a static field that may hold a different value at runtime:");
     ls.print_cr("Field: %s::%s", class_name, field_name);
     ls.print("Value: ");
     orig_obj->print_on(&ls);
@@ -319,6 +323,29 @@ void CDSHeapVerifier::trace_to_root(outputStream* st, oop orig_obj) {
   }
 }
 
+const char* static_field_name(oop mirror, oop field) {
+  Klass* k = java_lang_Class::as_Klass(mirror);
+  if (k->is_instance_klass()) {
+    for (JavaFieldStream fs(InstanceKlass::cast(k)); !fs.done(); fs.next()) {
+      if (fs.access_flags().is_static()) {
+        fieldDescriptor& fd = fs.field_descriptor();
+        switch (fd.field_type()) {
+        case T_OBJECT:
+        case T_ARRAY:
+          if (mirror->obj_field(fd.offset()) == field) {
+            return fs.name()->as_C_string();
+          }
+          break;
+        default:
+          break;
+        }
+      }
+    }
+  }
+
+  return "<unknown>";
+}
+
 int CDSHeapVerifier::trace_to_root(outputStream* st, oop orig_obj, oop orig_field, HeapShared::CachedOopInfo* info) {
   int level = 0;
   if (info->orig_referrer() != nullptr) {
@@ -334,7 +361,7 @@ int CDSHeapVerifier::trace_to_root(outputStream* st, oop orig_obj, oop orig_fiel
   orig_obj->print_address_on(st);
   st->print(" %s", k->internal_name());
   if (java_lang_Class::is_instance(orig_obj)) {
-    st->print(" (%s)", java_lang_Class::as_Klass(orig_obj)->external_name());
+    st->print(" (%s::%s)", java_lang_Class::as_Klass(orig_obj)->external_name(), static_field_name(orig_obj, orig_field));
   }
   if (orig_field != nullptr) {
     if (k->is_instance_klass()) {

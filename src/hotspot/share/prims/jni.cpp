@@ -25,6 +25,7 @@
  */
 
 #include "precompiled.hpp"
+#include "cds/cdsConfig.hpp"
 #include "ci/ciReplay.hpp"
 #include "classfile/altHashing.hpp"
 #include "classfile/classFileStream.hpp"
@@ -2651,9 +2652,13 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
     if ((cl ==  nullptr || SystemDictionary::is_platform_class_loader(cl)) &&
         ik->module()->is_named()) {
       Klass* caller = thread->security_get_caller_class(1);
-      // If no caller class, or caller class has a different loader, then
-      // issue a warning below.
-      do_warning = (caller == nullptr) || caller->class_loader() != cl;
+      if (k == vmClasses::Class_klass() && k->has_aot_initialized_mirror()) {
+        assert(CDSConfig::is_loading_invokedynamic(), "sanity");
+        assert(caller == nullptr, "sanity");
+        assert(cl == nullptr, "sanity");
+      } else {
+        do_warning = (caller == nullptr) || caller->class_loader() != cl;
+      }
     }
   }
 
