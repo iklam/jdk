@@ -248,10 +248,15 @@ void CDSHeapVerifier::do_klass(Klass* k) {
 }
 
 void CDSHeapVerifier::add_static_obj_field(InstanceKlass* ik, oop field, Symbol* name) {
-  if (field->klass() == vmClasses::MethodType_klass()) {
-    // The identity of MethodTypes are preserved between assembly phase and production runs
-    // (by MethodType::AOTHolder::archivedMethodTypes). No need to check.
-    return;
+  if (CDSConfig::is_dumping_invokedynamic()) {
+    if (field->klass() == vmClasses::MethodType_klass()) {
+      // The identity of MethodTypes are preserved between assembly phase and production runs
+      // (by MethodType::AOTHolder::archivedMethodTypes). No need to check.
+      return;
+    }
+    if (field->klass() == vmClasses::internal_Unsafe_klass()) {
+      return;
+    }
   }
 
   StaticFieldInfo info = {ik, name};

@@ -347,11 +347,16 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   initialize_class(vmSymbols::java_lang_System(), CHECK);
   // The VM creates & returns objects of this class. Make sure it's initialized.
   initialize_class(vmSymbols::java_lang_Class(), CHECK);
-  if (vmClasses::Class_klass()->has_aot_initialized_mirror()) {
-    assert(CDSConfig::is_loading_invokedynamic(), "sanity");
+  if (CDSConfig::is_loading_invokedynamic()) {
+    assert(vmClasses::Class_klass()->has_aot_initialized_mirror(), "sanity");
+    assert(vmClasses::internal_Unsafe_klass()->has_aot_initialized_mirror(), "sanity");
     JavaValue result(T_VOID);
     TempNewSymbol method_name = SymbolTable::new_symbol("registerNatives");
     JavaCalls::call_static(&result, vmClasses::Class_klass(),
+                           method_name,
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+    JavaCalls::call_static(&result, vmClasses::internal_Unsafe_klass(),
                            method_name,
                            vmSymbols::void_method_signature(),
                            CHECK);

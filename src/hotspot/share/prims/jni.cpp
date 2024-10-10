@@ -2652,8 +2652,9 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
     if ((cl ==  nullptr || SystemDictionary::is_platform_class_loader(cl)) &&
         ik->module()->is_named()) {
       Klass* caller = thread->security_get_caller_class(1);
-      if (k == vmClasses::Class_klass() && k->has_aot_initialized_mirror()) {
-        assert(CDSConfig::is_loading_invokedynamic(), "sanity");
+      if (CDSConfig::is_loading_invokedynamic() && 
+          (k == vmClasses::Class_klass() || k == vmClasses::internal_Unsafe_klass())) {
+        assert(k->has_aot_initialized_mirror(), "sanity");
         assert(caller == nullptr, "sanity");
         assert(cl == nullptr, "sanity");
       } else {

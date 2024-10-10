@@ -210,6 +210,7 @@ bool AOTClassInitializer::can_archive_initialized_mirror(InstanceKlass* ik) {
       {"java/util/stream/Collectors"},
       {"jdk/internal/constant/PrimitiveClassDescImpl"},
       {"jdk/internal/constant/ReferenceClassDescImpl"},
+      {"jdk/internal/misc/Unsafe"},
 
     // Can't include this, as it will pull in MethodHandleStatics which has many environment
     // dependencies (on system properties, etc).

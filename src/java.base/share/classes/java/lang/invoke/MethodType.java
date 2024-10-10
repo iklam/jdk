@@ -232,15 +232,13 @@ class MethodType
         return new IndexOutOfBoundsException(num.toString());
     }
 
-    private static class NoAOT {
-        static final ReferencedKeySet<MethodType> internTable =
-            ReferencedKeySet.create(false, true, new Supplier<>() {
-                @Override
-                public Map<ReferenceKey<MethodType>, ReferenceKey<MethodType>> get() {
-                    return new ConcurrentHashMap<>(512);
-                }
-            });
-    }
+    static final ReferencedKeySet<MethodType> internTable =
+        ReferencedKeySet.create(false, true, new Supplier<>() {
+            @Override
+            public Map<ReferenceKey<MethodType>, ReferenceKey<MethodType>> get() {
+                return new ConcurrentHashMap<>(512);
+            }
+        });
 
     static final Class<?>[] NO_PTYPES = {};
 
@@ -409,7 +407,7 @@ class MethodType
             }
         }
 
-        MethodType mt = NoAOT.internTable.get(primordialMT);
+        MethodType mt = internTable.get(primordialMT);
         if (mt != null)
             return mt;
 
@@ -425,7 +423,7 @@ class MethodType
             mt = new MethodType(rtype, ptypes);
         }
         mt.form = MethodTypeForm.findForm(mt);
-        return NoAOT.internTable.intern(mt);
+        return internTable.intern(mt);
     }
 
     private static final @Stable MethodType[] objectOnlyTypes = new MethodType[20];
@@ -1414,7 +1412,7 @@ s.writeObject(this.parameterArray());
     static HashMap<MethodType,MethodType> copyInternTable() {
         HashMap<MethodType,MethodType> copy = new HashMap<>();
 
-        for (Iterator<MethodType> i = NoAOT.internTable.iterator(); i.hasNext(); ) {
+        for (Iterator<MethodType> i = internTable.iterator(); i.hasNext(); ) {
             MethodType t = i.next();
             copy.put(t, t);
         }
@@ -1426,5 +1424,6 @@ s.writeObject(this.parameterArray());
     // during the AOT cache assembly phase.
     static void createArchivedObjects() {
         archivedMethodTypes = copyInternTable();
+        internTable.clear();
     }
 }

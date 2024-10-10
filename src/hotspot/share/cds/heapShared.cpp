@@ -802,8 +802,7 @@ public:
 };
 
 static bool mark_for_aot_initialization(InstanceKlass* buffered_ik) {
-  if (buffered_ik->name()->equals("java/lang/String") ||
-      buffered_ik->name()->equals("java/util/concurrent/ConcurrentHashMap")) {
+  if (buffered_ik->name()->equals("java/lang/String")) {
     return false;
   }
 
