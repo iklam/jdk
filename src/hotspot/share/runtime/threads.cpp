@@ -32,6 +32,7 @@
 #include "classfile/classLoader.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/javaThreadStatus.hpp"
+#include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
 #include "classfile/vmSymbols.hpp"
@@ -346,6 +347,20 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   initialize_class(vmSymbols::java_lang_System(), CHECK);
   // The VM creates & returns objects of this class. Make sure it's initialized.
   initialize_class(vmSymbols::java_lang_Class(), CHECK);
+  if (CDSConfig::is_loading_invokedynamic()) {
+    assert(vmClasses::Class_klass()->has_aot_initialized_mirror(), "sanity");
+    assert(vmClasses::internal_Unsafe_klass()->has_aot_initialized_mirror(), "sanity");
+    JavaValue result(T_VOID);
+    TempNewSymbol method_name = SymbolTable::new_symbol("registerNatives");
+    JavaCalls::call_static(&result, vmClasses::Class_klass(),
+                           method_name,
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+    JavaCalls::call_static(&result, vmClasses::internal_Unsafe_klass(),
+                           method_name,
+                           vmSymbols::void_method_signature(),
+                           CHECK);
+  }
   initialize_class(vmSymbols::java_lang_ThreadGroup(), CHECK);
   Handle thread_group = create_initial_thread_group(CHECK);
   Universe::set_main_thread_group(thread_group());
@@ -401,6 +416,7 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   initialize_class(vmSymbols::java_lang_StackOverflowError(), CHECK);
   initialize_class(vmSymbols::java_lang_IllegalMonitorStateException(), CHECK);
   initialize_class(vmSymbols::java_lang_IllegalArgumentException(), CHECK);
+  initialize_class(vmSymbols::java_lang_InternalError(), CHECK);
 }
 
 void Threads::initialize_jsr292_core_classes(TRAPS) {

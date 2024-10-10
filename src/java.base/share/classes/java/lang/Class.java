@@ -4044,15 +4044,18 @@ public final class Class<T> implements java.io.Serializable,
     // Fetches the factory for reflective objects
     @SuppressWarnings("removal")
     private static ReflectionFactory getReflectionFactory() {
-        var factory = reflectionFactory;
+        var factory = NonAOT.reflectionFactory;
         if (factory != null) {
             return factory;
         }
-        return reflectionFactory =
+        return NonAOT.reflectionFactory =
                 java.security.AccessController.doPrivileged
                         (new ReflectionFactory.GetReflectionFactoryAction());
     }
-    private static ReflectionFactory reflectionFactory;
+
+    private static class NonAOT {
+        private static ReflectionFactory reflectionFactory;
+    }
 
     /**
      * Returns the elements of this enum class or null if this
