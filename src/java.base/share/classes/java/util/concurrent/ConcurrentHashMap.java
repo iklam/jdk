@@ -6360,7 +6360,7 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     }
 
     // Unsafe mechanics
-    private static Unsafe U = Unsafe.getUnsafe();
+    private static final Unsafe U = Unsafe.getUnsafe();
     private static final long SIZECTL
         = U.objectFieldOffset(ConcurrentHashMap.class, "sizeCtl");
     private static final long TRANSFERINDEX
