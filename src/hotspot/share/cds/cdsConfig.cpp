@@ -241,6 +241,11 @@ void CDSConfig::init_shared_archive_paths() {
 }
 
 void CDSConfig::check_internal_module_property(const char* key, const char* value) {
+  if (is_using_archive() && strcmp(key, "jdk.module.enable.native.access") == 0) {
+    // During runtime, it's OK for the effect of jdk.module.enable.native.access to be applied
+    // on archived modules.
+    return;
+  }
   if (Arguments::is_internal_module_property(key)) {
     stop_using_optimized_module_handling();
     log_info(cds)("optimized module handling: disabled due to incompatible property: %s=%s", key, value);
