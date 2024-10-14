@@ -133,7 +133,7 @@ class AOTDisableClassPathCheckApp {
         System.out.println("Hello " + AOTDisableClassPathCheckApp.class.getName());
         String cp = System.getProperty("java.class.path");
         System.out.println("java.class.path = " + cp);
-        String expect = "/AOTDisableClassPathCheck.d";
+        String expect = "AOTDisableClassPathCheck.d";
         if (cp.indexOf(expect) < 0) {
             throw new RuntimeException("java.class.path should contain \"" + expect + "\"");
         }
