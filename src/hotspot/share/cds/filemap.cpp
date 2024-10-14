@@ -538,7 +538,7 @@ void FileMapInfo::check_nonempty_dir_in_shared_path_table() {
     SharedClassPathEntry *e = shared_path(i);
     if (e->is_dir()) {
       const char* path = e->name();
-      if (!os::dir_is_empty(path)) {
+      if (!os::dir_is_empty(path) && !AOTDisableClassPathCheck) {
         log_error(cds)("Error: non-empty directory '%s'", path);
         has_nonempty_dir = true;
       }
@@ -941,10 +941,8 @@ bool FileMapInfo::check_module_paths() {
   return check_paths(header()->app_module_paths_start_index(), num_paths, rp_array, 0, 0);
 }
 
-bool FileMapInfo::validate_shared_path_table() {
+bool FileMapInfo::validate_shared_path_table_helper() {
   assert(CDSConfig::is_using_archive(), "runtime only");
-
-  _validating_shared_path_table = true;
 
   // Load the shared path table info from the archive header
   _shared_path_table = header()->shared_path_table();
@@ -1026,9 +1024,23 @@ bool FileMapInfo::validate_shared_path_table() {
     return false;
   }
 
-  check_main_module_name();
+  return true;
+}
 
-  _validating_shared_path_table = false;
+bool FileMapInfo::validate_shared_path_table() {
+  assert(CDSConfig::is_using_archive(), "runtime only");
+
+  if (!AOTDisableClassPathCheck) {
+    _validating_shared_path_table = true;
+    bool status = validate_shared_path_table_helper();
+    _validating_shared_path_table = false;
+
+    if (!status) {
+      return false;
+    }
+  }
+
+  check_main_module_name();
 
 #if INCLUDE_JVMTI
   if (_classpath_entries_for_jvmti != nullptr) {

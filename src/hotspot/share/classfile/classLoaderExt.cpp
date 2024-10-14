@@ -76,7 +76,7 @@ void ClassLoaderExt::setup_app_search_path(JavaThread* current) {
   _app_class_paths_start_index = checked_cast<jshort>(start_index);
   char* app_class_path = os::strdup_check_oom(Arguments::get_appclasspath(), mtClass);
 
-  if (strcmp(app_class_path, ".") == 0) {
+  if (strcmp(app_class_path, ".") == 0 && !AOTDisableClassPathCheck) {
     // This doesn't make any sense, even for AppCDS, so let's skip it. We
     // don't want to throw an error here because -cp "." is usually assigned
     // by the launcher when classpath is not specified.

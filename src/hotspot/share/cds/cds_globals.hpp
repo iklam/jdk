@@ -117,6 +117,9 @@
   product(bool, AOTClassLinking, false,                                     \
           "Load/link all archived classes for the boot/platform/app "       \
           "loaders before application main")                                \
+                                                                            \
+  product(bool, AOTDisableClassPathCheck, false, DIAGNOSTIC,                \
+           "Do not check for AOTCache classpath validity")                  \
 
 // end of CDS_FLAGS
 

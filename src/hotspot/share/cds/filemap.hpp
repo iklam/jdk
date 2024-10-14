@@ -360,6 +360,8 @@ private:
   static bool _memory_mapping_failed;
   static GrowableArray<const char*>* _non_existent_class_paths;
 
+  bool validate_shared_path_table_helper();
+
 public:
   FileMapHeader *header() const       { return _header; }
   static bool get_base_archive_name_from_header(const char* archive_name,
