@@ -259,29 +259,3 @@ void AOTClassInitializer::call_runtime_setup(InstanceKlass* ik, TRAPS) {
   }
 }
 
-#ifdef ASSERT
-void AOTClassInitializer::assert_no_clinit_will_run_for_aot_init_class(InstanceKlass* ik) {
-  assert(ik->has_aot_initialized_mirror(), "must be");
-
-  InstanceKlass* s = ik->java_super();
-  if (s != nullptr) {
-    DEBUG_ONLY(ResourceMark rm);
-    assert(s->is_initialized(), "super class %s of aot-inited class %s must have been initialized",
-           s->external_name(), ik->external_name());
-    AOTClassInitializer::assert_no_clinit_will_run_for_aot_init_class(s);
-  }
-
-  Array<InstanceKlass*>* interfaces = ik->local_interfaces();
-  int len = interfaces->length();
-  for (int i = 0; i < len; i++) {
-    InstanceKlass* intf = interfaces->at(i);
-    if (!intf->is_initialized()) {
-      // Note: an interface needs to be marked as is_initialized() only if
-      // - it has a <clinit>
-      // - it has at least one default method.
-      assert(!intf->has_nonstatic_concrete_methods() || intf->class_initializer() == nullptr, "uninitialized super interface %s of aot-inited class %s must not have <clinit>",
-             intf->external_name(), ik->external_name());
-    }
-  }
-}
-#endif

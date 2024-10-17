@@ -308,10 +308,6 @@ void AOTLinkedClassBulkLoader::init_required_classes_for_loader(Handle class_loa
         continue;
       }
       if (ik->has_aot_initialized_mirror()) {
-        // No <clinit> of ik or any of its supertypes will be executed.
-        // Their mirrors were already initialized during AOT cache assembly.
-        AOTClassInitializer::assert_no_clinit_will_run_for_aot_init_class(ik);
-
         ik->initialize_from_cds(CHECK);
       }
     }

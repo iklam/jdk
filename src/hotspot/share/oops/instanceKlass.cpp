@@ -786,72 +786,66 @@ void InstanceKlass::initialize(TRAPS) {
   }
 }
 
-static bool check_supertypes_of_aot_inited_class(InstanceKlass* ik) {
+
+inline static void assert_no_clinit_will_run_for_aot_init_class(InstanceKlass* ik) {
+#ifdef ASSERT
   assert(ik->has_aot_initialized_mirror(), "must be");
 
-  // Sanity check of all superclasses and superinterfaces.
-  AOTClassInitializer::assert_no_clinit_will_run_for_aot_init_class(ik);
-
-  if (ik->has_nonstatic_concrete_methods()) {
-    Array<InstanceKlass*>* interfaces = ik->local_interfaces();
-    int len = interfaces->length();
-    for (int i = 0; i < len; i++) {
-      InstanceKlass* intf = interfaces->at(i);
-      if (!intf->is_initialized()) {
-        assert(intf->class_initializer() == nullptr, "should have been asserted");
-        if (log_is_enabled(Info, cds, init)) {
-          ResourceMark rm;
-          log_info(cds, init)("%s takes slow path because interface %s (%s <clinit>) is not yet initialized",
-                              ik->external_name(), intf->external_name(),
-                              (intf->class_initializer() != nullptr) ? "has" : "no");
-        }
-        return false;
-      }
-    }
+  InstanceKlass* s = ik->java_super();
+  if (s != nullptr) {
+    DEBUG_ONLY(ResourceMark rm);
+    assert(s->is_initialized(), "super class %s of aot-inited class %s must have been initialized",
+           s->external_name(), ik->external_name());
+    assert_no_clinit_will_run_for_aot_init_class(s);
   }
 
-  return true;
+  Array<InstanceKlass*>* interfaces = ik->local_interfaces();
+  int len = interfaces->length();
+  for (int i = 0; i < len; i++) {
+    InstanceKlass* intf = interfaces->at(i);
+    if (!intf->is_initialized()) {
+      ResourceMark rm;
+      // Note: an interface needs to be marked as is_initialized() only if
+      // - it has a <clinit>
+      // - it has declared a default method.
+      assert(!(intf->declares_nonstatic_concrete_methods() && intf->class_initializer() != nullptr),
+             "uninitialized super interface %s of aot-inited class %s must not have <clinit>",
+             intf->external_name(), ik->external_name());
+    }
+  }
+#endif
 }
 
 void InstanceKlass::initialize_from_cds(TRAPS) {
+  assert(has_aot_initialized_mirror(), "must be");
+  assert(CDSConfig::is_loading_heap(), "must be");
+  assert(CDSConfig::is_using_aot_linked_classes(), "must be");
+  assert_no_clinit_will_run_for_aot_init_class(this);
+
   if (is_initialized()) {
     return;
   }
 
-  if (has_aot_initialized_mirror() && CDSConfig::is_loading_heap() &&
-      check_supertypes_of_aot_inited_class(this)) {
-    if (log_is_enabled(Info, cds, init)) {
-      ResourceMark rm;
-      log_info(cds, init)("%s (quickest)", external_name());
-    }
+  if (log_is_enabled(Info, cds, init)) {
+    ResourceMark rm;
+    log_info(cds, init)("%s (aot-inited)", external_name());
+  }
 
-    link_class(CHECK);
+  link_class(CHECK);
 
 #ifdef ASSERT
-    {
-      Handle h_init_lock(THREAD, init_lock());
-      ObjectLocker ol(h_init_lock, THREAD);
-      assert(!is_initialized(), "sanity");
-      assert(!is_being_initialized(), "sanity");
-      assert(!is_in_error_state(), "sanity");
-    }
+  {
+    Handle h_init_lock(THREAD, init_lock());
+    ObjectLocker ol(h_init_lock, THREAD);
+    assert(!is_initialized(), "sanity");
+    assert(!is_being_initialized(), "sanity");
+    assert(!is_in_error_state(), "sanity");
+  }
 #endif
 
-    set_init_thread(THREAD);
-    set_initialization_state_and_notify(fully_initialized, CHECK);
-    AOTClassInitializer::call_runtime_setup(this, CHECK);
-    return;
-  }
-
-  if (log_is_enabled(Info, cds, init)) {
-    // If we have a preinit mirror, we may come to here if a supertype is not
-    // yet initialized. It will still be quicker than usual, as we will skip the
-    // execution of <clinit> of this class.
-    ResourceMark rm;
-    log_info(cds, init)("%s%s", external_name(),
-                        (has_aot_initialized_mirror() && CDSConfig::is_loading_heap()) ? " (quicker)" : "");
-  }
-  initialize(THREAD);
+  set_init_thread(THREAD);
+  set_initialization_state_and_notify(fully_initialized, CHECK);
+  AOTClassInitializer::call_runtime_setup(this, CHECK);
 }
 
 bool InstanceKlass::verify_code(TRAPS) {
