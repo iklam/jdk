@@ -331,6 +331,9 @@ public:
   // inside the output buffer, or (b), an object in the currently mapped static archive.
   uintx any_to_offset(address p) const;
 
+  // The reverse of buffer_to_offset()
+  address offset_to_buffered_address(u4 offset) const;
+
   template <typename T>
   u4 buffer_to_offset_u4(T p) const {
     uintx offset = buffer_to_offset((address)p);
@@ -341,6 +344,11 @@ public:
   u4 any_to_offset_u4(T p) const {
     uintx offset = any_to_offset((address)p);
     return to_offset_u4(offset);
+  }
+
+  template <typename T>
+  T offset_to_buffered(u4 offset) const {
+    return (T)offset_to_buffered_address(offset);
   }
 
 public:

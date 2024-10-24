@@ -109,10 +109,8 @@ public:
 
   static size_t crc_size(InstanceKlass* klass);
 public:
-  InstanceKlass* klass() const {
-    assert(!(ArchiveBuilder::is_active() && ArchiveBuilder::current()->is_in_buffer_space((address)this)), "only use at runtime");
-    return (InstanceKlass*)(SharedBaseAddress + _klass_offset);
-  }
+  InstanceKlass* klass() const;
+
   static size_t byte_size(InstanceKlass* klass, int num_verifier_constraints, int num_loader_constraints,
                           int num_enum_klass_static_fields) {
     return header_size_size() +
@@ -129,21 +127,21 @@ private:
     return header_size_size();
   }
 
-  size_t nest_host_offset(InstanceKlass* k) const {
-    return crc_offset() + crc_size(k);
+  size_t nest_host_offset() const {
+    return crc_offset() + crc_size(klass());
   }
 
-  size_t loader_constraints_offset(InstanceKlass* k) const  {
-    return nest_host_offset(k) + nest_host_size(k);
+  size_t loader_constraints_offset() const  {
+    return nest_host_offset() + nest_host_size(klass());
   }
-  size_t verifier_constraints_offset(InstanceKlass* k) const {
-    return loader_constraints_offset(k) + loader_constraints_size(_num_loader_constraints);
+  size_t verifier_constraints_offset() const {
+    return loader_constraints_offset() + loader_constraints_size(_num_loader_constraints);
   }
-  size_t verifier_constraint_flags_offset(InstanceKlass* k) const {
-    return verifier_constraints_offset(k) + verifier_constraints_size(_num_verifier_constraints);
+  size_t verifier_constraint_flags_offset() const {
+    return verifier_constraints_offset() + verifier_constraints_size(_num_verifier_constraints);
   }
-  size_t enum_klass_static_fields_offset(InstanceKlass* k) const {
-    return verifier_constraint_flags_offset(k) + verifier_constraint_flags_size(_num_verifier_constraints);
+  size_t enum_klass_static_fields_offset() const {
+    return verifier_constraint_flags_offset() + verifier_constraint_flags_size(_num_verifier_constraints);
   }
 
   void check_verifier_constraint_offset(int i) const {
@@ -154,50 +152,46 @@ private:
     assert(0 <= i && i < _num_loader_constraints, "sanity");
   }
 
-  RTEnumKlassStaticFields* enum_klass_static_fields_addr(InstanceKlass* k) const {
-    assert(k->has_archived_enum_objs(), "sanity");
-    return (RTEnumKlassStaticFields*)(address(this) + enum_klass_static_fields_offset(k));
-  }
-
-  CrcInfo* crc(InstanceKlass* k) const {
-    assert(crc_size(k) > 0, "must be");
-    return (CrcInfo*)(address(this) + crc_offset());
+  RTEnumKlassStaticFields* enum_klass_static_fields_addr() const {
+    assert(klass()->has_archived_enum_objs(), "sanity");
+    return (RTEnumKlassStaticFields*)(address(this) + enum_klass_static_fields_offset());
   }
 
 public:
   CrcInfo* crc() const {
-    return crc(klass());
+    assert(crc_size(klass()) > 0, "must be");
+    return (CrcInfo*)(address(this) + crc_offset());
   }
-  RTVerifierConstraint* verifier_constraints(InstanceKlass* k) {
+  RTVerifierConstraint* verifier_constraints() {
     assert(_num_verifier_constraints > 0, "sanity");
-    return (RTVerifierConstraint*)(address(this) + verifier_constraints_offset(k));
+    return (RTVerifierConstraint*)(address(this) + verifier_constraints_offset());
   }
   RTVerifierConstraint* verifier_constraint_at(int i) {
     check_verifier_constraint_offset(i);
-    return verifier_constraints(klass()) + i;
+    return verifier_constraints() + i;
   }
 
-  char* verifier_constraint_flags(InstanceKlass* k) {
+  char* verifier_constraint_flags() {
     assert(_num_verifier_constraints > 0, "sanity");
-    return (char*)(address(this) + verifier_constraint_flags_offset(k));
+    return (char*)(address(this) + verifier_constraint_flags_offset());
   }
 
-  InstanceKlass** nest_host_addr(InstanceKlass* k) {
-    assert(k->is_hidden(), "sanity");
-    return (InstanceKlass**)(address(this) + nest_host_offset(k));
+  InstanceKlass** nest_host_addr() {
+    assert(klass()->is_hidden(), "sanity");
+    return (InstanceKlass**)(address(this) + nest_host_offset());
   }
   InstanceKlass* nest_host() {
-    return *nest_host_addr(klass());
+    return *nest_host_addr();
   }
 
-  RTLoaderConstraint* loader_constraints(InstanceKlass* k) {
+  RTLoaderConstraint* loader_constraints() {
     assert(_num_loader_constraints > 0, "sanity");
-    return (RTLoaderConstraint*)(address(this) + loader_constraints_offset(k));
+    return (RTLoaderConstraint*)(address(this) + loader_constraints_offset());
   }
 
   RTLoaderConstraint* loader_constraint_at(int i) {
     check_loader_constraint_offset(i);
-    return loader_constraints(klass()) + i;
+    return loader_constraints() + i;
   }
 
   void init(DumpTimeClassInfo& info);
@@ -209,25 +203,25 @@ public:
 
   char verifier_constraint_flag(int i) {
     check_verifier_constraint_offset(i);
-    return verifier_constraint_flags(klass())[i];
+    return verifier_constraint_flags()[i];
   }
 
   int num_enum_klass_static_fields(int i) const {
-    return enum_klass_static_fields_addr(klass())->_num;
+    return enum_klass_static_fields_addr()->_num;
   }
 
-  void set_num_enum_klass_static_fields(InstanceKlass* k, int num) {
-    enum_klass_static_fields_addr(k)->_num = num;
+  void set_num_enum_klass_static_fields(int num) {
+    enum_klass_static_fields_addr()->_num = num;
   }
 
   int enum_klass_static_field_root_index_at(int i) const {
-    assert(0 <= i && i < enum_klass_static_fields_addr(klass())->_num, "must be");
-    return enum_klass_static_fields_addr(klass())->_root_indices[i];
+    assert(0 <= i && i < enum_klass_static_fields_addr()->_num, "must be");
+    return enum_klass_static_fields_addr()->_root_indices[i];
   }
 
-  void set_enum_klass_static_field_root_index_at(InstanceKlass* k, int i, int root_index) {
-    assert(0 <= i && i < enum_klass_static_fields_addr(k)->_num, "must be");
-    enum_klass_static_fields_addr(k)->_root_indices[i] = root_index;
+  void set_enum_klass_static_field_root_index_at(int i, int root_index) {
+    assert(0 <= i && i < enum_klass_static_fields_addr()->_num, "must be");
+    enum_klass_static_fields_addr()->_root_indices[i] = root_index;
   }
 private:
   // ArchiveBuilder::make_shallow_copy() has reserved a pointer immediately

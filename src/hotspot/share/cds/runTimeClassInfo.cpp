@@ -34,7 +34,7 @@ void RunTimeClassInfo::init(DumpTimeClassInfo& info) {
   _klass_offset = builder->any_to_offset_u4(k);
 
   if (!SystemDictionaryShared::is_builtin(k)) {
-    CrcInfo* c = crc(k);
+    CrcInfo* c = crc();
     c->_clsfile_size = info._clsfile_size;
     c->_clsfile_crc32 = info._clsfile_crc32;
   }
@@ -42,8 +42,8 @@ void RunTimeClassInfo::init(DumpTimeClassInfo& info) {
   _num_loader_constraints   = info.num_loader_constraints();
   int i;
   if (_num_verifier_constraints > 0) {
-    RTVerifierConstraint* vf_constraints = verifier_constraints(k);
-    char* flags = verifier_constraint_flags(k);
+    RTVerifierConstraint* vf_constraints = verifier_constraints();
+    char* flags = verifier_constraint_flags();
     for (i = 0; i < _num_verifier_constraints; i++) {
       vf_constraints[i]._name      = builder->any_to_offset_u4(info._verifier_constraints->at(i).name());
       vf_constraints[i]._from_name = builder->any_to_offset_u4(info._verifier_constraints->at(i).from_name());
@@ -54,7 +54,7 @@ void RunTimeClassInfo::init(DumpTimeClassInfo& info) {
   }
 
   if (_num_loader_constraints > 0) {
-    RTLoaderConstraint* ld_constraints = loader_constraints(k);
+    RTLoaderConstraint* ld_constraints = loader_constraints();
     for (i = 0; i < _num_loader_constraints; i++) {
       ld_constraints[i]._name = builder->any_to_offset_u4(info._loader_constraints->at(i).name());
       ld_constraints[i]._loader_type1 = info._loader_constraints->at(i).loader_type1();
@@ -63,14 +63,14 @@ void RunTimeClassInfo::init(DumpTimeClassInfo& info) {
   }
 
   if (k->is_hidden()) {
-    builder->write_pointer_in_buffer(nest_host_addr(k), info.nest_host());
+    builder->write_pointer_in_buffer(nest_host_addr(), info.nest_host());
   }
   if (k->has_archived_enum_objs()) {
     int num = info.num_enum_klass_static_fields();
-    set_num_enum_klass_static_fields(k, num);
+    set_num_enum_klass_static_fields(num);
     for (int i = 0; i < num; i++) {
       int root_index = info.enum_klass_static_field(i);
-      set_enum_klass_static_field_root_index_at(k, i, root_index);
+      set_enum_klass_static_field_root_index_at(i, root_index);
     }
   }
 }
@@ -80,5 +80,13 @@ size_t RunTimeClassInfo::crc_size(InstanceKlass* klass) {
     return sizeof(CrcInfo);
   } else {
     return 0;
+  }
+}
+
+InstanceKlass* RunTimeClassInfo::klass() const {
+  if (ArchiveBuilder::is_active() && ArchiveBuilder::current()->is_in_buffer_space((address)this)) {
+    return ArchiveBuilder::current()->offset_to_buffered<InstanceKlass*>(_klass_offset);
+  } else {
+    return (InstanceKlass*)(SharedBaseAddress + _klass_offset);
   }
 }
