@@ -927,6 +927,9 @@ bool InstanceKlass::link_class_impl(TRAPS) {
           SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
         need_init_table = false;
       }
+      if (name()->equals("BootChild")) {
+        tty->print_cr("BootChild>> need_init_table = %d", need_init_table);
+      }
       if (need_init_table) {
         vtable().initialize_vtable_and_check_constraints(CHECK_false);
         itable().initialize_itable_and_check_constraints(CHECK_false);
@@ -2637,6 +2640,9 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
     methods->at(index)->restore_unshareable_info(CHECK);
   }
 #if INCLUDE_JVMTI
+  if (name()->equals("BootChild")) {
+    tty->print_cr("BootChild>> JvmtiExport::has_redefined_a_class() = %d", JvmtiExport::has_redefined_a_class());
+  }
   if (JvmtiExport::has_redefined_a_class()) {
     // Reinitialize vtable because RedefineClasses may have changed some
     // entries in this vtable for super classes so the CDS vtable might
@@ -2647,8 +2653,11 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
     // have been redefined.
     bool trace_name_printed = false;
     adjust_default_methods(&trace_name_printed);
-    vtable().initialize_vtable();
-    itable().initialize_itable();
+    assert(!is_linked(), "must be");
+    if (is_linked()) {
+      vtable().initialize_vtable();
+      itable().initialize_itable();
+    }
   }
 #endif
 
