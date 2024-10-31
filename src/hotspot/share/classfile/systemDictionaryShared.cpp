@@ -694,7 +694,6 @@ void SystemDictionaryShared::dumptime_classes_do(class MetaspaceClosure* it) {
   auto do_lambda = [&] (LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info) {
     if (key.caller_ik()->is_loader_alive()) {
       info.metaspace_pointers_do(it);
-      key.metaspace_pointers_do(it);
     }
   };
   _dumptime_lambda_proxy_class_dictionary->iterate_all(do_lambda);
@@ -792,9 +791,10 @@ InstanceKlass* SystemDictionaryShared::get_shared_lambda_proxy_class(InstanceKla
   MutexLocker ml(CDSLambda_lock, Mutex::_no_safepoint_check_flag);
   LambdaProxyClassKey key(caller_ik, invoked_name, invoked_type,
                           method_type, member_method, instantiated_method_type);
+  RunTimeLambdaProxyClassKey runtime_key(key);
 
   // Try to retrieve the lambda proxy class from static archive.
-  const RunTimeLambdaProxyClassInfo* info = _static_archive.lookup_lambda_proxy_class(&key);
+  const RunTimeLambdaProxyClassInfo* info = _static_archive.lookup_lambda_proxy_class(&runtime_key);
   InstanceKlass* proxy_klass = retrieve_lambda_proxy_class(info);
   if (proxy_klass == nullptr) {
     if (info != nullptr && log_is_enabled(Debug, cds)) {
@@ -807,7 +807,7 @@ InstanceKlass* SystemDictionaryShared::get_shared_lambda_proxy_class(InstanceKla
   }
 
   // Retrieving from static archive is unsuccessful, try dynamic archive.
-  info = _dynamic_archive.lookup_lambda_proxy_class(&key);
+  info = _dynamic_archive.lookup_lambda_proxy_class(&runtime_key);
   proxy_klass = retrieve_lambda_proxy_class(info);
   if (proxy_klass == nullptr) {
     if (info != nullptr && log_is_enabled(Debug, cds)) {
@@ -1176,6 +1176,7 @@ public:
         (RunTimeLambdaProxyClassInfo*)ArchiveBuilder::ro_region_alloc(byte_size);
     runtime_info->init(key, info);
     unsigned int hash = runtime_info->hash();
+    runtime_info->key().remove_unshareable_info();
     u4 delta = _builder->any_to_offset_u4((void*)runtime_info);
     _writer->add(hash, delta);
     return true;

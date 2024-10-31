@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -56,15 +56,6 @@ public:
     _member_method(member_method),
     _instantiated_method_type(instantiated_method_type) {}
 
-  void metaspace_pointers_do(MetaspaceClosure* it) {
-    it->push(&_caller_ik);
-    it->push(&_invoked_name);
-    it->push(&_invoked_type);
-    it->push(&_method_type);
-    it->push(&_member_method);
-    it->push(&_instantiated_method_type);
-  }
-
   bool equals(LambdaProxyClassKey const& other) const {
     return _caller_ik == other._caller_ik &&
            _invoked_name == other._invoked_name &&
@@ -101,9 +92,59 @@ public:
     return (k1.equals(k2));
   }
 
-  InstanceKlass* caller_ik() const { return _caller_ik; }
+  InstanceKlass* caller_ik()         const { return _caller_ik; }
+  Symbol* invoked_name()             const { return _invoked_name; }
+  Symbol* invoked_type()             const { return _invoked_type; }
+  Symbol* method_type()              const { return _method_type; }
+  Method* member_method()            const { return _member_method; }
+  Symbol* instantiated_method_type() const { return _instantiated_method_type; }
 
-  void init_for_archive(LambdaProxyClassKey& dumptime_key);
+#ifndef PRODUCT
+  void print_on(outputStream* st) const;
+#endif
+};
+
+class RunTimeLambdaProxyClassKey {
+  u4 _caller_ik;
+  u4 _invoked_name;
+  u4 _invoked_type;
+  u4 _method_type;
+  Method* _member_method;
+  u4 _instantiated_method_type;
+
+public:
+  RunTimeLambdaProxyClassKey(LambdaProxyClassKey& key) {
+    if (ArchiveBuilder::is_active()) {
+      ArchiveBuilder* b = ArchiveBuilder::current();
+      _caller_ik                = b->any_to_offset_u4(key.caller_ik());
+      _invoked_name             = b->any_to_offset_u4(key.invoked_name());
+      _invoked_type             = b->any_to_offset_u4(key.invoked_type());
+      _method_type              = b->any_to_offset_u4(key.method_type());
+      _instantiated_method_type = b->any_to_offset_u4(key.instantiated_method_type());
+    } else {
+      _caller_ik                = ArchiveBuilder::to_offset_u4(uintx(key.caller_ik()) - uintx(SharedBaseAddress));
+      _invoked_name             = ArchiveBuilder::to_offset_u4(uintx(key.invoked_name()) - uintx(SharedBaseAddress));
+      _invoked_type             = ArchiveBuilder::to_offset_u4(uintx(key.invoked_type()) - uintx(SharedBaseAddress));
+      _method_type              = ArchiveBuilder::to_offset_u4(uintx(key.method_type()) - uintx(SharedBaseAddress));
+      _instantiated_method_type = ArchiveBuilder::to_offset_u4(uintx(key.instantiated_method_type()) - uintx(SharedBaseAddress));
+    }
+
+    _member_method = key.member_method();
+  }
+
+  unsigned int hash() const;
+  bool equals(RunTimeLambdaProxyClassKey const& other) const {
+    return _caller_ik == other._caller_ik &&
+           _invoked_name == other._invoked_name &&
+           _invoked_type == other._invoked_type &&
+           _method_type == other._method_type &&
+           _member_method == other._member_method &&
+           _instantiated_method_type == other._instantiated_method_type;
+  }
+
+  void remove_unshareable_info() {
+    _member_method = nullptr;
+  }
 
 #ifndef PRODUCT
   void print_on(outputStream* st) const;
@@ -133,17 +174,17 @@ public:
 };
 
 class RunTimeLambdaProxyClassInfo {
-  LambdaProxyClassKey _key;
+  RunTimeLambdaProxyClassKey _key;
   InstanceKlass* _proxy_klass_head;
 public:
-  RunTimeLambdaProxyClassInfo(LambdaProxyClassKey key, InstanceKlass* proxy_klass_head) :
+  RunTimeLambdaProxyClassInfo(RunTimeLambdaProxyClassKey key, InstanceKlass* proxy_klass_head) :
     _key(key), _proxy_klass_head(proxy_klass_head) {}
 
   InstanceKlass* proxy_klass_head() const { return _proxy_klass_head; }
 
   // Used by LambdaProxyClassDictionary to implement OffsetCompactHashtable::EQUALS
   static inline bool EQUALS(
-       const RunTimeLambdaProxyClassInfo* value, LambdaProxyClassKey* key, int len_unused) {
+       const RunTimeLambdaProxyClassInfo* value, RunTimeLambdaProxyClassKey* key, int len_unused) {
     return (value->_key.equals(*key));
   }
   void init(LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info);
@@ -151,7 +192,7 @@ public:
   unsigned int hash() const {
     return _key.hash();
   }
-  LambdaProxyClassKey key() const {
+  RunTimeLambdaProxyClassKey key() const {
     return _key;
   }
 #ifndef PRODUCT
@@ -173,7 +214,7 @@ public:
 };
 
 class LambdaProxyClassDictionary : public OffsetCompactHashtable<
-  LambdaProxyClassKey*,
+  RunTimeLambdaProxyClassKey*,
   const RunTimeLambdaProxyClassInfo*,
   RunTimeLambdaProxyClassInfo::EQUALS> {};
 
