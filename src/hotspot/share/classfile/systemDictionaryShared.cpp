@@ -694,6 +694,7 @@ void SystemDictionaryShared::dumptime_classes_do(class MetaspaceClosure* it) {
   auto do_lambda = [&] (LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info) {
     if (key.caller_ik()->is_loader_alive()) {
       info.metaspace_pointers_do(it);
+      key.metaspace_pointers_do(it);
     }
   };
   _dumptime_lambda_proxy_class_dictionary->iterate_all(do_lambda);
@@ -788,10 +789,19 @@ InstanceKlass* SystemDictionaryShared::get_shared_lambda_proxy_class(InstanceKla
                                                                      Symbol* method_type,
                                                                      Method* member_method,
                                                                      Symbol* instantiated_method_type) {
+  if (!caller_ik->is_shared() ||
+      !invoked_name->is_shared() ||
+      !invoked_type->is_shared() ||
+      !method_type->is_shared() ||
+      !member_method->is_shared() ||
+      !instantiated_method_type->is_shared()) {
+    // These can't be represented as u4 offset, but we wouldn't have archived a lambda proxy in this case anyway.
+    return nullptr;
+  }
   MutexLocker ml(CDSLambda_lock, Mutex::_no_safepoint_check_flag);
-  LambdaProxyClassKey key(caller_ik, invoked_name, invoked_type,
-                          method_type, member_method, instantiated_method_type);
-  RunTimeLambdaProxyClassKey runtime_key(key);
+  RunTimeLambdaProxyClassKey runtime_key =
+    RunTimeLambdaProxyClassKey::init_for_runtime(caller_ik, invoked_name, invoked_type,
+                                                 method_type, member_method, instantiated_method_type);
 
   // Try to retrieve the lambda proxy class from static archive.
   const RunTimeLambdaProxyClassInfo* info = _static_archive.lookup_lambda_proxy_class(&runtime_key);
@@ -1176,7 +1186,6 @@ public:
         (RunTimeLambdaProxyClassInfo*)ArchiveBuilder::ro_region_alloc(byte_size);
     runtime_info->init(key, info);
     unsigned int hash = runtime_info->hash();
-    runtime_info->key().remove_unshareable_info();
     u4 delta = _builder->any_to_offset_u4((void*)runtime_info);
     _writer->add(hash, delta);
     return true;

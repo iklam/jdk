@@ -69,7 +69,7 @@ void RunTimeLambdaProxyClassKey::print_on(outputStream* st) const {
   st->print_cr("_instantiated_method_type : %d", _instantiated_method_type);
   st->print_cr("_invoked_name             : %d", _invoked_name);
   st->print_cr("_invoked_type             : %d", _invoked_type);
-  st->print_cr("_member_method            : %s", _member_method->name()->as_C_string());
+  st->print_cr("_member_method            : %d", _member_method);
   st->print_cr("_method_type              : %d", _method_type);
 }
 
@@ -79,8 +79,7 @@ void RunTimeLambdaProxyClassInfo::print_on(outputStream* st) const {
 #endif
 
 void RunTimeLambdaProxyClassInfo::init(LambdaProxyClassKey& key, DumpTimeLambdaProxyClassInfo& info) {
-  RunTimeLambdaProxyClassKey runtime_key(key);
-  _key = runtime_key;
+  _key = RunTimeLambdaProxyClassKey::init_for_dumptime(key);
   ArchiveBuilder::current()->write_pointer_in_buffer(&_proxy_klass_head,
                                                      info._proxy_klasses->at(0));
 }
