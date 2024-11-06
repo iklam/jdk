@@ -298,6 +298,13 @@ bool HeapShared::archive_object(oop obj) {
     return true;
   }
 
+  if (obj->klass()->name()->equals("sun/security/rsa/RSAUtil$KeyType")) {
+    // See comments inside AOTClassInitializer::can_archive_initialized_mirror().
+    debug_trace();
+    log_error(cds, heap)("RSAUtil$KeyType should not be archived");
+    MetaspaceShared::unrecoverable_writing_error();
+  }
+
   if (ArchiveHeapWriter::is_too_large_to_archive(obj->size())) {
     log_debug(cds, heap)("Cannot archive, object (" PTR_FORMAT ") is too large: " SIZE_FORMAT,
                          p2i(obj), obj->size());
