@@ -31,6 +31,8 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.security.CodeSource;
+import java.security.ProtectionDomain;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,6 +104,18 @@ public class CDS {
      * ImmutableCollections are always sorted the same order for the same VM build.
      */
     public static native long getRandomSeedForDumping();
+
+
+    /**
+     * Returns if a ProtectionDomain has signers.
+     * This is called from the VM (ClassListWriter) to check if a class has
+     * signers (before the class is fully set up).
+     */
+    public static boolean hasSigners(ProtectionDomain pd) {
+        // This has the same logic as in ClassLoader::postDefineClass()
+        CodeSource cs = pd.getCodeSource();
+        return cs != null && cs.getCertificates() != null;
+    }
 
     /**
      * log lambda form invoker holder, name and method type

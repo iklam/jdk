@@ -57,6 +57,7 @@ public:
   static bool is_enabled() {
     return _classlist_file != nullptr && _classlist_file->is_open();
   }
+  static bool class_or_any_super_has_signers(const InstanceKlass* k);
 
 #else
 public:
@@ -67,7 +68,7 @@ public:
 
 
   static void init() NOT_CDS_RETURN;
-  static void write(const InstanceKlass* k, const ClassFileStream* cfs) NOT_CDS_RETURN;
+  static void write(const InstanceKlass* k, const ClassFileStream* cfs, TRAPS) NOT_CDS_RETURN;
   static void write_to_stream(const InstanceKlass* k, outputStream* stream, const ClassFileStream* cfs = nullptr) NOT_CDS_RETURN;
   static void write_resolved_constants() NOT_CDS_RETURN;
   static void delete_classlist() NOT_CDS_RETURN;

@@ -35,6 +35,7 @@
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.inline.hpp"
 #include "oops/instanceKlass.hpp"
+#include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
 
 fileStream* ClassListWriter::_classlist_file = nullptr;
@@ -54,7 +55,7 @@ void ClassListWriter::init() {
   }
 }
 
-void ClassListWriter::write(const InstanceKlass* k, const ClassFileStream* cfs) {
+void ClassListWriter::write(const InstanceKlass* k, const ClassFileStream* cfs, TRAPS) {
   assert(is_enabled(), "must be");
 
   if (!ClassLoader::has_jrt_entry()) {
@@ -62,6 +63,36 @@ void ClassListWriter::write(const InstanceKlass* k, const ClassFileStream* cfs) 
     DumpLoadedClassList = nullptr;
     return;
   }
+
+
+  // Do not write the class if it (or any of its supers) has signers, as
+  // we can't archive such classes anyway.
+  if (class_or_any_super_has_signers(k)) {
+    return;
+  }
+  if (!k->is_shared() && vmClasses::Class_klass_loaded()) {
+    // This function is called when k is still being parsed,
+    // before ClassLoader::postDefineClass() calls setSigners().
+    // So we must check the protection domain directly.
+    oop pd = java_lang_Class::protection_domain(k->java_mirror());
+    if (pd != nullptr) {
+      JavaThread* current = JavaThread::current();
+      Handle h_pd(current, pd);
+      JavaValue result(T_BOOLEAN);
+      JavaCallArguments args(1);
+      args.push_oop(h_pd);
+      JavaCalls::call_static(&result,
+                             vmClasses::CDS_klass(),
+                             vmSymbols::hasSigners_name(),
+                             vmSymbols::hasSigners_signature(),
+                             &args,
+                             CHECK);
+      if (result.get_jboolean()) {
+        return;
+      }
+    }
+  }
+
 
   ClassListWriter w;
   write_to_stream(k, w.stream(), cfs);
@@ -95,6 +126,26 @@ bool ClassListWriter::has_id(const InstanceKlass* k) {
   } else {
     return false;
   }
+}
+
+bool ClassListWriter::class_or_any_super_has_signers(const InstanceKlass* k) {
+  if (!vmClasses::Class_klass_loaded()) {
+    return false;
+  }
+  if (k->signers() != nullptr) {
+    return true;
+  }
+
+  if (k->java_super() != nullptr && class_or_any_super_has_signers(k->java_super())) {
+    return true;
+  }
+  Array<InstanceKlass*>* intfs = k->local_interfaces();
+  for (int i = 0; i < intfs->length(); i++) {
+    if (class_or_any_super_has_signers(intfs->at(i))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ClassListWriter::handle_class_unloading(const InstanceKlass* klass) {
@@ -239,6 +290,10 @@ void ClassListWriter::write_resolved_constants_for(InstanceKlass* ik) {
   }
 
   if (!has_id(ik)) { // do not resolve CP for classes loaded by custom loaders.
+    return;
+  }
+
+  if (class_or_any_super_has_signers(ik)) {
     return;
   }
 

@@ -3875,10 +3875,10 @@ const char* InstanceKlass::internal_name() const {
 
 void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
                                              const ModuleEntry* module_entry,
-                                             const ClassFileStream* cfs) const {
+                                             const ClassFileStream* cfs, TRAPS) const {
 
   if (ClassListWriter::is_enabled()) {
-    ClassListWriter::write(this, cfs);
+    ClassListWriter::write(this, cfs, CHECK);
   }
 
   print_class_load_helper(loader_data, module_entry, cfs);

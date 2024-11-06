@@ -1197,7 +1197,13 @@ InstanceKlass* SystemDictionary::load_shared_class(InstanceKlass* ik,
 }
 
 void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData* loader_data) {
-  ik->print_class_load_logging(loader_data, nullptr, nullptr);
+  {
+    // print_class_load_logging() will never call Java code for shared classes, so there's
+    // no chance of exceptions.
+    JavaThread* THREAD = JavaThread::current();
+    HandleMark em(THREAD);
+    ik->print_class_load_logging(loader_data, nullptr, nullptr, THREAD);
+  }
 
   // For boot loader, ensure that GetSystemPackage knows that a class in this
   // package was loaded.

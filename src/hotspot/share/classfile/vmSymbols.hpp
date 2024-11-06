@@ -745,6 +745,8 @@ class SerializeClosure;
   template(runtimeSetup,                                    "runtimeSetup")                                       \
   template(toFileURL_name,                                  "toFileURL")                                          \
   template(toFileURL_signature,                             "(Ljava/lang/String;)Ljava/net/URL;")                 \
+  template(hasSigners_name,                                 "hasSigners")                                         \
+  template(hasSigners_signature,                            "(Ljava/security/ProtectionDomain;)Z")                \
   template(url_array_classloader_void_signature,            "([Ljava/net/URL;Ljava/lang/ClassLoader;)V")          \
                                                                                                                   \
   /* Thread.dump_to_file jcmd */                                                                                  \
