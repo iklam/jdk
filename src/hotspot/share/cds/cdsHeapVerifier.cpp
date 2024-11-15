@@ -130,8 +130,10 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
 
   if (CDSConfig::is_dumping_invokedynamic()) {
     ADD_EXCL("java/lang/invoke/InvokerBytecodeGenerator", "MEMBERNAME_FACTORY",    // D
-                                                          "CD_Object_array",       // E same as <...>ConstantUtils.CD_Object_array::CD_Object
+                                                          "CD_Object_array",       // E same as <...>ConstantUtils::CD_Object_array
                                                           "INVOKER_SUPER_DESC");   // E same as java.lang.constant.ConstantDescs::CD_Object
+
+    ADD_EXCL("java/lang/invoke/MethodHandleImpl$BindCaller", "CD_Object_array");   // E same as <...>ConstantUtils::CD_Object_array
   }
 
 # undef ADD_EXCL
@@ -211,6 +213,11 @@ public:
         if (field_ik == vmClasses::MethodType_klass()) {
           // The identity of MethodTypes are preserved between assembly phase and production runs
           // (by MethodType::AOTHolder::archivedMethodTypes). No need to check.
+          return;
+        }
+
+        if (field_ik->name() == vmSymbols::java_math_BigInteger()) {
+          // The identity of BigIntegers is not important
           return;
         }
 

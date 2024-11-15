@@ -108,6 +108,15 @@ bool AOTClassInitializer::can_archive_initialized_mirror(InstanceKlass* ik) {
   }
 
   if (ik->is_enum_subclass()) {
+    if (ik->name()->equals("sun/security/rsa/RSAUtil$KeyType")) {
+      // This enum is used by Java code when some signed classes are loaded. If we AOT-initialize it,
+      // we will pull in a lot of unwanted stuff from sun.security.util.ObjectIdentifier::oidTable
+      // that will cause CDSHeapVerifier to fail.
+      //
+      // We actually don't need to archive objects of this classes. So don't AOT-initialize it.
+      // (This assumption will be checked in HeapShared::archive_object().
+      return false;
+    }
     return true;
   }
 
