@@ -32,6 +32,7 @@
 #include "classfile/classLoader.hpp"
 #include "classfile/javaClasses.hpp"
 #include "classfile/javaThreadStatus.hpp"
+#include "classfile/modules.hpp"
 #include "classfile/symbolTable.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmClasses.hpp"
@@ -324,6 +325,8 @@ static void call_initPhase2(TRAPS) {
   if (result.get_jint() != JNI_OK) {
     vm_exit_during_initialization(); // no message or exception
   }
+
+  Modules::add_jvmci_module_if_needed(CHECK);
 
   universe_post_module_init();
 }

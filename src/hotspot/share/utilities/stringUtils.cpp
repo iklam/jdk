@@ -31,7 +31,7 @@
 #include <ctype.h>
 #include <string.h>
 
-int StringUtils::replace_no_expand(char* string, const char* from, const char* to) {
+int StringUtils::replace_no_expand(char* string, const char* from, const char* to, int max_count) {
   int replace_count = 0;
   size_t from_len = strlen(from);
   size_t to_len = strlen(to);
@@ -43,6 +43,9 @@ int StringUtils::replace_no_expand(char* string, const char* from, const char* t
     dst += to_len;                                  // skip over the replacement.
     memmove(dst, left_over, strlen(left_over) + 1); // copies the trailing 0 of <left_over>
     ++ replace_count;
+    if (replace_count >= max_count) {
+      break;
+    }
   }
 
   return replace_count;

@@ -655,14 +655,61 @@ void Modules::dump_addmods_names() {
   }
 }
 
+#define JVMCI_MODULE_NAME "jdk.internal.vm.ci"
+
+static bool _need_to_add_jvmci_module = false;
+static bool _loaded_jvmci_module = false;
+
 const char* Modules::get_addmods_names_as_sorted_string() {
   return get_numbered_property_as_sorted_string("jdk.module.addmods");
+}
+
+static const char* do_strip(const char* string, const char* pattern) {
+  if (strstr(string, pattern) == nullptr) {
+    return nullptr;
+  }
+  size_t len = strlen(string);
+  char* tmp = resource_allocate_bytes(len + 1);
+  strcpy(tmp, string);
+  int n = StringUtils::replace_no_expand(tmp, pattern, "", /*max_replace_count=*/1);
+  assert(n == 1, "sanity"); 
+  return tmp;
+}
+
+static bool only_extra_addmod_is_jvmci(char* archived_flag, const char* runtime_flag) {
+  if (runtime_flag == nullptr) {
+    return false;
+  }
+
+  if (archived_flag == nullptr) {
+    if (strcmp(runtime_flag, JVMCI_MODULE_NAME) == 0) {
+      return true;
+    }
+  } else {
+    ResourceMark rm;
+    const char* s1 = do_strip(runtime_flag, JVMCI_MODULE_NAME ",");
+    if (s1 != nullptr && strcmp(archived_flag, s1) == 0) {
+      return true;
+    }
+    const char* s2 = do_strip(runtime_flag, "," JVMCI_MODULE_NAME);
+    if (s2 != nullptr && strcmp(archived_flag, s2) == 0) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void Modules::serialize_addmods_names(SerializeClosure* soc) {
   soc->do_ptr(&_archived_addmods_names);
   if (soc->reading()) {
-    check_archived_flag_consistency(_archived_addmods_names, get_addmods_names_as_sorted_string(), "jdk.module.addmods");
+    if (only_extra_addmod_is_jvmci(_archived_addmods_names, get_addmods_names_as_sorted_string())) {
+      // If we add exactly one module (jdk.internal.vm.ci) at runtime, load the full module graph and
+      // add this module dynamically using Modules::add_jvmci_module_if_needed().
+      _need_to_add_jvmci_module = true;
+    } else {
+      check_archived_flag_consistency(_archived_addmods_names, get_addmods_names_as_sorted_string(), "jdk.module.addmods");
+    }
 
     // Don't hold onto the pointer, in case we might decide to unmap the archive.
     _archived_addmods_names = nullptr;
@@ -760,6 +807,30 @@ void Modules::define_archived_modules(Handle h_platform_loader, Handle h_system_
   assert(Arguments::get_property("java.system.class.loader") == nullptr,
            "archived full module should have been disabled if -Djava.system.class.loader is specified");
   ClassLoaderDataShared::restore_java_system_loader_from_archive(system_loader_data);
+}
+
+void Modules::add_jvmci_module_if_needed(TRAPS) {
+  if (_need_to_add_jvmci_module) {
+    ResourceMark rm(THREAD);
+    HandleMark hm(THREAD);
+    JavaValue result(T_OBJECT);
+    Handle h_module_name = java_lang_String::create_from_str(JVMCI_MODULE_NAME, CHECK);
+    JavaCalls::call_static(&result,
+                           vmClasses::module_Modules_klass(),
+                           vmSymbols::loadModule_name(),
+                           vmSymbols::loadModule_signature(),
+                           h_module_name,
+                           CHECK);
+    _loaded_jvmci_module = true;
+  }
+}
+
+bool Modules::jvmci_module_not_loaded_yet() {
+  if (_need_to_add_jvmci_module && !_loaded_jvmci_module) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void Modules::check_cds_restrictions(TRAPS) {

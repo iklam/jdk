@@ -41,7 +41,7 @@ public:
   // will result in "aa", not "a".
   //
   // Returns the count of substrings that have been replaced.
-  static int replace_no_expand(char* string, const char* from, const char* to);
+  static int replace_no_expand(char* string, const char* from, const char* to, int max_replace_count = INT_MAX);
 
   // Compute string similarity based on Dice's coefficient
   static double similarity(const char* str1, size_t len1, const char* str2, size_t len2);

@@ -22,6 +22,7 @@
  */
 
 #include "precompiled.hpp"
+#include "classfile/modules.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "compiler/abstractCompiler.hpp"
 #include "compiler/compileTask.hpp"
@@ -93,6 +94,9 @@ bool JVMCI::can_initialize_JVMCI() {
   // JVMCI initialization requires) isn't usable until after phase 3. Testing
   // whether the system loader is initialized satisfies all these invariants.
   if (SystemDictionary::java_system_loader() == nullptr) {
+    return false;
+  }
+  if (Modules::jvmci_module_not_loaded_yet()) {
     return false;
   }
   assert(Universe::is_module_initialized(), "must be");
