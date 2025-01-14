@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -181,6 +181,7 @@ public class MainModuleOnly {
         // used during dump time.
         Result res = TestCommon.run("-cp", destJar.toString(),
                        "-Xlog:cds",
+                       "-Xlog:class+path",
                        "--module-path", moduleDir.toString(),
                        "-m", TEST_MODULE1);
         res.assertAbnormalExit(jarFileError);

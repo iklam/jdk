@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "cds/aotClassLinker.hpp"
+#include "cds/aotCodeSource.hpp"
 #include "cds/aotConstantPoolResolver.hpp"
 #include "cds/aotLinkedClassBulkLoader.hpp"
 #include "cds/archiveBuilder.hpp"
@@ -294,20 +295,9 @@ void MetaspaceShared::initialize_for_static_dump() {
 // Called by universe_post_init()
 void MetaspaceShared::post_initialize(TRAPS) {
   if (CDSConfig::is_using_archive()) {
-    int size = FileMapInfo::get_number_of_shared_paths();
+    int size = AOTCodeSourceConfig::runtime()->length();
     if (size > 0) {
       CDSProtectionDomain::allocate_shared_data_arrays(size, CHECK);
-      if (!CDSConfig::is_dumping_dynamic_archive()) {
-        FileMapInfo* info;
-        if (FileMapInfo::dynamic_info() == nullptr) {
-          info = FileMapInfo::current_info();
-        } else {
-          info = FileMapInfo::dynamic_info();
-        }
-        ClassLoaderExt::init_paths_start_index(info->app_class_paths_start_index());
-        ClassLoaderExt::init_app_module_paths_start_index(info->app_module_paths_start_index());
-        ClassLoaderExt::init_num_module_paths(info->header()->num_module_paths());
-      }
     }
   }
 }
@@ -522,7 +512,7 @@ private:
     SymbolTable::write_to_archive(symbols);
   }
   char* dump_early_read_only_tables();
-  char* dump_read_only_tables();
+  char* dump_read_only_tables(AOTCodeSourceConfig*& cs_config);
 
 public:
 
@@ -543,7 +533,6 @@ public:
   StaticArchiveBuilder() : ArchiveBuilder() {}
 
   virtual void iterate_roots(MetaspaceClosure* it) {
-    FileMapInfo::metaspace_pointers_do(it);
     SystemDictionaryShared::dumptime_classes_do(it);
     Universe::metaspace_pointers_do(it);
     vmSymbols::metaspace_pointers_do(it);
@@ -577,10 +566,11 @@ char* VM_PopulateDumpSharedSpace::dump_early_read_only_tables() {
   return start;
 }
 
-char* VM_PopulateDumpSharedSpace::dump_read_only_tables() {
+char* VM_PopulateDumpSharedSpace::dump_read_only_tables(AOTCodeSourceConfig*& cs_config) {
   ArchiveBuilder::OtherROAllocMark mark;
 
   SystemDictionaryShared::write_to_archive();
+  cs_config = AOTCodeSourceConfig::dumptime()->write_to_archive();
   AOTClassLinker::write_to_archive();
   MetaspaceShared::write_method_handle_intrinsics();
 
@@ -608,7 +598,7 @@ void VM_PopulateDumpSharedSpace::doit() {
     SystemDictionary::get_all_method_handle_intrinsics(_pending_method_handle_intrinsics);
   }
 
-  FileMapInfo::check_nonempty_dir_in_shared_path_table();
+  AOTCodeSourceConfig::dumptime_check_nonempty_dirs();
 
   NOT_PRODUCT(SystemDictionary::verify();)
 
@@ -634,7 +624,8 @@ void VM_PopulateDumpSharedSpace::doit() {
   MetaspaceShared::make_method_handle_intrinsics_shareable();
 
   char* early_serialized_data = dump_early_read_only_tables();
-  char* serialized_data = dump_read_only_tables();
+  AOTCodeSourceConfig* cs_config;
+  char* serialized_data = dump_read_only_tables(cs_config);
 
   SystemDictionaryShared::adjust_lambda_proxy_class_dictionary();
 
@@ -650,6 +641,7 @@ void VM_PopulateDumpSharedSpace::doit() {
   _map_info->set_early_serialized_data(early_serialized_data);
   _map_info->set_serialized_data(serialized_data);
   _map_info->set_cloned_vtables(CppVtables::vtables_serialized_base());
+  _map_info->header()->set_code_source_config(cs_config);
 }
 
 class CollectCLDClosure : public CLDClosure {
@@ -746,7 +738,6 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
 void MetaspaceShared::prepare_for_dumping() {
   assert(CDSConfig::is_dumping_archive(), "sanity");
   CDSConfig::check_unsupported_dumping_module_options();
-  ClassLoader::initialize_shared_path(JavaThread::current());
 }
 
 // Preload classes from a list, populate the shared spaces and dump to a
@@ -1113,11 +1104,8 @@ void MetaspaceShared::initialize_runtime_shared_and_meta_spaces() {
     _relocation_delta = static_mapinfo->relocation_delta();
     _requested_base_address = static_mapinfo->requested_base_address();
     if (dynamic_mapped) {
-      FileMapInfo::set_shared_path_table(dynamic_mapinfo);
       // turn AutoCreateSharedArchive off if successfully mapped
       AutoCreateSharedArchive = false;
-    } else {
-      FileMapInfo::set_shared_path_table(static_mapinfo);
     }
   } else {
     set_shared_metaspace_range(nullptr, nullptr, nullptr);
