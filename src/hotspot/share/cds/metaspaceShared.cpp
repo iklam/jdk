@@ -901,6 +901,7 @@ void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS
     HeapShared::init_for_dumping(CHECK);
     ArchiveHeapWriter::init();
     if (CDSConfig::is_dumping_full_module_graph()) {
+      ClassLoaderDataShared::ensure_module_entry_tables_exist();
       HeapShared::reset_archived_object_states(CHECK);
     }
 
