@@ -1296,7 +1296,7 @@ final class CertificateMessage {
             // Note that the "UNKNOWN" authentication type is sufficient to
             // check the required digitalSignature KeyUsage for TLS 1.3.
             String authType = "UNKNOWN";
-
+/***
             try {
                 X509TrustManager tm = chc.sslContext.getX509TrustManager();
                 if (tm instanceof X509ExtendedTrustManager) {
@@ -1325,7 +1325,7 @@ final class CertificateMessage {
             } catch (CertificateException ce) {
                 throw chc.conContext.fatal(getCertificateAlert(chc, ce), ce);
             }
-
+****/
             return certs;
         }
 
