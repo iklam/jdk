@@ -2501,6 +2501,12 @@ bool FileMapInfo::validate_aot_class_linking() {
       log_error(cds)("CDS archive has aot-linked classes. It cannot be used when JVMTI early vm start is in use.");
       return false;
     }
+
+    if (EnableDynamicAgentLoading) {
+      log_error(cds)("CDS archive has aot-linked classes. It cannot be used with -XX:+EnableDynamicAgentLoading");
+      return false;
+    }
+
     if (!CDSConfig::is_using_full_module_graph()) {
       log_error(cds)("CDS archive has aot-linked classes. It cannot be used when archived full module graph is not used.");
       return false;
