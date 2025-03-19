@@ -543,6 +543,7 @@ void Modules::verify_archived_modules() {
 
 char* Modules::_archived_main_module_name = nullptr;
 char* Modules::_archived_addmods_names = nullptr;
+char* Modules::_archived_addexports_names = nullptr;
 char* Modules::_archived_native_access_flags = nullptr;
 
 void Modules::dump_main_module_name() {
@@ -580,21 +581,20 @@ void Modules::check_archived_flag_consistency(char* archived_flag, const char* r
 }
 
 void Modules::dump_archived_module_info() {
-  // Write module name into archive
-  CDS_JAVA_HEAP_ONLY(Modules::dump_main_module_name();)
-  // Write module names from --add-modules into archive
-  CDS_JAVA_HEAP_ONLY(Modules::dump_addmods_names();)
-  // Write native enable-native-access flag into archive
-  CDS_JAVA_HEAP_ONLY(Modules::dump_native_access_flag());
+  Modules::dump_main_module_name();
+  Modules::dump_addmods_names(); // --add-modules
+  Modules::dump_addexports_names(); // --add-exports
+  Modules::dump_native_access_flag(); // --enable-native-access
 }
 
 void Modules::serialize_archived_module_info(SerializeClosure* soc) {
-  CDS_JAVA_HEAP_ONLY(Modules::serialize(soc);)
-  CDS_JAVA_HEAP_ONLY(Modules::serialize_addmods_names(soc);)
-  CDS_JAVA_HEAP_ONLY(Modules::serialize_native_access_flags(soc);)
+  Modules::serialize_main_module_name(soc);
+  Modules::serialize_addmods_names(soc);
+  Modules::serialize_addexports_names(soc);
+  Modules::serialize_native_access_flags(soc);
 }
 
-void Modules::serialize(SerializeClosure* soc) {
+void Modules::serialize_main_module_name(SerializeClosure* soc) {
   soc->do_ptr(&_archived_main_module_name);
   if (soc->reading()) {
     const char* runtime_main_module = Arguments::get_property("jdk.module.main");
@@ -653,6 +653,30 @@ void Modules::serialize_addmods_names(SerializeClosure* soc) {
 
     // Don't hold onto the pointer, in case we might decide to unmap the archive.
     _archived_addmods_names = nullptr;
+  }
+}
+
+void Modules::dump_addexports_names() {
+  ResourceMark rm;
+  const char* addexports_names = get_addexports_names_as_sorted_string();
+  if (addexports_names != nullptr) {
+    _archived_addexports_names = ArchiveBuilder::current()->ro_strdup(addexports_names);
+  }
+}
+
+// Caller needs ResourceMark
+const char* Modules::get_addexports_names_as_sorted_string() {
+  return get_numbered_property_as_sorted_string("jdk.module.addexports");
+}
+
+void Modules::serialize_addexports_names(SerializeClosure* soc) {
+  soc->do_ptr(&_archived_addexports_names);
+  if (soc->reading()) {
+    ResourceMark rm;
+    check_archived_flag_consistency(_archived_addexports_names, get_addexports_names_as_sorted_string(), "jdk.module.addexports");
+
+    // Don't hold onto the pointer, in case we might decide to unmap the archive.
+    _archived_addexports_names = nullptr;
   }
 }
 

@@ -59,23 +59,32 @@ public:
   static void verify_archived_modules() NOT_CDS_JAVA_HEAP_RETURN;
   static void dump_archived_module_info() NOT_CDS_JAVA_HEAP_RETURN;
   static void serialize_archived_module_info(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
-  static void dump_main_module_name() NOT_CDS_JAVA_HEAP_RETURN;
-  static void serialize(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
-  static void check_archived_flag_consistency(char* archived_flag, const char* runtime_flag, const char* property) NOT_CDS_JAVA_HEAP_RETURN;
 
-  static void dump_native_access_flag() NOT_CDS_JAVA_HEAP_RETURN;
-  static const char* get_native_access_flags_as_sorted_string() NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
-  static void serialize_native_access_flags(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
-
-  static void dump_addmods_names() NOT_CDS_JAVA_HEAP_RETURN;
-  static const char* get_addmods_names_as_sorted_string() NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
-  static void serialize_addmods_names(SerializeClosure* soc) NOT_CDS_JAVA_HEAP_RETURN;
-
-  static const char* get_numbered_property_as_sorted_string(const char* property) NOT_CDS_JAVA_HEAP_RETURN_(nullptr);
 #if INCLUDE_CDS_JAVA_HEAP
+private:
+  static void dump_main_module_name();
+  static void serialize_main_module_name(SerializeClosure* soc);
+  static void check_archived_flag_consistency(char* archived_flag, const char* runtime_flag, const char* property);
+
+  static void dump_native_access_flag();
+  static const char* get_native_access_flags_as_sorted_string();
+  static void serialize_native_access_flags(SerializeClosure* soc);
+
+  static void dump_addexports_names();
+  static const char* get_addexports_names_as_sorted_string();
+  static void serialize_addexports_names(SerializeClosure* soc);
+
+  static void dump_addmods_names();
+  static const char* get_addmods_names_as_sorted_string();
+  static void serialize_addmods_names(SerializeClosure* soc);
+
+  static const char* get_numbered_property_as_sorted_string(const char* property);
+
   static char* _archived_main_module_name;
   static char* _archived_addmods_names;
+  static char* _archived_addexports_names;
   static char* _archived_native_access_flags;
+public:
 #endif
 
   // Provides the java.lang.Module for the unnamed module defined
