@@ -44,19 +44,24 @@ public class Util {
       try (DataInputStream dis = new DataInputStream(new FileInputStream(clsFile))) {
         byte[] buff = new byte[(int)clsFile.length()];
         dis.readFully(buff);
-        replace(buff, fromString, toString);
+        if (fromString != null || toString != null) {
+            replace(buff, fromString, toString);
+        }
 
         System.out.println("Loading from: " + clsFile + " (" + buff.length + " bytes)");
 
-
-        // We directly call into Lookup.defineClass() to define the "Super" class. Also,
-        // rewrite its classfile so that it returns ___yyy___ instead of ___xxx___. Changing the
-        // classfile will guarantee that this class will NOT be loaded from the CDS archive.
         Class<?> cls = lookup.defineClass(buff);
         System.out.println("Loaded : " + cls);
 
         return cls;
       }
+    }
+
+    public static Class<?> defineClass(Lookup lookup, File clsFile)
+        throws FileNotFoundException, IOException, NoSuchMethodException, IllegalAccessException,
+               InvocationTargetException
+    {
+        return defineModifiedClass(lookup, clsFile, null, null);
     }
 
     /**

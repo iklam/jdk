@@ -50,13 +50,22 @@ abstract public class CDSAppTester {
     private final String dynamicArchiveFileLog;
     private final String tempBaseArchiveFile;
     private int numProductionRuns = 0;
+    private final String mainClassName;
+    private final String jarFileName;
 
     public CDSAppTester(String name) {
+        this(name, null, null);
+    }
+
+    public CDSAppTester(String name, String mainClass, String jarFile) {
         if (CDSTestUtils.DYNAMIC_DUMP) {
             throw new SkippedException("Tests based on CDSAppTester should be excluded when -Dtest.dynamic.cds.archive is specified");
         }
 
         this.name = name;
+        this.mainClassName = mainClass;
+        this.jarFileName = jarFile;
+
         classListFile = name() + ".classlist";
         classListFileLog = classListFile + ".log";
         aotConfigurationFile = name() + ".aotconfig";
@@ -121,21 +130,29 @@ abstract public class CDSAppTester {
         return this.name;
     }
 
-    // optional
+    // Override this function to specify vm argument.
     public String[] vmArgs(RunMode runMode) {
         return new String[0];
     }
 
-    // optional
+    // Override this function if your classpath depends on runMode. Otherwise, just
+    // pass jarFile to the CDSAppTester(String,String,String) constructor.
     public String classpath(RunMode runMode) {
-        return null;
+        // If CDSAppTester(String,String,String) was used -> return the specified JAR file
+        // Otherwise, return null.
+        return jarFileName;
     }
 
-    // must override
-    // main class, followed by arguments to the main class
-    abstract public String[] appCommandLine(RunMode runMode);
+    // Default implementation: return the mainClass set by the
+    // CDSAppTester(String,String,String) constructor.
+    public String[] appCommandLine(RunMode runMode) {
+        if (mainClassName != null) {
+            return new String[] {mainClassName};
+        }
+        throw new RuntimeException("The test case should specify mainClassName, or override the appCommandLine() method");
+    }
 
-    // optional
+    // Override if you want to check the output in different execution phases.
     public void checkExecution(OutputAnalyzer out, RunMode runMode) throws Exception {}
 
     private Workflow workflow;
