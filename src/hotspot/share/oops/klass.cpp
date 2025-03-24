@@ -121,9 +121,17 @@ uint8_t Klass::compute_hash_slot(Symbol* n) {
   return (hash_code & SECONDARY_SUPERS_TABLE_MASK);
 }
 
+void foofoo() {
+
+
+}
+
 void Klass::set_name(Symbol* n) {
   _name = n;
 
+  if (n != nullptr && n->equals("Barbar")) {
+    foofoo();
+  }
   if (_name != nullptr) {
     _name->increment_refcount();
   }
