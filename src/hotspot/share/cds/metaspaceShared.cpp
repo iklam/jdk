@@ -683,25 +683,30 @@ void VM_PopulateDumpSharedSpace::doit() {
   _map_info->header()->set_class_location_config(cl_config);
 }
 
-class CollectCLDClosure : public CLDClosure {
-  GrowableArray<ClassLoaderData*> _loaded_cld;
-  GrowableArray<OopHandle> _loaded_cld_handles; // keep the CLDs alive
-  Thread* _current_thread;
+class CollectClassesForLinking : public LoaderAndKlassClosure {
+  GrowableArray<InstanceKlass*> _classes;
+  GrowableArray<OopHandle> _keep_alive_clds;
+
 public:
-  CollectCLDClosure(Thread* thread) : _current_thread(thread) {}
-  ~CollectCLDClosure() {
-    for (int i = 0; i < _loaded_cld_handles.length(); i++) {
-      _loaded_cld_handles.at(i).release(Universe::vm_global());
+  CollectClassesForLinking() {}
+  ~CollectClassesForLinking() {
+    for (int i = 0; i < _keep_alive_clds.length(); i++) {
+      _keep_alive_clds.at(i).release(Universe::vm_global());
     }
   }
+
   void do_cld(ClassLoaderData* cld) {
     assert(cld->is_alive(), "must be");
-    _loaded_cld.append(cld);
-    _loaded_cld_handles.append(OopHandle(Universe::vm_global(), cld->holder()));
+    _keep_alive_clds.append(OopHandle(Universe::vm_global(), cld->holder()));
   }
 
-  int nof_cld() const                { return _loaded_cld.length(); }
-  ClassLoaderData* cld_at(int index) { return _loaded_cld.at(index); }
+  void do_klass(Klass* k) {
+    if (k->is_instance_klass()) {
+      _classes.append(InstanceKlass::cast(k));
+    }
+  }
+
+  const GrowableArray<InstanceKlass*>* classes() const { return &_classes; }
 };
 
 // Check if we can eagerly link this class at dump time, so we can avoid the
@@ -741,30 +746,23 @@ void MetaspaceShared::link_shared_classes(bool jcmd_request, TRAPS) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
   }
 
-  // Collect all loaded ClassLoaderData.
-  CollectCLDClosure collect_cld(THREAD);
+  CollectClassesForLinking collect_classes;
   {
     // ClassLoaderDataGraph::loaded_cld_do requires ClassLoaderDataGraph_lock.
     // We cannot link the classes while holding this lock (or else we may run into deadlock).
-    // Therefore, we need to first collect all the CLDs, and then link their classes after
-    // releasing the lock.
+    // Therefore, we need to first collect all the classes while keeping all CLDs alive (by holding
+    // onto each CLD's ClassLoader oop). We then link the classes after releasing the lock.
     MutexLocker lock(ClassLoaderDataGraph_lock);
-    ClassLoaderDataGraph::loaded_cld_do(&collect_cld);
+    ClassLoaderDataGraph::loaded_classes_do(&collect_classes);
   }
 
   while (true) {
     bool has_linked = false;
-    for (int i = 0; i < collect_cld.nof_cld(); i++) {
-      ClassLoaderData* cld = collect_cld.cld_at(i);
-      for (Klass* klass = cld->klasses(); klass != nullptr; klass = klass->next_link()) {
-        if (klass->is_instance_klass()) {
-          // Skip classes that are not yet loaded: these are classes that have failed
-          // to load after they were inserted into the ClassLoaderData by the ClassFileParser.
-          InstanceKlass* ik = InstanceKlass::cast(klass);
-          if (ik->is_loaded() && may_be_eagerly_linked(ik)) {
-            has_linked |= link_class_for_cds(ik, CHECK);
-          }
-        }
+    const GrowableArray<InstanceKlass*>* classes = collect_classes.classes();
+    for (int i = 0; i < classes->length(); i++) {
+      InstanceKlass* ik = classes->at(i);
+      if (may_be_eagerly_linked(ik)) {
+        has_linked |= link_class_for_cds(ik, CHECK);
       }
     }
 

@@ -337,6 +337,14 @@ void ClassLoaderDataGraph::loaded_classes_do_keepalive(KlassClosure* klass_closu
   }
 }
 
+void ClassLoaderDataGraph::loaded_classes_do(LoaderAndKlassClosure* loader_and_klass_closure) {
+  ClassLoaderDataGraphIterator iter;
+  while (ClassLoaderData* cld = iter.get_next()) {
+    loader_and_klass_closure->do_cld(cld);
+    cld->loaded_classes_do(loader_and_klass_closure);
+  }
+}
+
 void ClassLoaderDataGraph::classes_unloading_do(void f(Klass* const)) {
   ClassUnloadingContext::context()->classes_unloading_do(f);
 }

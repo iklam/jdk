@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -89,6 +89,7 @@ class ClassLoaderDataGraph : public AllStatic {
   static void modules_do(void f(ModuleEntry*));
   static void packages_do(void f(PackageEntry*));
   static void loaded_classes_do_keepalive(KlassClosure* klass_closure);
+  static void loaded_classes_do(LoaderAndKlassClosure*);
   static void classes_unloading_do(void f(Klass* const));
   static bool do_unloading();
 

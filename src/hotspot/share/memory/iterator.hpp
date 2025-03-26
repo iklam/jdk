@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2024, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -144,6 +144,12 @@ class KlassClosure : public Closure {
 class CLDClosure : public Closure {
  public:
   virtual void do_cld(ClassLoaderData* cld) = 0;
+};
+
+class LoaderAndKlassClosure : public KlassClosure {
+public:
+  virtual void do_cld(ClassLoaderData* cld) = 0;
+  virtual void do_klass(Klass* k) = 0;
 };
 
 class MetadataClosure : public Closure {
