@@ -342,6 +342,7 @@ bool AOTClassInitializer::can_archive_initialized_mirror(InstanceKlass* ik) {
 bool AOTClassInitializer::is_runtime_setup_required(InstanceKlass* ik) {
   return ik == vmClasses::Class_klass() ||
          ik == vmClasses::internal_Unsafe_klass() ||
+         ik == vmClasses::MethodHandleImpl_klass() ||
          ik == vmClasses::ConcurrentHashMap_klass();
 }
 
