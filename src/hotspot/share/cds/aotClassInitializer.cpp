@@ -321,6 +321,10 @@ bool AOTClassInitializer::can_archive_initialized_mirror(InstanceKlass* ik) {
     if (is_allowed(indy_specs, ik)) {
       return true;
     }
+
+    if (ik->name()->starts_with("java/lang/invoke/MethodHandleImpl")) {
+      return true;
+    }
   }
 
 #ifdef ASSERT
