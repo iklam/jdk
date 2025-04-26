@@ -94,8 +94,16 @@ void LogTagSet::log(const LogMessageBuffer& msg) {
   }
 }
 
+extern bool _cds_tag_specified;
+
 void LogTagSet::label(outputStream* st, const char* separator) const {
-  for (size_t i = 0; i < _ntags; i++) {
+  size_t i = 0;
+  if (_ntags > 0 && _tag[0] == LogTag::_cds && !_cds_tag_specified) {
+    st->print("%s", "aot");
+    i++;
+  }
+
+  for (; i < _ntags; i++) {
     st->print("%s%s", (i == 0 ? "" : separator), LogTag::name(_tag[i]));
   }
 }
