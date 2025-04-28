@@ -1118,7 +1118,7 @@ void MetaspaceShared::unrecoverable_loading_error(const char* message) {
   }
 }
 
-void MetaspaceShared::report_loading_error(const char* message) {
+void MetaspaceShared::report_loading_error(const char* format, ...) {
   // If the user doesn't specify any CDS options, we will try to load the default CDS archive, which
   // may fail due to incompatible VM options. Print at the info level to avoid excessive verbosity.
   // However, if the user has specified a CDS archive (or AOT cache), they would be interested in
@@ -1126,12 +1126,17 @@ void MetaspaceShared::report_loading_error(const char* message) {
   Log(cds) log;
   LogStream ls_error(log.error());
   LogStream ls_info(log.info());
-  LogStream& ls = CDSConfig::is_using_only_default_archive() ? ls_info : ls_error;
+  LogStream& ls = (!CDSConfig::is_using_archive()) || CDSConfig::is_using_only_default_archive() ? ls_info : ls_error;
 
-  ls.print_cr("An error has occurred while processing the %s.", CDSConfig::type_of_archive_being_loaded());
-  if (message != nullptr) {
-     ls.print("%s", message);
+  static bool printed_error = false;
+  if (!printed_error) { // No need for locks. Loading error checks happen only in main thread.
+    ls.print_cr("An error has occurred while processing the %s. Run with -Xlog:cds for details.", CDSConfig::type_of_archive_being_loaded());
+    printed_error = true;
   }
+  va_list ap;
+  va_start(ap, format);
+  ls.vprint_cr(format, ap);
+  va_end(ap);
 }
 
 // This function is called when the JVM is unable to write the specified CDS archive due to an
