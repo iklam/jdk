@@ -36,7 +36,6 @@ import com.sun.tools.javac.jvm.*;
 import com.sun.tools.javac.jvm.PoolConstant.LoadableConstant;
 import com.sun.tools.javac.main.Option.PkgInfo;
 import com.sun.tools.javac.resources.CompilerProperties.Fragments;
-import com.sun.tools.javac.resources.CompilerProperties.Notes;
 import com.sun.tools.javac.tree.*;
 import com.sun.tools.javac.util.*;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
@@ -2321,9 +2320,10 @@ public class Lower extends TreeTranslator {
         // synthetic private static final T[] $VALUES = $values();
         Name valuesName = syntheticName(tree, "VALUES");
         Type arrayType = new ArrayType(types.erasure(tree.type), syms.arrayClass);
+        Type valuesFieldType = useImmutableList() ? syms.listType : arrayType;
         VarSymbol valuesVar = new VarSymbol(PRIVATE|FINAL|STATIC|SYNTHETIC,
                                             valuesName,
-                                            arrayType,
+                                            valuesFieldType,
                                             tree.type.tsym);
         JCNewArray newArray = make.NewArray(make.Type(types.erasure(tree.type)),
                                           List.nil(),
@@ -2337,13 +2337,34 @@ public class Lower extends TreeTranslator {
         enumDefs.append(make.MethodDef(valuesMethod, make.Block(0, List.of(make.Return(newArray)))));
         tree.sym.members().enter(valuesMethod);
 
-        enumDefs.append(make.VarDef(valuesVar, make.App(make.QualIdent(valuesMethod))));
+        // private static final T[] $VALUES = ...
+        var callValues = make.App(make.QualIdent(valuesMethod));
+        JCExpression valuesInitializer;
+        if (useImmutableList()) {
+            // List.of($values());
+            valuesInitializer = make.App(make.QualIdent(listOfSym()), List.of(callValues));
+        } else {
+            // $values()
+            valuesInitializer = callValues;
+        }
+        enumDefs.append(make.VarDef(valuesVar, valuesInitializer));
         tree.sym.members().enter(valuesVar);
 
         MethodSymbol valuesSym = lookupMethod(tree.pos(), names.values,
                                         tree.type, List.nil());
         List<JCStatement> valuesBody;
-        if (useClone()) {
+        if (useImmutableList()) {
+            // is the arrayType equal to return type?
+            // return (T[]) $VALUES.toArray(new T[0]);
+            JCTypeCast toArrayResult =
+                make.TypeCast(valuesSym.type.getReturnType(),
+                              make.App(make.Select(make.Ident(valuesVar),
+                                                   toArraySym()),
+                                       List.of(make.NewArray(make.Type(types.erasure(tree.type)),
+                                                             List.of(make.Literal(0)),
+                                                             List.nil()).setType(arrayType))));
+            valuesBody = List.of(make.Return(toArrayResult));
+        } else if (useClone()) {
             // return (T[]) $VALUES.clone();
             JCTypeCast valuesResult =
                 make.TypeCast(valuesSym.type.getReturnType(),
@@ -2444,6 +2465,40 @@ public class Lower extends TreeTranslator {
             while (tree.sym.members().findFirst(valuesName) != null) // avoid name clash
                 valuesName = names.fromString(valuesName + "" + target.syntheticNameChar());
             return valuesName;
+        }
+
+        private boolean useImmutableList() {
+            var cache = useImmutableListCache;
+            if (cache != null)
+                return cache;
+            boolean result = useClone() && findListOfMethod();
+            useImmutableListCache = result;
+            return result;
+        }
+        private Boolean useImmutableListCache;
+        private boolean findListOfMethod() {
+            try {
+                return syms.listType.tsym.members().findFirst(names.of) != null;
+            } catch (CompletionFailure e){
+                return false;
+            }
+        }
+
+        private MethodSymbol listOfSym() {
+            return new MethodSymbol(PUBLIC | STATIC,
+                    names.of,
+                    new MethodType(List.of(new ArrayType(syms.objectType, syms.arrayClass)),
+                            syms.listType, List.nil(), syms.methodClass),
+                    syms.listType.tsym);
+        }
+
+        private MethodSymbol toArraySym() {
+            var objArrayType = new ArrayType(syms.objectType, syms.arrayClass);
+            return new MethodSymbol(PUBLIC,
+                    names.fromString("toArray"),
+                    new MethodType(List.of(objArrayType),
+                            objArrayType, List.nil(), syms.methodClass),
+                    syms.listType.tsym);
         }
 
     /** Translate an enumeration constant and its initializer. */

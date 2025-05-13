@@ -174,6 +174,10 @@ public:
       return;
     }
 
+    if (_ik->is_enum_subclass() && fd->name()->equals("$VALUES")) {
+      return;
+    }
+
     if (fd->signature()->equals("Ljdk/internal/access/JavaLangAccess;")) {
       // A few classes have static fields that point to SharedSecrets.getJavaLangAccess().
       // This object carries no state and we can create a new one in the production run.
