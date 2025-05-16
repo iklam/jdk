@@ -455,8 +455,61 @@ const char* InstanceKlass::nest_host_error() {
   }
 }
 
+static char test_blocks[2][0x4000];
+static bool is_8343892_special_class_1 = 0;
+static bool is_8343892_special_class_2 = 0;
+
 void* InstanceKlass::operator new(size_t size, ClassLoaderData* loader_data, size_t word_size,
                                   bool use_class_space, TRAPS) throw() {
+#ifdef ASSERT
+  // This code reproduces the bug in JDK-8343892, where the contents of classes.jsa becomes
+  // non-deterministic in rare occasions. The root cause is the following comparison in
+  //
+  // void Klass::hash_insert(...) {
+  //      [...]
+  //        // This tie breaker ensures that the hash order is maintained.
+  //        || ((existing_dist == dist)
+  //            && (uintptr_t(existing) < uintptr_t(klass)))  <<< HERE
+  //
+  // During java-Xshare:dump, we assume that all Klasses are loaded in a deterministic order
+  // and their addresses have a deterministic order. However, since JDK-8305895, abstract classes
+  // and interfaces can be allocated outside of the compressed class space (use_class_space == false).
+  //
+  // https://github.com/openjdk/jdk/blame/3dd34517000e4ce1a21619922c62c025f98aad44/src/hotspot/share/classfile/classFileParser.cpp#L5835-L5842
+  //
+  // Because the addresses returned by Metaspace::allocate(..., /*use_class_space ==*/ false, ...) can be
+  // unpredictable, occasionally this breaks the determinism of the (klass1 < klass2) comparison.
+  //
+  // The bug in JDK-8343892 is very hard to reproduce. However, it can be simulated easily by changing
+  // the address order of the two interfaces java/util/Collection and java/util/Deque.
+  //
+  // Reproduce this with a debug build:
+  //
+  // $ java -Xshare:dump -XX:+UseNewCode  -XX:SharedArchiveFile=f1.jsa
+  // $ java -Xshare:dump -XX:+UseNewCode2 -XX:SharedArchiveFile=f2.jsa
+  // $ cksum f1.jsa f2.jsa
+  //   2834014305 16105472 f1.jsa
+  //   4126337207 16105472 f2.jsa
+  //
+  // The following shows that the proposed fix works (UseNewCode3 will enable the fix in
+  // klass.cpp)
+  //
+  // $ java -Xshare:dump -XX:+UseNewCode  -XX:+UseNewCode3 -XX:SharedArchiveFile=f1.jsa
+  // $ java -Xshare:dump -XX:+UseNewCode2 -XX:+UseNewCode3 -XX:SharedArchiveFile=f2.jsa
+  // $ cksum f1.jsa f2.jsa
+  //   3637571299 16105472 f1.jsa
+  //   3637571299 16105472 f2.jsa
+
+  if (UseNewCode || UseNewCode2) {
+    if (is_8343892_special_class_1) {
+      return (void*)(test_blocks[UseNewCode ? 0 : 1]);
+    }
+    if (is_8343892_special_class_2) {
+      return (void*)(test_blocks[UseNewCode ? 1 : 0]);
+    }
+  }
+#endif
+
   return Metaspace::allocate(loader_data, word_size, ClassType, use_class_space, THREAD);
 }
 
@@ -489,6 +542,12 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
     ik = new (loader_data, size, use_class_space, THREAD) InstanceClassLoaderKlass(parser);
   } else {
     // normal
+#ifdef ASSERT
+    // These two classes will have a collision in Klass::hash_insert() when
+    // running "java -Xshare:dump"
+    is_8343892_special_class_1 = class_name->equals("java/util/Collection");
+    is_8343892_special_class_2 = class_name->equals("java/util/Deque");
+#endif
     ik = new (loader_data, size, use_class_space, THREAD) InstanceKlass(parser);
   }
 
