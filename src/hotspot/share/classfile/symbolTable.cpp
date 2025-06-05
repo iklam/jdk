@@ -31,6 +31,7 @@
 #include "classfile/javaClasses.hpp"
 #include "classfile/symbolTable.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/memoryReserver.hpp"
 #include "memory/metaspaceClosure.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/oop.inline.hpp"
@@ -193,6 +194,60 @@ private:
       assert(p > last, "must increase monotonically");
       DEBUG_ONLY(last = p);
       return p;
+    }
+
+    if (CDSConfig::is_dumping_dynamic_archive() && value.equals("new__field_name00")) {
+      // This is just proof of concept so don't worry about thread safety.
+      //
+      // TODO: I will create an RFE to add this into the JDK mainline.
+      //
+      // Let oldSym be a symbol in the (mapped) static CDS archive.
+      // Let newSym be a symbol that will be stored in the dynamic CDS archive.
+      //
+      // There are 3 versions of newSym. See comments in archiveBuilder.hpp for details.
+      //
+      //   newSym_orig      = the pointer returned by this function call
+      //   newSym_buffer    = the copy of newSym_orig in the ArchiveBuilder buffer
+      //   newSym_requested = the address of this symbol as written into the CDS archive.
+      //
+      // Because the dynamic archive is alway mapped at a higher address than the static archive, the
+      // following is always true:
+      //
+      //      oldSym < newSym_requested
+      //
+      // However, the following CANNOT be guaranteed:
+      //
+      //      oldSym < newSym_orig
+      //
+      // Therefore, for tables that are sorted by Symbol addresses (Symbol::fast_compare), we must
+      // allow for the possibility of (oldSym > newSym_orig), and re-sort such tables inside
+      // DynamicArchiveBuilder::doit(). An example is DynamicArchiveBuilder::sort_methods().
+      //
+      //
+      // Why is this POC necessary 
+      // =========================
+      //
+      // newSym_orig is (eventually) allocated with os::malloc(). On Linux/x64, newSym_orig is usually
+      // at a higher address than oldSym, so you will not notice the sorting problem. You can
+      // comment out DynamicArchiveBuilder::sort_methods() and yet all the dynamic CDS archive
+      // tests will pass.
+      //
+      // However, on MacOS, the addresses returned by os::malloc() can be more erratic. They can
+      // often be below oldSym. The following code simulates this situation. (On most 64-bit platforms,
+      // the CDS static archive will be mapped at a much higher address than 0x800000000 when
+      // ArchiveRelocationMode has the default value of 1).
+      static bool found = 0;
+      if (!found) {
+        found = 1;
+        ReservedSpace rs = MemoryReserver::reserve((char*) 0x800000000,
+                                                   os::vm_page_size(),
+                                                   os::vm_page_size(),
+                                                   os::vm_page_size());
+        char* base = rs.base();
+        guarantee(base == (char*)0x800000000, "This POC is not compatible with -XX:ArchiveRelocationMode=0");
+        os::commit_memory(base, os::vm_page_size(), false);
+        return (void*)base;
+      }
     }
 #endif
     if (value.refcount() != PERM_REFCOUNT) {

@@ -2707,7 +2707,15 @@ void InstanceKlass::remove_unshareable_info() {
 
   remove_unshareable_flags();
 
-  DEBUG_ONLY(FieldInfoStream::validate_search_table(_constants, _fieldinfo_stream, _fieldinfo_search_table));
+
+  if (CDSConfig::is_dumping_dynamic_archive()) {
+    // We cannot call validate_search_table. The _fieldinfo_search_table should be sorted by "requested" addresses,
+    // but validate_search_table will be getting Symbol* addresses from _constants, which has "buffered" addresses.
+    //
+    // For background, see new comments inside allocate_node_impl in symbolTable.cpp
+  } else {
+    DEBUG_ONLY(FieldInfoStream::validate_search_table(_constants, _fieldinfo_stream, _fieldinfo_search_table));
+  }
 }
 
 void InstanceKlass::remove_unshareable_flags() {
@@ -2813,6 +2821,11 @@ void InstanceKlass::restore_unshareable_info(ClassLoaderData* loader_data, Handl
   // Initialize @ValueBased class annotation if not already set in the archived klass.
   if (DiagnoseSyncOnValueBasedClasses && has_value_based_class_annotation() && !is_value_based()) {
     set_is_value_based();
+  }
+
+  if (name()->equals("FieldSearchTest")) {
+    tty->print_cr("Hello");
+    print_on(tty);
   }
 
   DEBUG_ONLY(FieldInfoStream::validate_search_table(_constants, _fieldinfo_stream, _fieldinfo_search_table));
@@ -3771,6 +3784,11 @@ void InstanceKlass::print_on(outputStream* st) const {
     map++;
   }
   st->cr();
+
+  if (fieldinfo_search_table() != nullptr) {
+    st->print_cr(BULLET"---- field info search table:");
+    FieldInfoStream::print_search_table(st, _constants, _fieldinfo_stream, _fieldinfo_search_table);
+  }
 }
 
 void InstanceKlass::print_value_on(outputStream* st) const {

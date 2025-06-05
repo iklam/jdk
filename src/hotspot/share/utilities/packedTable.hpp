@@ -102,6 +102,16 @@ public:
   // the function returns false.
   bool search(Comparator& comparator, const u1* table, size_t table_length, uint32_t* found_key, uint32_t* found_value) const;
 
+  template<typename Function>
+  void iterate(Function func, const u1* table, size_t length) const {
+    for (size_t offset = 0; offset < length; offset += _element_bytes) {
+      uint64_t element = read_element(table, length, offset);
+      uint32_t key = element & _key_mask;
+
+      func(offset, key);
+    }
+  }
+
   // Asserts that elements in the packed table follow the order defined by the comparator.
   DEBUG_ONLY(void validate_order(Comparator &comparator, const u1* table, size_t table_length) const);
 };
