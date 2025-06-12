@@ -115,6 +115,7 @@ OopStorage*   StringTable::_oop_storage;
 
 static size_t _current_size = 0;
 static volatile size_t _items_count = 0;
+DEBUG_ONLY(static int _disable_interning_during_cds_dump = 0);
 
 volatile bool _alt_hash = false;
 
@@ -346,6 +347,10 @@ bool StringTable::has_work() {
   return Atomic::load_acquire(&_has_work);
 }
 
+size_t StringTable::items_count() {
+  return Atomic::load_acquire(&_items_count);
+}
+
 void StringTable::trigger_concurrent_work() {
   // Avoid churn on ServiceThread
   if (!has_work()) {
@@ -504,6 +509,14 @@ oop StringTable::intern(const char* utf8_string, TRAPS) {
 }
 
 oop StringTable::intern(const StringWrapper& name, TRAPS) {
+#ifdef ASSERT
+  if (CDSConfig::is_dumping_heap()) {
+    assert(THREAD->is_Java_thread(), "must be");
+    assert(THREAD->can_call_java(), "must be");
+  }
+  assert(!Atomic::load_acquire(&_disable_interning_during_cds_dump), "Cannot intern after CDS has started copying interned string table");
+#endif
+
   // shared table always uses java_lang_String::hash_code
   unsigned int hash = hash_wrapped_string(name);
   oop found_string = lookup_shared(name, hash);
@@ -793,7 +806,7 @@ void StringTable::verify() {
 }
 
 // Verification and comp
-class VerifyCompStrings : StackObj {
+class StringTable::VerifyCompStrings : StackObj {
   static unsigned string_hash(oop const& str) {
     return java_lang_String::hash_code_noupdate(str);
   }
@@ -805,7 +818,7 @@ class VerifyCompStrings : StackObj {
                               string_hash, string_equals> _table;
  public:
   size_t _errors;
-  VerifyCompStrings() : _table(unsigned(_items_count / 8) + 1, 0 /* do not resize */), _errors(0) {}
+  VerifyCompStrings() : _table(unsigned(items_count() / 8) + 1, 0 /* do not resize */), _errors(0) {}
   bool operator()(WeakHandle* val) {
     oop s = val->resolve();
     if (s == nullptr) {
@@ -947,12 +960,13 @@ void StringTable::allocate_shared_strings_array(TRAPS) {
     return;
   }
   assert(CDSConfig::allow_only_single_java_thread(), "No more interned strings can be added");
+  DEBUG_ONLY(Atomic::release_store(&_disable_interning_during_cds_dump, 1));
 
-  if (_items_count > (size_t)max_jint) {
-    fatal("Too many strings to be archived: %zu", _items_count);
+  if (items_count() > (size_t)max_jint) {
+    fatal("Too many strings to be archived: %zu", items_count());
   }
 
-  int total = (int)_items_count;
+  int total = (int)items_count();
   size_t single_array_size = objArrayOopDesc::object_size(total);
 
   log_info(aot)("allocated string table for %d strings", total);
@@ -972,7 +986,7 @@ void StringTable::allocate_shared_strings_array(TRAPS) {
       // This can only happen if you have an extremely large number of classes that
       // refer to more than 16384 * 16384 = 26M interned strings! Not a practical concern
       // but bail out for safety.
-      log_error(aot)("Too many strings to be archived: %zu", _items_count);
+      log_error(aot)("Too many strings to be archived: %zu", items_count());
       MetaspaceShared::unrecoverable_writing_error();
     }
 
@@ -1070,7 +1084,7 @@ oop StringTable::init_shared_strings_array() {
 
 void StringTable::write_shared_table() {
   _shared_table.reset();
-  CompactHashtableWriter writer((int)_items_count, ArchiveBuilder::string_stats());
+  CompactHashtableWriter writer((int)items_count(), ArchiveBuilder::string_stats());
 
   int index = 0;
   auto copy_into_shared_table = [&] (WeakHandle* val) {
@@ -1084,6 +1098,8 @@ void StringTable::write_shared_table() {
   };
   _local_table->do_safepoint_scan(copy_into_shared_table);
   writer.dump(&_shared_table, "string");
+
+  DEBUG_ONLY(Atomic::release_store(&_disable_interning_during_cds_dump, 0));
 }
 
 void StringTable::set_shared_strings_array_index(int root_index) {
