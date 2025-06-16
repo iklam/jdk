@@ -802,16 +802,16 @@ bool CDSConfig::is_logging_lambda_form_invokers() {
 }
 
 bool CDSConfig::is_dumping_regenerated_lambdaform_invokers() {
-  if (is_dumping_final_static_archive()) {
+  if (is_dumping_final_static_archive() && 0) {
     // No need to regenerate -- the lambda form invokers should have been regenerated
-    // in the preimage archive (if allowed)
+    // in the preimage archive.
     return false;
   } else if (is_dumping_dynamic_archive() && is_using_aot_linked_classes()) {
     // The base archive has aot-linked classes that may have AOT-resolved CP references
     // that point to the lambda form invokers in the base archive. Such pointers will
     // be invalid if lambda form invokers are regenerated in the dynamic archive.
     return false;
-  } else if (CDSConfig::is_dumping_method_handles()) {
+  } else if (CDSConfig::is_dumping_method_handles() && 0) {
     // Work around JDK-8310831, as some methods in lambda form holder classes may not get generated.
     return false;
   } else {
