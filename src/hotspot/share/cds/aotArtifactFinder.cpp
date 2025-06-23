@@ -30,6 +30,7 @@
 #include "cds/dumpTimeClassInfo.inline.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/lambdaProxyClassDictionary.hpp"
+#include "cds/regeneratedClasses.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "logging/log.hpp"
 #include "memory/metaspaceClosure.hpp"
@@ -188,7 +189,11 @@ void AOTArtifactFinder::end_scanning_for_oops() {
 
 void AOTArtifactFinder::add_aot_inited_class(InstanceKlass* ik) {
   if (CDSConfig::is_initing_classes_at_dump_time()) {
-    assert(ik->is_initialized(), "must be");
+    if (RegeneratedClasses::is_regenerated_object(ik)) {
+      precond(RegeneratedClasses::get_original_object(ik)->is_initialized());
+    } else {
+      precond(ik->is_initialized());
+    }
     add_cached_instance_class(ik);
 
     bool created;

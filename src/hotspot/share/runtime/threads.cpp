@@ -415,7 +415,7 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
 void Threads::initialize_jsr292_core_classes(TRAPS) {
   TraceTime timer("Initialize java.lang.invoke classes", TRACETIME_LOG(Info, startuptime));
 
-  if (UseSharedSpaces) {
+  if (UseSharedSpaces && 0) {
     initialize_class(vmSymbols::java_lang_invoke_Invokers_Holder(), CHECK);
     initialize_class(vmSymbols::java_lang_invoke_DirectMethodHandle_Holder(), CHECK);
     initialize_class(vmSymbols::java_lang_invoke_DelegatingMethodHandle_Holder(), CHECK);

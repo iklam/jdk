@@ -510,10 +510,17 @@ void HeapShared::copy_and_rescan_aot_inited_mirror(InstanceKlass* ik) {
     ik->set_is_runtime_setup_required();
   }
 
-  oop orig_mirror = ik->java_mirror();
-  oop m = scratch_java_mirror(ik);
-  assert(ik->is_initialized(), "must be");
+  oop orig_mirror;
+  if (RegeneratedClasses::is_regenerated_object(ik)) {
+    InstanceKlass* orig_ik = RegeneratedClasses::get_original_object(ik);
+    precond(orig_ik->is_initialized());
+    orig_mirror = orig_ik->java_mirror();
+  } else {
+    precond(ik->is_initialized());
+    orig_mirror = ik->java_mirror();
+  }
 
+  oop m = scratch_java_mirror(ik);
   int nfields = 0;
   for (JavaFieldStream fs(ik); !fs.done(); fs.next()) {
     if (fs.access_flags().is_static()) {
@@ -1121,8 +1128,12 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
 
 void HeapShared::initialize_java_lang_invoke(TRAPS) {
   if (CDSConfig::is_using_aot_linked_classes() || CDSConfig::is_dumping_method_handles()) {
+    resolve_or_init("java/lang/invoke/Invokers$Holder", true, CHECK);
     resolve_or_init("java/lang/invoke/MethodHandle", true, CHECK);
     resolve_or_init("java/lang/invoke/MethodHandleNatives", true, CHECK);
+    resolve_or_init("java/lang/invoke/DirectMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/DelegatingMethodHandle$Holder", true, CHECK);
+    resolve_or_init("java/lang/invoke/LambdaForm$Holder", true, CHECK);
     resolve_or_init("java/lang/invoke/BoundMethodHandle$Species_L", true, CHECK);
   }
 }
