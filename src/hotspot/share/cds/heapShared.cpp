@@ -36,6 +36,7 @@
 #include "cds/cdsHeapVerifier.hpp"
 #include "cds/heapShared.hpp"
 #include "cds/metaspaceShared.hpp"
+#include "cds/regeneratedClasses.hpp"
 #include "classfile/classLoaderData.hpp"
 #include "classfile/classLoaderExt.hpp"
 #include "classfile/javaClasses.inline.hpp"
@@ -337,6 +338,9 @@ bool HeapShared::archive_object(oop obj, oop referrer, KlassSubGraphInfo* subgra
       } else if (java_lang_invoke_ResolvedMethodName::is_instance(obj)) {
         Method* m = java_lang_invoke_ResolvedMethodName::vmtarget(obj);
         if (m != nullptr) {
+          if (RegeneratedClasses::has_been_regenerated(m)) {
+            m = RegeneratedClasses::get_regenerated_object(m);
+          }
           InstanceKlass* method_holder = m->method_holder();
           AOTArtifactFinder::add_cached_class(method_holder);
         }
@@ -1117,12 +1121,8 @@ void HeapShared::resolve_classes_for_subgraph_of(JavaThread* current, Klass* k) 
 
 void HeapShared::initialize_java_lang_invoke(TRAPS) {
   if (CDSConfig::is_using_aot_linked_classes() || CDSConfig::is_dumping_method_handles()) {
-    resolve_or_init("java/lang/invoke/Invokers$Holder", true, CHECK);
     resolve_or_init("java/lang/invoke/MethodHandle", true, CHECK);
     resolve_or_init("java/lang/invoke/MethodHandleNatives", true, CHECK);
-    resolve_or_init("java/lang/invoke/DirectMethodHandle$Holder", true, CHECK);
-    resolve_or_init("java/lang/invoke/DelegatingMethodHandle$Holder", true, CHECK);
-    resolve_or_init("java/lang/invoke/LambdaForm$Holder", true, CHECK);
     resolve_or_init("java/lang/invoke/BoundMethodHandle$Species_L", true, CHECK);
   }
 }
@@ -1518,6 +1518,13 @@ bool HeapShared::walk_one_object(PendingOopStack* stack, int level, KlassSubGrap
     }
     out.print_cr("; scratch mirror = "  PTR_FORMAT,
                  p2i(scratch_java_mirror(orig_obj)));
+  }
+
+  if (java_lang_Class::is_instance(orig_obj)) {
+    Klass* k = java_lang_Class::as_Klass(orig_obj);
+    if (RegeneratedClasses::has_been_regenerated(k)) {
+      orig_obj = RegeneratedClasses::get_regenerated_object(k)->java_mirror();
+    }
   }
 
   if (CDSConfig::is_initing_classes_at_dump_time()) {

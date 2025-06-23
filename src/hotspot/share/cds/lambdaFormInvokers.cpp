@@ -97,6 +97,9 @@ public:
       // Classes like java.lang.invoke.BoundMethodHandle$Species_L should be included in AOT cache
       return false;
     }
+    if (ik->name()->index_of_at(0, "GenerateJLIClassesHelper", 24) > 0) {
+      return false;
+    }
     if (LambdaFormInvokers::may_be_regenerated_class(ik->name())) {
       // Regenerated holder classes should be included in AOT cache.
       return false;
@@ -224,6 +227,7 @@ void LambdaFormInvokers::regenerate_class(char* class_name, ClassFileStream& st,
 
   result->set_is_generated_shared_class();
   if (!klass->is_shared()) {
+    log_info(aot, lambda)("regenerate_class excluding klass %s %s", class_name, klass->name()->as_C_string());
     SystemDictionaryShared::set_excluded(InstanceKlass::cast(klass)); // exclude the existing class from dump
   }
   log_info(aot, lambda)("Regenerated class %s, old: " INTPTR_FORMAT " new: " INTPTR_FORMAT,
