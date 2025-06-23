@@ -97,9 +97,9 @@ public:
       // Classes like java.lang.invoke.BoundMethodHandle$Species_L should be included in AOT cache
       return false;
     }
-    if (ik->name()->index_of_at(0, "GenerateJLIClassesHelper", 24) > 0) {
-      return false;
-    }
+    //if (ik->name()->index_of_at(0, "GenerateJLIClassesHelper", 24) > 0) {
+    //  return false;
+    //}
     if (LambdaFormInvokers::may_be_regenerated_class(ik->name())) {
       // Regenerated holder classes should be included in AOT cache.
       return false;
