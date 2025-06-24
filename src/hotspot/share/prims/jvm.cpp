@@ -1168,6 +1168,11 @@ JVM_ENTRY_PROF(void, JVM_AddReadsModule, JVM_AddReadsModule(JNIEnv *env, jobject
   Modules::add_reads_module(h_from_module, h_source_module, CHECK);
 JVM_END
 
+JVM_ENTRY_PROF(jobject, JVM_GetArchivedBootLoaderUnnamedModule, JVM_GetArchivedBootLoaderUnnamedModule(JNIEnv *env))
+  oop result = Modules::get_archived_boot_loader_unnamed_module();
+  return JNIHandles::make_local(THREAD, result);
+JVM_END
+
 JVM_ENTRY_PROF(void, JVM_DefineArchivedModules, JVM_DefineArchivedModules(JNIEnv *env, jobject platform_loader, jobject system_loader))
   Handle h_platform_loader (THREAD, JNIHandles::resolve(platform_loader));
   Handle h_system_loader (THREAD, JNIHandles::resolve(system_loader));

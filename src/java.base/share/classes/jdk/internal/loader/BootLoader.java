@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.CDS;
 import jdk.internal.module.Modules;
 import jdk.internal.module.ServicesCatalog;
 import jdk.internal.util.StaticProperty;
@@ -61,7 +62,12 @@ public class BootLoader {
 
     static {
         JavaLangAccess jla = SharedSecrets.getJavaLangAccess();
-        UNNAMED_MODULE = jla.defineUnnamedModule(null);
+        Module m = CDS.getArchivedBootLoaderUnnamedModule();
+        if (m != null) {
+            UNNAMED_MODULE = m;
+        } else { 
+            UNNAMED_MODULE = jla.defineUnnamedModule(null);
+        }
         jla.addEnableNativeAccess(UNNAMED_MODULE);
         setBootLoaderUnnamedModule0(UNNAMED_MODULE);
     }

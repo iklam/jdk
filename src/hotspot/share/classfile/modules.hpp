@@ -55,6 +55,7 @@ public:
                             jstring location, jobjectArray packages, TRAPS);
 
   static void check_archived_module_oop(oop orig_module_obj) NOT_CDS_JAVA_HEAP_RETURN;
+  static oop get_archived_boot_loader_unnamed_module() NOT_CDS_JAVA_HEAP_RETURN;
   static void define_archived_modules(Handle h_platform_loader, Handle h_system_loader,
                                       TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static void verify_archived_modules() NOT_CDS_JAVA_HEAP_RETURN;

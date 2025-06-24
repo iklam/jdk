@@ -24,6 +24,7 @@
 
 #include "cds/aotLogging.hpp"
 #include "cds/cdsConfig.hpp"
+#include "cds/heapShared.hpp"
 #include "cds/serializeClosure.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/classLoaderDataShared.hpp"
@@ -42,6 +43,7 @@ bool ClassLoaderDataShared::_full_module_graph_loaded = false;
 class ArchivedClassLoaderData {
   Array<PackageEntry*>* _packages;
   Array<ModuleEntry*>* _modules;
+  int _unnamed_module_index;
 
   void assert_valid(ClassLoaderData* loader_data) {
     // loader_data may be null if the boot layer has loaded no modules for the platform or
@@ -52,7 +54,7 @@ class ArchivedClassLoaderData {
     }
   }
 public:
-  ArchivedClassLoaderData() : _packages(nullptr), _modules(nullptr) {}
+  ArchivedClassLoaderData() : _packages(nullptr), _modules(nullptr), _unnamed_module_index(-1) {}
 
   void iterate_symbols(ClassLoaderData* loader_data, MetaspaceClosure* closure);
   void allocate(ClassLoaderData* loader_data);
@@ -61,10 +63,15 @@ public:
   void serialize(SerializeClosure* f) {
     f->do_ptr(&_packages);
     f->do_ptr(&_modules);
+    f->do_int(&_unnamed_module_index);
   }
 
   void restore(ClassLoaderData* loader_data, bool do_entries, bool do_oops);
   void clear_archived_oops();
+
+  oop unnamed_module_oop() {
+    return HeapShared::get_root(_unnamed_module_index);
+  }
 };
 
 static ArchivedClassLoaderData _archived_boot_loader_data;
@@ -100,6 +107,9 @@ void ArchivedClassLoaderData::init_archived_entries(ClassLoaderData* loader_data
   if (loader_data != nullptr) {
     loader_data->packages()->init_archived_entries(_packages);
     loader_data->modules() ->init_archived_entries(_modules);
+    if (loader_data->class_loader() == nullptr) {
+      _unnamed_module_index = HeapShared::append_root(loader_data->unnamed_module()->module());
+    }
   }
 }
 
@@ -168,6 +178,11 @@ void ClassLoaderDataShared::iterate_symbols(MetaspaceClosure* closure) {
   _archived_system_loader_data.iterate_symbols  (java_system_loader_data_or_null(), closure);
 }
 
+void ClassLoaderDataShared::scan_unnamed_module_oops() {
+
+
+}
+
 void ClassLoaderDataShared::allocate_archived_tables() {
   assert(CDSConfig::is_dumping_full_module_graph(), "must be");
   _archived_boot_loader_data.allocate    (null_class_loader_data());
@@ -203,6 +218,14 @@ void ClassLoaderDataShared::clear_archived_oops() {
   _archived_boot_loader_data.clear_archived_oops();
   _archived_platform_loader_data.clear_archived_oops();
   _archived_system_loader_data.clear_archived_oops();
+}
+
+oop ClassLoaderDataShared::get_archived_boot_loader_unnamed_module() {
+  if (CDSConfig::is_using_full_module_graph()) {
+    return _archived_boot_loader_data.unnamed_module_oop();
+  } else {
+    return nullptr;
+  }
 }
 
 oop ClassLoaderDataShared::restore_archived_oops_for_null_class_loader_data() {

@@ -477,6 +477,7 @@ void Modules::define_module(Handle module, jboolean is_open, jstring version,
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
+static bool _seen_boot_unnamed_module = false;
 static bool _seen_platform_unnamed_module = false;
 static bool _seen_system_unnamed_module = false;
 
@@ -512,20 +513,22 @@ void Modules::check_archived_module_oop(oop orig_module_obj) {
       // For each named module, we archive both the java.lang.Module oop and the ModuleEntry.
       assert(orig_module_ent->has_been_archived(), "sanity");
     } else {
-      // We only archive two unnamed module oops (for platform and system loaders). These do NOT have an archived
-      // ModuleEntry.
+      // We only archive three unnamed module oops (for boot, platform, and system loaders). These do
+      // NOT have an archived ModuleEntry.
       //
       // At runtime, these oops are fetched from java_lang_ClassLoader::unnamedModule(loader) and
       // are initialized in ClassLoaderData::ClassLoaderData() => ModuleEntry::create_unnamed_module(), where
       // a new ModuleEntry is allocated.
-      assert(!loader_data->is_boot_class_loader_data(), "unnamed module for boot loader should be not archived");
       assert(!orig_module_ent->has_been_archived(), "sanity");
 
-      if (SystemDictionary::is_platform_class_loader(loader_data->class_loader())) {
-        assert(!_seen_platform_unnamed_module, "only once");
+      if (loader_data->is_boot_class_loader_data()) {
+        guarantee(!_seen_boot_unnamed_module, "only once");
+        _seen_boot_unnamed_module = true;
+      } else if (SystemDictionary::is_platform_class_loader(loader_data->class_loader())) {
+        guarantee(!_seen_platform_unnamed_module, "only once");
         _seen_platform_unnamed_module = true;
       } else if (SystemDictionary::is_system_class_loader(loader_data->class_loader())) {
-        assert(!_seen_system_unnamed_module, "only once");
+        guarantee(!_seen_system_unnamed_module, "only once");
         _seen_system_unnamed_module = true;
       } else {
         // The java.lang.Module oop and ModuleEntry of the unnamed module of the boot loader are
@@ -698,6 +701,10 @@ void Modules::serialize_archived_module_info(SerializeClosure* soc) {
     aot_log_info(aot)("optimized module handling: %s", CDSConfig::is_using_optimized_module_handling() ? "enabled" : "disabled");
     aot_log_info(aot)("full module graph: %s", CDSConfig::is_using_full_module_graph() ? "enabled" : "disabled");
   }
+}
+
+oop Modules::get_archived_boot_loader_unnamed_module() {
+  return ClassLoaderDataShared::get_archived_boot_loader_unnamed_module();
 }
 
 void Modules::define_archived_modules(Handle h_platform_loader, Handle h_system_loader, TRAPS) {

@@ -24,6 +24,7 @@
  */
 package jdk.internal.module;
 
+import jdk.internal.loader.BootLoader;
 import jdk.internal.misc.CDS;
 
 /**
@@ -33,9 +34,11 @@ class ArchivedBootLayer {
     private static ArchivedBootLayer archivedBootLayer;
 
     private final ModuleLayer bootLayer;
+    private final Module unnamedModuleForBootLoader;
 
     private ArchivedBootLayer(ModuleLayer bootLayer) {
         this.bootLayer = bootLayer;
+        this.unnamedModuleForBootLoader = BootLoader.getUnnamedModule();
     }
 
     ModuleLayer bootLayer() {

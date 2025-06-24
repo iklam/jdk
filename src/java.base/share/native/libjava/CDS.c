@@ -32,6 +32,11 @@ Java_jdk_internal_misc_CDS_initializeFromArchive(JNIEnv *env, jclass ignore,
     JVM_InitializeFromArchive(env, c);
 }
 
+JNIEXPORT jobject JNICALL
+Java_jdk_internal_misc_CDS_getArchivedBootLoaderUnnamedModule(JNIEnv *env, jclass ignore) {
+    return JVM_GetArchivedBootLoaderUnnamedModule(env);
+}
+
 JNIEXPORT void JNICALL
 Java_jdk_internal_misc_CDS_defineArchivedModules(JNIEnv *env, jclass ignore,
                                                 jobject platform_loader,
