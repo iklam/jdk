@@ -108,10 +108,6 @@ void AOTArtifactFinder::find_artifacts() {
 
     // Universe::fillerArrayKlass() isn't in the class hierarchy, so handle it specially.
     HeapShared::scan_java_mirror(Universe::fillerArrayKlass()->java_mirror());
-
-    //if (CDSConfig::is_dumping_full_module_graph()) {
-    //  ClassLoaderDataShared::scan_unnamed_module_oops();
-    //}
   }
 #endif
 

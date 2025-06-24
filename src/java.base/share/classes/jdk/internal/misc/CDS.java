@@ -143,8 +143,6 @@ public class CDS {
      */
     public static native void initializeFromArchive(Class<?> c);
 
-    public static native Module getArchivedBootLoaderUnnamedModule();
-
     /**
      * Ensure that the native representation of all archived java.lang.Module objects
      * are properly restored.

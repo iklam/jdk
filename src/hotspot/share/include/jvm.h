@@ -544,12 +544,6 @@ JNIEXPORT void JNICALL
 JVM_AddReadsModule(JNIEnv *env, jobject from_module, jobject source_module);
 
 /*
- * Get the boot loader's unnamed module that has been stored in the CDS archived heap.
- */
-JNIEXPORT jobject JNICALL
-JVM_GetArchivedBootLoaderUnnamedModule(JNIEnv *env);
-
-/*
  * Define all modules that have been stored in the CDS archived heap.
  *  platform_loader: the built-in platform class loader
  *  system_loader:   the built-in system class loader

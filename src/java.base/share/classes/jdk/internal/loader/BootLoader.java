@@ -41,7 +41,6 @@ import java.util.stream.Stream;
 
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
-import jdk.internal.misc.CDS;
 import jdk.internal.module.Modules;
 import jdk.internal.module.ServicesCatalog;
 import jdk.internal.util.StaticProperty;
@@ -62,9 +61,9 @@ public class BootLoader {
 
     static {
         JavaLangAccess jla = SharedSecrets.getJavaLangAccess();
-        Module m = CDS.getArchivedBootLoaderUnnamedModule();
-        if (m != null) {
-            UNNAMED_MODULE = m;
+        ArchivedClassLoaders archivedClassLoaders = ArchivedClassLoaders.get();
+        if (archivedClassLoaders != null) {
+            UNNAMED_MODULE = archivedClassLoaders.unnamedModuleForBootLoader();
         } else { 
             UNNAMED_MODULE = jla.defineUnnamedModule(null);
         }

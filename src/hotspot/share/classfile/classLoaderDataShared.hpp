@@ -37,7 +37,6 @@ class ClassLoaderDataShared : AllStatic {
   static void ensure_module_entry_table_exists(oop class_loader);
 public:
   static void ensure_module_entry_tables_exist();
-  static void scan_unnamed_module_oops();
   static void allocate_archived_tables();
   static void iterate_symbols(MetaspaceClosure* closure);
   static void init_archived_tables();

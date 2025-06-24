@@ -703,10 +703,6 @@ void Modules::serialize_archived_module_info(SerializeClosure* soc) {
   }
 }
 
-oop Modules::get_archived_boot_loader_unnamed_module() {
-  return ClassLoaderDataShared::get_archived_boot_loader_unnamed_module();
-}
-
 void Modules::define_archived_modules(Handle h_platform_loader, Handle h_system_loader, TRAPS) {
   assert(CDSConfig::is_using_full_module_graph(), "must be");
 

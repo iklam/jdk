@@ -178,11 +178,6 @@ void ClassLoaderDataShared::iterate_symbols(MetaspaceClosure* closure) {
   _archived_system_loader_data.iterate_symbols  (java_system_loader_data_or_null(), closure);
 }
 
-void ClassLoaderDataShared::scan_unnamed_module_oops() {
-
-
-}
-
 void ClassLoaderDataShared::allocate_archived_tables() {
   assert(CDSConfig::is_dumping_full_module_graph(), "must be");
   _archived_boot_loader_data.allocate    (null_class_loader_data());
