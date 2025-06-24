@@ -78,6 +78,7 @@ int CDSConfig::get_status() {
          (is_dumping_static_archive()       ? IS_DUMPING_STATIC_ARCHIVE : 0) |
          (is_logging_lambda_form_invokers() ? IS_LOGGING_LAMBDA_FORM_INVOKERS : 0) |
          (is_using_archive()                ? IS_USING_ARCHIVE : 0) |
+         (is_dumping_aot_linked_classes()   ? IS_DUMPING_AOT_LINKED_CLASSES : 0) |
          (is_dumping_heap()                 ? IS_DUMPING_HEAP : 0) |
          (is_logging_dynamic_proxies()      ? IS_LOGGING_DYNAMIC_PROXIES : 0) |
          (is_dumping_packages()             ? IS_DUMPING_PACKAGES : 0) |

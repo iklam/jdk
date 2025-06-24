@@ -52,10 +52,11 @@ public class CDS {
     private static final int IS_DUMPING_STATIC_ARCHIVE       = 1 << 2;
     private static final int IS_LOGGING_LAMBDA_FORM_INVOKERS = 1 << 3;
     private static final int IS_USING_ARCHIVE                = 1 << 4;
-    private static final int IS_DUMPING_HEAP                 = 1 << 5;
-    private static final int IS_LOGGING_DYNAMIC_PROXIES      = 1 << 6;
-    private static final int IS_DUMPING_PACKAGES             = 1 << 7;
-    private static final int IS_DUMPING_PROTECTION_DOMAINS   = 1 << 8;
+    private static final int IS_DUMPING_AOT_LINKED_CLASSES   = 1 << 5;
+    private static final int IS_DUMPING_HEAP                 = 1 << 6;
+    private static final int IS_LOGGING_DYNAMIC_PROXIES      = 1 << 7;
+    private static final int IS_DUMPING_PACKAGES             = 1 << 8;
+    private static final int IS_DUMPING_PROTECTION_DOMAINS   = 1 << 9;
     private static final int configStatus = getCDSConfigStatus();
 
     /**
@@ -88,6 +89,10 @@ public class CDS {
 
     public static boolean isDumpingHeap() {
         return (configStatus & IS_DUMPING_HEAP) != 0;
+    }
+
+    public static boolean isDumpingAOTLinkedClasses() {
+        return (configStatus & IS_DUMPING_AOT_LINKED_CLASSES) != 0;
     }
 
     public static boolean isLoggingDynamicProxies() {
