@@ -91,11 +91,10 @@ public:
   static const int IS_DUMPING_STATIC_ARCHIVE       = 1 << 2;
   static const int IS_LOGGING_LAMBDA_FORM_INVOKERS = 1 << 3;
   static const int IS_USING_ARCHIVE                = 1 << 4;
-  static const int IS_DUMPING_BOOT_UNNAMED_MODULE  = 1 << 5;
-  static const int IS_DUMPING_HEAP                 = 1 << 6;
-  static const int IS_LOGGING_DYNAMIC_PROXIES      = 1 << 7;
-  static const int IS_DUMPING_PACKAGES             = 1 << 8;
-  static const int IS_DUMPING_PROTECTION_DOMAINS   = 1 << 9;
+  static const int IS_DUMPING_HEAP                 = 1 << 5;
+  static const int IS_LOGGING_DYNAMIC_PROXIES      = 1 << 6;
+  static const int IS_DUMPING_PACKAGES             = 1 << 7;
+  static const int IS_DUMPING_PROTECTION_DOMAINS   = 1 << 8;
   static int get_status() NOT_CDS_RETURN_(0);
 
   // Initialization and command-line checking
@@ -175,7 +174,6 @@ public:
   static bool is_dumping_regenerated_lambdaform_invokers()   NOT_CDS_RETURN_(false);
 
   static bool is_dumping_aot_linked_classes()                NOT_CDS_JAVA_HEAP_RETURN_(false);
-  static bool is_dumping_boot_unnamed_module()               NOT_CDS_JAVA_HEAP_RETURN_(false);
   static bool is_using_aot_linked_classes()                  NOT_CDS_JAVA_HEAP_RETURN_(false);
   static void set_has_aot_linked_classes(bool has_aot_linked_classes) NOT_CDS_JAVA_HEAP_RETURN;
 

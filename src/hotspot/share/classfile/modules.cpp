@@ -513,17 +513,11 @@ void Modules::check_archived_module_oop(oop orig_module_obj) {
       // For each named module, we archive both the java.lang.Module oop and the ModuleEntry.
       assert(orig_module_ent->has_been_archived(), "sanity");
     } else {
-      // We always archive unnamed module oop for platform, and system loaders.
-      //
-      // At runtime, these oops are fetched from java_lang_ClassLoader::unnamedModule(loader) and
-      // are initialized in ClassLoaderData::ClassLoaderData() => ModuleEntry::create_unnamed_module(), where
-      // a new ModuleEntry is allocated.
-      if (orig_module_ent->should_be_archived()) {
-        precond(orig_module_ent->has_been_archived());
-      }
+      // We always archive unnamed module oop for boot, platform, and system loaders.
+      precond(orig_module_ent->should_be_archived());
+      precond(orig_module_ent->has_been_archived());
 
       if (loader_data->is_boot_class_loader_data()) {
-        precond(CDSConfig::is_dumping_boot_unnamed_module());
         assert(!_seen_boot_unnamed_module, "only once");
         _seen_boot_unnamed_module = true;
       } else if (SystemDictionary::is_platform_class_loader(loader_data->class_loader())) {
@@ -800,7 +794,7 @@ void Modules::set_bootloader_unnamed_module(Handle module, TRAPS) {
   java_lang_Module::set_module_entry(module(), unnamed_module);
 
 #if INCLUDE_CDS_JAVA_HEAP
-  if (ClassLoaderDataShared::has_archived_unnamed_modules() && CDSConfig::is_using_full_module_graph()) {
+  if (CDSConfig::is_using_full_module_graph()) {
     precond(unnamed_module == ClassLoaderDataShared::archived_boot_unnamed_module());
     unnamed_module->load_from_archive(boot_loader_data);
     unnamed_module->log_as_restored_from_archive();

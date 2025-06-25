@@ -53,7 +53,7 @@ class ArchivedClassLoaders {
         servicesCatalogs[2] = ServicesCatalog.getServicesCatalog(appLoader);
 
         packageToModule = BuiltinClassLoader.packageToModule();
-        unnamedModuleForBootLoader = CDS.isDumpingAOTLinkedClasses() ? BootLoader.getUnnamedModule() : null;
+        unnamedModuleForBootLoader = BootLoader.getUnnamedModule();
     }
 
     ClassLoader bootLoader() {

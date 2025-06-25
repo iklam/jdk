@@ -414,14 +414,7 @@ static int _num_inited_module_entries = 0;
 #endif
 
 bool ModuleEntry::should_be_archived() const {
-  if (!SystemDictionaryShared::is_builtin_loader(loader_data())) {
-    return false;
-  }
-  if (!is_named() && !CDSConfig::is_dumping_boot_unnamed_module()) {
-    return false;
-  }
-
-  return true;
+  return SystemDictionaryShared::is_builtin_loader(loader_data());
 }
 
 ModuleEntry* ModuleEntry::allocate_archived_entry() const {

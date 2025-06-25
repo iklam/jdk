@@ -78,7 +78,6 @@ int CDSConfig::get_status() {
          (is_dumping_static_archive()       ? IS_DUMPING_STATIC_ARCHIVE : 0) |
          (is_logging_lambda_form_invokers() ? IS_LOGGING_LAMBDA_FORM_INVOKERS : 0) |
          (is_using_archive()                ? IS_USING_ARCHIVE : 0) |
-         (is_dumping_boot_unnamed_module()  ? IS_DUMPING_BOOT_UNNAMED_MODULE : 0) |
          (is_dumping_heap()                 ? IS_DUMPING_HEAP : 0) |
          (is_logging_dynamic_proxies()      ? IS_LOGGING_DYNAMIC_PROXIES : 0) |
          (is_dumping_packages()             ? IS_DUMPING_PACKAGES : 0) |
@@ -1181,14 +1180,6 @@ void CDSConfig::stop_using_full_module_graph(const char* reason) {
     if (reason != nullptr) {
       aot_log_info(aot)("full module graph cannot be loaded: %s", reason);
     }
-  }
-}
-
-bool CDSConfig::is_dumping_boot_unnamed_module() {
-  if (UseNewCode) {
-    return is_dumping_aot_linked_classes();
-  } else {
-    return true;
   }
 }
 

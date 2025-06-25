@@ -35,9 +35,7 @@ class SerializeClosure;
 
 class ClassLoaderDataShared : AllStatic {
   static bool _full_module_graph_loaded;
-  static bool _has_archived_unnamed_modules;
   static void ensure_module_entry_table_exists(oop class_loader);
-  static bool should_archive_boot_unnamed_module();
 public:
   static void ensure_module_entry_tables_exist();
   static void allocate_archived_tables();
@@ -52,7 +50,6 @@ public:
   static ModuleEntry* archived_boot_unnamed_module();
   static ModuleEntry* archived_unnamed_module(ClassLoaderData* loader_data);
   static bool is_full_module_graph_loaded() { return _full_module_graph_loaded; }
-  static bool has_archived_unnamed_modules() { return _has_archived_unnamed_modules; }
 };
 
 #endif // SHARE_CLASSFILE_CLASSLOADERDATASHARED_HPP

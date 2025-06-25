@@ -39,7 +39,6 @@
 #if INCLUDE_CDS_JAVA_HEAP
 
 bool ClassLoaderDataShared::_full_module_graph_loaded = false;
-bool ClassLoaderDataShared::_has_archived_unnamed_modules = false;
 
 class ArchivedClassLoaderData {
   Array<PackageEntry*>* _packages;
@@ -87,9 +86,7 @@ void ArchivedClassLoaderData::iterate_symbols(ClassLoaderData* loader_data, Meta
   if (loader_data != nullptr) {
     loader_data->packages()->iterate_symbols(closure);
     loader_data->modules() ->iterate_symbols(closure);
-    if (CDSConfig::is_dumping_boot_unnamed_module()) {
-      loader_data->unnamed_module()->iterate_symbols(closure);
-    }
+    loader_data->unnamed_module()->iterate_symbols(closure);
   }
 }
 
@@ -103,9 +100,7 @@ void ArchivedClassLoaderData::allocate(ClassLoaderData* loader_data) {
     // the hashtables using these arrays.
     _packages = loader_data->packages()->allocate_archived_entries();
     _modules  = loader_data->modules() ->allocate_archived_entries();
-    if (CDSConfig::is_dumping_boot_unnamed_module()) {
-      _unnamed_module = loader_data->unnamed_module()->allocate_archived_entry();
-    }
+    _unnamed_module = loader_data->unnamed_module()->allocate_archived_entry();
   }
 }
 
@@ -115,9 +110,7 @@ void ArchivedClassLoaderData::init_archived_entries(ClassLoaderData* loader_data
   if (loader_data != nullptr) {
     loader_data->packages()->init_archived_entries(_packages);
     loader_data->modules() ->init_archived_entries(_modules);
-    if (CDSConfig::is_dumping_boot_unnamed_module()) {
-      _unnamed_module->init_as_archived_entry();
-    }
+    _unnamed_module->init_as_archived_entry();
   }
 }
 
@@ -136,11 +129,10 @@ void ArchivedClassLoaderData::restore(ClassLoaderData* loader_data, bool do_entr
     if (do_oops) {
       modules->restore_archived_oops(loader_data, _modules);
       if (_unnamed_module != nullptr) {
-        //precond(CDSConfig::is_using_aot_linked_classes());
         oop module = _unnamed_module->module();
         assert(module != nullptr, "must be already set");
         assert(_unnamed_module == java_lang_Module::module_entry(module), "must be already set");
-        assert( loader_data->class_loader() == java_lang_Module::loader(module), "must be set in dump time");
+        assert(loader_data->class_loader() == java_lang_Module::loader(module), "must be set in dump time");
       }
     }
   }
@@ -209,11 +201,8 @@ void ClassLoaderDataShared::init_archived_tables() {
 
   _archived_javabase_moduleEntry = ModuleEntry::get_archived_entry(ModuleEntryTable::javabase_moduleEntry());
 
-  if (CDSConfig::is_dumping_boot_unnamed_module()) {
-    _platform_loader_root_index = HeapShared::append_root(SystemDictionary::java_platform_loader());
-    _system_loader_root_index = HeapShared::append_root(SystemDictionary::java_system_loader());
-    _has_archived_unnamed_modules = true;
-  }
+  _platform_loader_root_index = HeapShared::append_root(SystemDictionary::java_platform_loader());
+  _system_loader_root_index = HeapShared::append_root(SystemDictionary::java_system_loader());
 }
 
 void ClassLoaderDataShared::serialize(SerializeClosure* f) {
@@ -223,7 +212,6 @@ void ClassLoaderDataShared::serialize(SerializeClosure* f) {
   f->do_ptr(&_archived_javabase_moduleEntry);
   f->do_int(&_platform_loader_root_index);
   f->do_int(&_system_loader_root_index);
-  f->do_bool(&_has_archived_unnamed_modules);
 }
 
 ModuleEntry* ClassLoaderDataShared::archived_boot_unnamed_module() {
@@ -237,8 +225,7 @@ ModuleEntry* ClassLoaderDataShared::archived_boot_unnamed_module() {
 ModuleEntry* ClassLoaderDataShared::archived_unnamed_module(ClassLoaderData* loader_data) {
   ModuleEntry* archived_module = nullptr;
 
-  if (!Universe::is_module_initialized() && has_archived_unnamed_modules() && CDSConfig::is_using_full_module_graph()) {
-    //precond(CDSConfig::is_using_aot_linked_classes());
+  if (!Universe::is_module_initialized() && CDSConfig::is_using_full_module_graph()) {
     precond(_platform_loader_root_index >= 0);
     precond(_system_loader_root_index >= 0);
 
