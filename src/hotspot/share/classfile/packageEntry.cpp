@@ -221,7 +221,7 @@ static ArchivedPackageEntries* _archived_packages_entries = nullptr;
 bool PackageEntry::should_be_archived() const {
   // We don't archive unnamed modules, or packages in unnamed modules. They will be
   // created on-demand at runtime as classes in such packages are loaded.
-  return module()->should_be_archived() && module()->is_named();
+  return module()->should_be_archived() && (module()->is_named() || CDSConfig::is_dumping_aot_linked_classes());
 }
 
 PackageEntry* PackageEntry::allocate_archived_entry() const {

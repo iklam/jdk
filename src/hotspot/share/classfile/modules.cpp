@@ -524,6 +524,7 @@ void Modules::check_archived_module_oop(oop orig_module_obj) {
       }
 
       if (loader_data->is_boot_class_loader_data()) {
+        precond(CDSConfig::is_dumping_aot_linked_classes());
         assert(!_seen_boot_unnamed_module, "only once");
         _seen_boot_unnamed_module = true;
       } else if (SystemDictionary::is_platform_class_loader(loader_data->class_loader())) {
