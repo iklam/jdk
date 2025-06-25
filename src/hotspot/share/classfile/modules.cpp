@@ -789,17 +789,19 @@ void Modules::set_bootloader_unnamed_module(Handle module, TRAPS) {
   ClassLoaderData* boot_loader_data = ClassLoaderData::the_null_class_loader_data();
   ModuleEntry* unnamed_module = boot_loader_data->unnamed_module();
   assert(unnamed_module != nullptr, "boot loader's unnamed ModuleEntry not defined");
-  unnamed_module->set_module(boot_loader_data->add_handle(module));
-  // Store pointer to the ModuleEntry in the unnamed module's java.lang.Module object.
-  java_lang_Module::set_module_entry(module(), unnamed_module);
 
 #if INCLUDE_CDS_JAVA_HEAP
   if (CDSConfig::is_using_full_module_graph()) {
     precond(unnamed_module == ClassLoaderDataShared::archived_boot_unnamed_module());
     unnamed_module->load_from_archive(boot_loader_data);
-    unnamed_module->log_as_restored_from_archive();
-  }
+    unnamed_module->restore_archived_oops(boot_loader_data);
+  } else
 #endif
+  {
+    unnamed_module->set_module(boot_loader_data->add_handle(module));
+    // Store pointer to the ModuleEntry in the unnamed module's java.lang.Module object.
+    java_lang_Module::set_module_entry(module(), unnamed_module);
+  }
 }
 
 void Modules::add_module_exports(Handle from_module, jstring package_name, Handle to_module, TRAPS) {

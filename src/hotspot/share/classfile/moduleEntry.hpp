@@ -208,7 +208,6 @@ public:
   void load_from_archive(ClassLoaderData* loader_data);
   void restore_archived_oops(ClassLoaderData* loader_data);
   void clear_archived_oops();
-  void log_as_restored_from_archive() const;
   static void verify_archived_module_entries() PRODUCT_RETURN;
 #endif
 };

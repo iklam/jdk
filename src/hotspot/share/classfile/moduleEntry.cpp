@@ -560,10 +560,6 @@ void ModuleEntry::restore_archived_oops(ClassLoaderData* loader_data) {
   assert(java_lang_Module::loader(module_handle()) == loader_data->class_loader(),
          "must be set in dump time");
 
-  log_as_restored_from_archive();
-}
-
-void ModuleEntry::log_as_restored_from_archive() const {
   if (log_is_enabled(Info, aot, module)) {
     ResourceMark rm;
     LogStream ls(Log(aot, module)::info());
