@@ -417,7 +417,7 @@ bool ModuleEntry::should_be_archived() const {
   if (!SystemDictionaryShared::is_builtin_loader(loader_data())) {
     return false;
   }
-  if (!is_named() && !CDSConfig::is_dumping_aot_linked_classes()) {
+  if (!is_named() && !CDSConfig::is_dumping_boot_unnamed_module()) {
     return false;
   }
 
