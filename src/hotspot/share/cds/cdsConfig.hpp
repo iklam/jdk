@@ -43,6 +43,7 @@ class CDSConfig : public AllStatic {
   static bool _has_aot_linked_classes;
   static bool _is_single_command_training;
   static bool _has_temp_aot_config_file;
+  static bool _is_loading_packages;
 
   const static char* _default_archive_path;
   const static char* _input_static_archive_path;
@@ -83,6 +84,7 @@ public:
   static const int IS_DUMPING_STATIC_ARCHIVE       = 1 << 2;
   static const int IS_LOGGING_LAMBDA_FORM_INVOKERS = 1 << 3;
   static const int IS_USING_ARCHIVE                = 1 << 4;
+  static const int IS_DUMPING_PACKAGES             = 1 << 5;
 
   static int get_status() NOT_CDS_RETURN_(0);
 
@@ -181,6 +183,10 @@ public:
 
   static bool is_dumping_invokedynamic()                     NOT_CDS_JAVA_HEAP_RETURN_(false);
   static bool is_dumping_method_handles()                    NOT_CDS_JAVA_HEAP_RETURN_(false);
+
+  static bool is_dumping_packages()                          NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static bool is_loading_packages()                          NOT_CDS_JAVA_HEAP_RETURN_(false);
+  static void set_is_loading_packages()                      { CDS_JAVA_HEAP_ONLY(_is_loading_packages = true); }
 
   // full_module_graph (requires optimized_module_handling)
   static bool is_dumping_full_module_graph()                 { return CDS_ONLY(_is_dumping_full_module_graph) NOT_CDS(false); }

@@ -144,6 +144,10 @@ CDSHeapVerifier::CDSHeapVerifier() : _archived_objs(0), _problems(0)
                                                           "ZERO");                 // D
   }
 
+  if (CDSConfig::is_dumping_packages()) {
+    ADD_EXCL("java/lang/Package$VersionInfo",             "NULL_VERSION_INFO");    // D
+  }
+
 # undef ADD_EXCL
 
   ClassLoaderDataGraph::classes_do(this);

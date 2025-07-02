@@ -51,6 +51,7 @@ bool CDSConfig::_is_using_full_module_graph = true;
 bool CDSConfig::_has_aot_linked_classes = false;
 bool CDSConfig::_is_single_command_training = false;
 bool CDSConfig::_has_temp_aot_config_file = false;
+bool CDSConfig::_is_loading_packages = false;
 bool CDSConfig::_old_cds_flags_used = false;
 bool CDSConfig::_new_aot_flags_used = false;
 bool CDSConfig::_disable_heap_dumping = false;
@@ -68,7 +69,8 @@ int CDSConfig::get_status() {
          (is_dumping_method_handles()       ? IS_DUMPING_METHOD_HANDLES : 0) |
          (is_dumping_static_archive()       ? IS_DUMPING_STATIC_ARCHIVE : 0) |
          (is_logging_lambda_form_invokers() ? IS_LOGGING_LAMBDA_FORM_INVOKERS : 0) |
-         (is_using_archive()                ? IS_USING_ARCHIVE : 0);
+         (is_using_archive()                ? IS_USING_ARCHIVE : 0) |
+         (is_dumping_packages()             ? IS_DUMPING_PACKAGES : 0);
 }
 
 DEBUG_ONLY(static bool _cds_ergo_initialize_started = false);
@@ -986,6 +988,24 @@ bool CDSConfig::is_dumping_invokedynamic() {
   // Requires is_dumping_aot_linked_classes(). Otherwise the classes of some archived heap
   // objects used by the archive indy callsites may be replaced at runtime.
   return AOTInvokeDynamicLinking && is_dumping_aot_linked_classes() && is_dumping_heap();
+}
+
+// Returns true iff we are savings the contents of java.lang.ClassLoader::packages for
+// the platform/app loaders into the AOT cache.
+bool CDSConfig::is_dumping_packages() {
+  // Since the dynamic archive doesn't support dumping heap objects, it cannot this optimization.
+  // FIXME -- comment why do we need aot-linked classes?
+  return is_dumping_heap() && is_dumping_aot_linked_classes();
+}
+
+// Returns true iff java.lang.ClassLoader::packages for the platform/app loaders
+// are already saved in the AOT cache that's being used by the current process.
+// This means the java.lang.Package objects for the platform/app classes loaded
+// by AOTLinkedClassBulkLoader are already present, so we can skip the call to
+// jdk.internal.loader.BuiltinClassLoader::defineOrCheckPackage() when loading
+// such classes.
+bool CDSConfig::is_loading_packages() {
+  return UseSharedSpaces && is_using_full_module_graph() && _is_loading_packages;
 }
 
 // When we are dumping aot-linked classes and we are able to write archived heap objects, we automatically

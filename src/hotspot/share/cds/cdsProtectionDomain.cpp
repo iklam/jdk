@@ -85,20 +85,28 @@ Handle CDSProtectionDomain::init_security_info(Handle class_loader, InstanceKlas
     //
     //   Note that if an element of these 3 _shared_xxx arrays is null, it will be initialized by
     //   the corresponding CDSProtectionDomain::get_shared_xxx() function.
-    Handle manifest = get_shared_jar_manifest(index, CHECK_NH);
     Handle url = get_shared_jar_url(index, CHECK_NH);
-    int index_offset = index - AOTClassLocationConfig::runtime()->app_cp_start_index();
-    if (index_offset < PackageEntry::max_index_for_defined_in_class_path()) {
-      if (pkg_entry == nullptr || !pkg_entry->is_defined_by_cds_in_class_path(index_offset)) {
-        // define_shared_package only needs to be called once for each package in a jar specified
-        // in the shared class path.
-        define_shared_package(class_name, class_loader, manifest, url, CHECK_NH);
-        if (pkg_entry != nullptr) {
-          pkg_entry->set_defined_by_cds_in_class_path(index_offset);
-        }
-      }
+    if (CDSConfig::is_loading_packages() && !MetaspaceShared::is_shared_dynamic(ik)) {
+      // The packages for the aot-linked classes from the static archive are already in
+      // ClassLoader::packages, so there's no need to call BuiltinClassLoader::defineOrCheckPackage
+      precond(CDSConfig::is_using_aot_linked_classes());
     } else {
-      define_shared_package(class_name, class_loader, manifest, url, CHECK_NH);
+      Handle manifest = get_shared_jar_manifest(index, CHECK_NH);
+      int index_offset = index - AOTClassLocationConfig::runtime()->app_cp_start_index();
+      if (index_offset < PackageEntry::max_index_for_defined_in_class_path()) {
+        if (pkg_entry == nullptr || !pkg_entry->is_defined_by_cds_in_class_path(index_offset)) {
+          // define_shared_package only needs to be called once for each package in a jar specified
+          // in the shared class path.
+          define_shared_package(class_name, class_loader, manifest, url, CHECK_NH);
+          if (pkg_entry != nullptr) {
+            pkg_entry->set_defined_by_cds_in_class_path(index_offset);
+          }
+        } else {
+          define_shared_package(class_name, class_loader, manifest, url, CHECK_NH);
+        }
+      } else {
+        define_shared_package(class_name, class_loader, manifest, url, CHECK_NH);
+      }
     }
     return get_shared_protection_domain(class_loader, index, url, THREAD);
   }
@@ -137,15 +145,15 @@ PackageEntry* CDSProtectionDomain::get_package_entry_from_class(InstanceKlass* i
 // package sealing (all done in Java code)
 // See http://docs.oracle.com/javase/tutorial/deployment/jar/sealman.html
 void CDSProtectionDomain::define_shared_package(Symbol*  class_name,
-                                                   Handle class_loader,
-                                                   Handle manifest,
-                                                   Handle url,
-                                                   TRAPS) {
+                                                Handle class_loader,
+                                                Handle manifest,
+                                                Handle url,
+                                                TRAPS) {
   assert(SystemDictionary::is_system_class_loader(class_loader()), "unexpected class loader");
   // get_package_name() returns a null handle if the class is in unnamed package
   Handle pkgname_string = get_package_name(class_name, CHECK);
   if (pkgname_string.not_null()) {
-    Klass* app_classLoader_klass = vmClasses::jdk_internal_loader_ClassLoaders_AppClassLoader_klass();
+    Klass* app_classLoader_klass = vmClasses::jdk_internal_loader_BuiltinClassLoader_klass();
     JavaValue result(T_OBJECT);
     JavaCallArguments args(3);
     args.set_receiver(class_loader);

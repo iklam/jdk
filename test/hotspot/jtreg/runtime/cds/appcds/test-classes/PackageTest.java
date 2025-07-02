@@ -38,7 +38,14 @@ public class PackageTest {
             pkg_from_loader = Package.getPackage("p");
         }
 
+        System.out.println("cl = " + cl);
+        System.out.println("from loader = " + pkg_from_loader);
+
         Package pkg = PackageTest.class.getPackage();
+
+        System.out.println(pkg);
+        System.out.println(pkg.getName());
+
         if (pkg_from_loader != null && pkg == pkg_from_loader &&
             pkg.getName().equals("p")) {
             System.out.println("Expected package: " + pkg);
