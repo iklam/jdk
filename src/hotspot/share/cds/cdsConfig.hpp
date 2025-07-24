@@ -29,6 +29,7 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 
+class InstanceKlass;
 class JavaThread;
 
 class CDSConfig : public AllStatic {
@@ -160,6 +161,9 @@ public:
   static bool is_dumping_aot_linked_classes()                NOT_CDS_JAVA_HEAP_RETURN_(false);
   static bool is_using_aot_linked_classes()                  NOT_CDS_JAVA_HEAP_RETURN_(false);
   static void set_has_aot_linked_classes(bool has_aot_linked_classes) NOT_CDS_JAVA_HEAP_RETURN;
+
+  // Misc CDS features
+  static bool      preserve_all_dumptime_verification_states(const InstanceKlass* ik);
 
   // archive_path
 

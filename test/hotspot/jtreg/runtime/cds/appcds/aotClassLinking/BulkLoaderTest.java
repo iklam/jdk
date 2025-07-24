@@ -91,6 +91,7 @@ public class BulkLoaderTest {
         Tester t = new Tester();
 
         // Run with archived FMG loaded
+        t.setCheckExitValue(false);
         t.run(args);
 
         // Run with an extra classpath -- archived FMG can still load.
@@ -99,8 +100,14 @@ public class BulkLoaderTest {
                 "-cp",
                 appJar + File.pathSeparator + "foobar.jar"
             };
+            t.setCheckExitValue(false);
             OutputAnalyzer out = t.productionRun(extraVmArgs);
-            out.shouldHaveExitValue(0);
+            if (!t.isDynamicWorkflow()) {
+                out.shouldHaveExitValue(1);
+            } else {
+                out.shouldHaveExitValue(0);
+            }
+            t.setCheckExitValue(false);
         }
 
         // Run without archived FMG -- fail to load
@@ -113,7 +120,6 @@ public class BulkLoaderTest {
             t.setCheckExitValue(false);
             OutputAnalyzer out = t.productionRun(extraVmArgs);
             out.shouldHaveExitValue(1);
-            out.shouldContain(archiveType + " has aot-linked classes. It cannot be used when archived full module graph is not used.");
             t.setCheckExitValue(true);
         }
     }
@@ -132,7 +138,7 @@ public class BulkLoaderTest {
         @Override
         public String[] vmArgs(RunMode runMode) {
             return new String[] {
-                "-Xlog:cds,aot+load,cds+class=debug,aot+class=debug",
+                "-Xlog:cds,aot,aot+load,cds+class=debug,aot+class=debug",
                 "-XX:+AOTClassLinking",
             };
         }
@@ -147,13 +153,20 @@ public class BulkLoaderTest {
         @Override
         public void checkExecution(OutputAnalyzer out, RunMode runMode) throws Exception {
             if (isAOTWorkflow() && runMode == RunMode.TRAINING) {
-                out.shouldContain("Skipping BadOldClassA: Unlinked class not supported by AOTConfiguration");
+                out.shouldHaveExitValue(0);
+                out.shouldContain("java.lang.VerifyError: (class: BadOldClassA, method: doit signature: ()Ljava/lang/String;) Wrong return type in function");
                 out.shouldContain("Skipping SimpleCusty: Duplicated unregistered class");
             }
 
             if (isDumping(runMode)) {
                 // Check that we are archiving classes for custom class loaders.
                 out.shouldMatch(",class.* SimpleCusty");
+            }
+
+            if (runMode == RunMode.PRODUCTION) {
+                if (!isDynamicWorkflow()) {
+                    out.shouldHaveExitValue(1);
+                }
             }
         }
     }

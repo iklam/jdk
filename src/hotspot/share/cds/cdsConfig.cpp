@@ -30,6 +30,7 @@
 #include "cds/heapShared.hpp"
 #include "classfile/classLoaderDataShared.hpp"
 #include "classfile/moduleEntry.hpp"
+#include "classfile/systemDictionaryShared.hpp"
 #include "code/aotCodeCache.hpp"
 #include "include/jvm_io.h"
 #include "logging/log.hpp"
@@ -908,6 +909,16 @@ void CDSConfig::log_reasons_for_not_dumping_heap() {
 // This is *Legacy* optimization for lambdas before JEP 483. May be removed in the future.
 bool CDSConfig::is_dumping_lambdas_in_legacy_mode() {
   return !is_dumping_method_handles();
+}
+
+// Preserve all states that were examined used during dumptime verification, such
+// that the verification result (pass or fail) cannot be changed at runtime.
+//
+// For example, if the verification of ik requires that class A must be a subtype of B,
+// then this relationship between A and B cannot be changed at runtime. I.e., the app
+// cannot load alternative versions of A and B such that A is not a subtype of B.
+bool CDSConfig::preserve_all_dumptime_verification_states(const InstanceKlass* ik) {
+  return AOTClassLinking && SystemDictionaryShared::is_builtin(ik);
 }
 
 #if INCLUDE_CDS_JAVA_HEAP
