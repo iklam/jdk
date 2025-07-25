@@ -918,7 +918,11 @@ bool CDSConfig::is_dumping_lambdas_in_legacy_mode() {
 // then this relationship between A and B cannot be changed at runtime. I.e., the app
 // cannot load alternative versions of A and B such that A is not a subtype of B.
 bool CDSConfig::preserve_all_dumptime_verification_states(const InstanceKlass* ik) {
-  return AOTClassLinking && SystemDictionaryShared::is_builtin(ik);
+  return AOTClassLinking && SystemDictionaryShared::is_builtin(ik) && 0; // <-- This won't work. See new comments in dumpTimeClassInfo.cpp
+}
+
+bool CDSConfig::is_old_class(const InstanceKlass* ik) {
+  return ik->major_version() < 50;
 }
 
 #if INCLUDE_CDS_JAVA_HEAP

@@ -163,7 +163,8 @@ public:
   static void set_has_aot_linked_classes(bool has_aot_linked_classes) NOT_CDS_JAVA_HEAP_RETURN;
 
   // Misc CDS features
-  static bool      preserve_all_dumptime_verification_states(const InstanceKlass* ik);
+  static bool preserve_all_dumptime_verification_states(const InstanceKlass* ik);
+  static bool is_old_class(const InstanceKlass* ik);
 
   // archive_path
 

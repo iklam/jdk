@@ -1003,6 +1003,9 @@ bool InstanceKlass::link_class_impl(TRAPS) {
           if (!verify_ok) {
             return false;
           }
+          if (CDSConfig::is_dumping_aot_linked_classes() && CDSConfig::is_old_class(this)) {
+            SystemDictionaryShared::add_possible_verification_constraints(THREAD, this);
+          }
         }
 
         // Just in case a side-effect of verify linked this class already

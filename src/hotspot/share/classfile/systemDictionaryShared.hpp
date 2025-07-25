@@ -174,6 +174,8 @@ private:
                                bool is_builtin);
   static bool is_jfr_event_class(InstanceKlass *k);
   static bool check_for_exclusion_impl(InstanceKlass* k);
+  static Symbol* check_for_exclusion_due_to_class_loader_constraints(InstanceKlass* k);
+  static bool check_for_exclusion_due_to_class_loader_constraints(InstanceKlass* k, Symbol* constraint_class_name);
   static void remove_dumptime_info(InstanceKlass* k) NOT_CDS_RETURN;
   static bool has_been_redefined(InstanceKlass* k);
   DEBUG_ONLY(static bool _class_loading_may_happen;)
@@ -237,6 +239,7 @@ public:
                   Symbol* from_name, bool from_field_is_protected,
                   bool from_is_array, bool from_is_object,
                   bool* skip_assignability_check);
+  static void add_possible_verification_constraints(Thread* current, InstanceKlass* k);
   static void check_verification_constraints(InstanceKlass* klass,
                                              TRAPS) NOT_CDS_RETURN;
   static void add_enum_klass_static_field(InstanceKlass* ik, int root_index);

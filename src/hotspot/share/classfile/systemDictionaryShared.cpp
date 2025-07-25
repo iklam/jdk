@@ -249,6 +249,7 @@ bool SystemDictionaryShared::is_early_klass(InstanceKlass* ik) {
 }
 
 bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
+  assert_lock_strong(DumpTimeTable_lock);
   if (CDSConfig::is_dumping_final_static_archive() && k->defined_by_other_loaders()
       && k->is_shared()) {
     return false; // Do not exclude: unregistered classes are passed from preimage to final image.
@@ -356,7 +357,70 @@ bool SystemDictionaryShared::check_for_exclusion_impl(InstanceKlass* k) {
     return true;
   }
 
+  if (CDSConfig::is_dumping_aot_linked_classes()) {
+    Symbol* cause = check_for_exclusion_due_to_class_loader_constraints(k);
+    if (cause != nullptr) {
+      aot_log_warning(aot)("Skipping %s: verification constraint class %s is excluded", k->name()->as_C_string(), cause->as_C_string());
+      return true;
+    }
+  }
+
   return false; // false == k should NOT be excluded
+}
+
+// The "verification constraint" classes are those used in assignability checks when k
+// was verified in dumptime. When AOT class linking is enabled, we cannot replace any of
+// the verification constraint classes at runtime. This means we can guarantee that
+// the results of all successful assignability checks done during the dumptime verification of
+// k will remain true in runtime.
+//
+// The only exception is when a verification constraint class has been excluded (because it's signed,
+// etc). In this case, we must exclude k because the above guarantee cannot be made.
+Symbol* SystemDictionaryShared::check_for_exclusion_due_to_class_loader_constraints(InstanceKlass* k) {
+  precond(CDSConfig::is_dumping_aot_linked_classes());
+  DumpTimeClassInfo* info = get_info_locked(k);
+
+  int n = info->num_verifier_constraints();
+  for (int i = 0; i < n; i++) {
+    Symbol* name = info->verifier_constraint_name_at(i);
+    if (check_for_exclusion_due_to_class_loader_constraints(k, name)) {
+      return name;
+    }
+    Symbol* from_name = info->verifier_constraint_from_name_at(i);
+    if (check_for_exclusion_due_to_class_loader_constraints(k, from_name)) {
+      return from_name;
+    }
+  }
+
+  int pn = info->num_possible_verifier_constraints();
+  for (int i = 0; i < pn; i++) {
+    Symbol* name = info->possible_verifier_constraint_name_at(i);
+    if (check_for_exclusion_due_to_class_loader_constraints(k, name)) {
+      return name;
+    }
+  }
+
+  return nullptr;
+}
+
+bool SystemDictionaryShared::check_for_exclusion_due_to_class_loader_constraints(InstanceKlass* k, Symbol* constraint_class_name) {
+  Thread* current = Thread::current();
+  Handle loader(current, k->class_loader());
+  Klass* constraint_class = SystemDictionary::find_instance_or_array_klass(current, constraint_class_name, loader);
+  if (constraint_class == nullptr) {
+    return true;
+  }
+
+  if (constraint_class->is_objArray_klass()) {
+    constraint_class = ObjArrayKlass::cast(constraint_class)->bottom_klass();
+  }
+
+  if (constraint_class->is_instance_klass()) {
+    return check_for_exclusion(InstanceKlass::cast(constraint_class), nullptr);
+  } else {
+    assert(constraint_class->is_typeArray_klass(), "must be");
+    return false;
+  }
 }
 
 bool SystemDictionaryShared::is_builtin_loader(ClassLoaderData* loader_data) {
@@ -817,6 +881,43 @@ void SystemDictionaryShared::add_verification_constraint(InstanceKlass* k, Symbo
     // In all other cases, we are using an *actual* class loader to load k, so it should be able
     // to resolve any types that are needed for the verification of k.
     *skip_assignability_check = false;
+  }
+}
+
+// TODO: do we need to do this for "fail over" verifier??
+//
+// This is called after an "old" class is verifierd by the old verifier, which doesn't call add_verification_constraint((), so
+// we make a pessmistic guess of what the verification constraints might be.
+void SystemDictionaryShared::add_possible_verification_constraints(Thread* current, InstanceKlass* k) {
+  precond(CDSConfig::is_dumping_aot_linked_classes());
+  precond(CDSConfig::is_old_class(k));
+  DumpTimeClassInfo* info = get_info(k);
+  ConstantPool* cp = k->constants();
+
+  for (int cp_index = 1; cp_index < cp->length(); cp_index++) { // Index 0 is unused
+    switch (cp->tag_at(cp_index).value()) {
+    case JVM_CONSTANT_Class:
+    case JVM_CONSTANT_UnresolvedClass:
+    case JVM_CONSTANT_UnresolvedClassInError:
+      {
+        // All verification constraints for k must come from a Class constant in k's constant pool.
+        // Make a pessmistic guess -- if any class constant C is already resolved, we assume
+        // it was resolved by the old verifier to perform an assignability check.
+        Symbol* class_name = cp->klass_name_at(cp_index);
+        Handle loader(current, k->class_loader());
+        Klass* k = SystemDictionary::find_instance_or_array_klass(current, class_name, loader);
+        if (k != nullptr) {
+          info->add_possible_verification_constraint(class_name);
+
+          if (log_is_enabled(Trace, aot, verification)) {
+            ResourceMark rm;
+            log_trace(aot, verification)("add possible verification constraint: %s: %s must be also be archived",
+                                         k->external_name(), class_name->as_klass_external_name());
+          }
+        }
+      }
+      break;
+    }
   }
 }
 

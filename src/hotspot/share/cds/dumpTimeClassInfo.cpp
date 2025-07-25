@@ -36,6 +36,9 @@ DumpTimeClassInfo::~DumpTimeClassInfo() {
     delete _verifier_constraints;
     delete _verifier_constraint_flags;
   }
+  if (_possible_verifier_constraints != nullptr) {
+    delete _possible_verifier_constraints;
+  }
   if (_loader_constraints != nullptr) {
     delete _loader_constraints;
   }
@@ -57,6 +60,10 @@ bool DumpTimeClassInfo::is_excluded() {
       // If X and B can be verified, but A fails verification, we still archive A (in a preloaded
       // SystemDictionary) so that at runtime we cannot subvert the verification of X by replacing
       // A with a version that is not a subtype of B.
+      //
+      //
+      // UPDATE: this won' work, because A can be excluded for other reasons (it's a subclass of JFR Event, signed class ...)
+      // so it's might be possible for A to be replaced at runtime.
     } else {
       // Don't archive this class. At runtime, load it from classfile and rerun verification.
       return true;
@@ -102,6 +109,14 @@ void DumpTimeClassInfo::add_verification_constraint(InstanceKlass* k, Symbol* na
                                  name->as_klass_external_name(), c, vc_array->length(), vcflags_array->length());
   }
 }
+
+void DumpTimeClassInfo::add_possible_verification_constraint(Symbol* name) {
+  if (_possible_verifier_constraints == nullptr) {
+    _possible_verifier_constraints = new (mtClass) GrowableArray<Symbol*>(4, mtClass);
+  }
+   _possible_verifier_constraints->append(name);
+}
+
 
 static char get_loader_type_by(oop  loader) {
   assert(SystemDictionary::is_builtin_class_loader(loader), "Must be built-in loader");
