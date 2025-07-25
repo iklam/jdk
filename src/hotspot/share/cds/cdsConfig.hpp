@@ -30,6 +30,7 @@
 #include "utilities/macros.hpp"
 
 class JavaThread;
+class InstanceKlass;
 
 class CDSConfig : public AllStatic {
 #if INCLUDE_CDS
@@ -160,6 +161,10 @@ public:
   static bool is_dumping_aot_linked_classes()                NOT_CDS_JAVA_HEAP_RETURN_(false);
   static bool is_using_aot_linked_classes()                  NOT_CDS_JAVA_HEAP_RETURN_(false);
   static void set_has_aot_linked_classes(bool has_aot_linked_classes) NOT_CDS_JAVA_HEAP_RETURN;
+
+  // Bytecode verification
+  static bool is_preserving_verification_dependencies();
+  static bool is_old_class_for_verifier(const InstanceKlass* ik);
 
   // archive_path
 

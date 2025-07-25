@@ -754,12 +754,9 @@ bool MetaspaceShared::may_be_eagerly_linked(InstanceKlass* ik) {
   return true;
 }
 
-void MetaspaceShared::link_shared_classes(TRAPS) {
-  AOTClassLinker::initialize();
-  AOTClassInitializer::init_test_class(CHECK);
-
+void MetaspaceShared::link_all_loaded_classes(JavaThread* current) {
   while (true) {
-    ResourceMark rm(THREAD);
+    ResourceMark rm(current);
     CollectClassesForLinking collect_classes;
     bool has_linked = false;
     const GrowableArray<OopHandle>* mirrors = collect_classes.mirrors();
@@ -767,7 +764,7 @@ void MetaspaceShared::link_shared_classes(TRAPS) {
       OopHandle mirror = mirrors->at(i);
       InstanceKlass* ik = InstanceKlass::cast(java_lang_Class::as_Klass(mirror.resolve()));
       if (may_be_eagerly_linked(ik)) {
-        has_linked |= try_link_class(THREAD, ik);
+        has_linked |= try_link_class(current, ik);
       }
     }
 
@@ -777,6 +774,13 @@ void MetaspaceShared::link_shared_classes(TRAPS) {
     // Class linking includes verification which may load more classes.
     // Keep scanning until we have linked no more classes.
   }
+}
+
+void MetaspaceShared::link_shared_classes(TRAPS) {
+  AOTClassLinker::initialize();
+  AOTClassInitializer::init_test_class(CHECK);
+
+  link_all_loaded_classes(THREAD);
 
   // Eargerly resolve all string constants in constant pools
   {
