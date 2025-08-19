@@ -134,3 +134,32 @@ JNIEXPORT jbyte JNICALL Java_jdk_internal_reflect_ConstantPool_getTagAt0
   return JVM_ConstantPoolGetTagAt(env, unused, jcpool, index);
 }
 
+JNIEXPORT jbyte JNICALL Java_jdk_internal_reflect_ConstantPool_getMethodHandleRefKindAt0
+(JNIEnv *env, jobject unused, jobject jcpool, jint index)
+{
+  return JVM_ConstantPoolGetMethodHandleRefKindAt(env, jcpool, index);
+}
+
+JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getMethodHandleRefIndexAt0
+(JNIEnv *env, jobject unused, jobject jcpool, jint index)
+{
+  return JVM_ConstantPoolGetMethodHandleRefIndexAt(env, jcpool, index);
+}
+
+JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmRefIndex0
+(JNIEnv *env, jobject unused, jobject jcpool, jint index)
+{
+  return JVM_ConstantPoolGetBootstrapMethodArgumentRef(env, jcpool, index);
+}
+
+JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmArgSize0
+(JNIEnv *env, jobject unused, jobject jcpool, jint index)
+{
+  return JVM_ConstantPoolGetBootstrapMethodArgumentCount(env, jcpool, index);
+}
+
+JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmArgIndexAt0
+(JNIEnv *env, jobject unused, jobject jcpool, jint index, jint i)
+{
+  return JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt(env, jcpool, index, i);
+}

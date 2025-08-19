@@ -23,6 +23,7 @@
  */
 
 #include "cds/aotClassInitializer.hpp"
+#include "cds/aotConstantPoolResolver.hpp"
 #include "cds/cdsConfig.hpp"
 #include "cds/classListParser.hpp"
 #include "cds/classListWriter.hpp"
@@ -2229,6 +2230,36 @@ JVM_ENTRY(jbyte, JVM_ConstantPoolGetTagAt(JNIEnv *env, jobject obj, jobject unus
 }
 JVM_END
 
+JVM_ENTRY(jbyte, JVM_ConstantPoolGetMethodHandleRefKindAt(JNIEnv *env, jobject jcpool, jint index))
+{
+  return (jbyte) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->method_handle_ref_kind_at(index);
+}
+JVM_END
+
+JVM_ENTRY(jint, JVM_ConstantPoolGetMethodHandleRefIndexAt(JNIEnv *env, jobject jcpool, jint index))
+{
+  return (jint) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->method_handle_index_at(index);
+}
+JVM_END
+
+JVM_ENTRY(jint, JVM_ConstantPoolGetBootstrapMethodRefIndex(JNIEnv *env, jobject jcpool, jint index))
+{
+  return (jint) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->bootstrap_method_ref_index_at(index);
+}
+JVM_END
+
+JVM_ENTRY(jint, JVM_ConstantPoolGetBootstrapMethodArgumentCount(JNIEnv *env, jobject jcpool, jint index))
+{
+  return (jint) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->bootstrap_argument_count_at(index);
+}
+JVM_END
+
+JVM_ENTRY(jint, JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt(JNIEnv *env, jobject jcpool, jint index, jint i))
+{
+  return (jint) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->bootstrap_argument_index_at(index, i);
+}
+JVM_END
+
 // Assertion support. //////////////////////////////////////////////////////////
 
 JVM_ENTRY(jboolean, JVM_DesiredAssertionStatus(JNIEnv *env, jclass unused, jclass cls))
@@ -3535,6 +3566,16 @@ JVM_ENTRY(jboolean, JVM_NeedsClassInitBarrierForCDS(JNIEnv* env, jclass cls))
       return true;
     }
   }
+#else
+  return false;
+#endif // INCLUDE_CDS
+JVM_END
+
+JVM_ENTRY(jboolean, JVM_IsClassResolutionDeterministic(JNIEnv* env, jclass from, jstring input, jboolean isMethod))
+#if INCLUDE_CDS
+  Symbol* sym = java_lang_String::as_symbol(JNIHandles::resolve_non_null(input));
+  InstanceKlass* ik = InstanceKlass::cast(java_lang_Class::as_Klass(JNIHandles::resolve_non_null(from)));
+  return (jboolean) AOTConstantPoolResolver::check_type_signature(ik->constants(), sym, isMethod);
 #else
   return false;
 #endif // INCLUDE_CDS

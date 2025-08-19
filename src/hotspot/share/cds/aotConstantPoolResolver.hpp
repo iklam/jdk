@@ -65,7 +65,8 @@ class AOTConstantPoolResolver :  AllStatic {
 
   static void resolve_string(constantPoolHandle cp, int cp_index, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static bool is_class_resolution_deterministic(InstanceKlass* cp_holder, Klass* resolved_class);
-  static bool is_indy_resolution_deterministic(ConstantPool* cp, int cp_index);
+  static bool is_dynamic_resolution_deterministic(ConstantPool* cp, int cp_index);
+  static Bytecodes::Code method_handle_ref_kind_to_code(int ref_kind);
 
   static Klass* find_loaded_class(Thread* current, oop class_loader, Symbol* name);
   static Klass* find_loaded_class(Thread* current, ConstantPool* cp, int class_cp_index);
@@ -74,7 +75,6 @@ class AOTConstantPoolResolver :  AllStatic {
   static void maybe_resolve_fmi_ref(InstanceKlass* ik, Method* m, Bytecodes::Code bc, int raw_index,
                                     GrowableArray<bool>* resolve_fmi_list, TRAPS);
 
-  static bool check_methodtype_signature(ConstantPool* cp, Symbol* sig, Klass** return_type_ret = nullptr);
   static bool check_lambda_metafactory_signature(ConstantPool* cp, Symbol* sig);
   static bool check_lambda_metafactory_methodtype_arg(ConstantPool* cp, int bsms_attribute_index, int arg_i);
   static bool check_lambda_metafactory_methodhandle_arg(ConstantPool* cp, int bsms_attribute_index, int arg_i);
@@ -86,6 +86,7 @@ public:
   static void preresolve_string_cp_entries(InstanceKlass* ik, TRAPS);
 
   static bool is_resolution_deterministic(ConstantPool* cp, int cp_index);
+  static bool check_type_signature(ConstantPool* cp, Symbol* sig, bool is_method = true);
 };
 
 #endif // SHARE_CDS_AOTCONSTANTPOOLRESOLVER_HPP

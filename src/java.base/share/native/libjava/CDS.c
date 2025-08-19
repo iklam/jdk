@@ -69,3 +69,9 @@ Java_jdk_internal_misc_CDS_needsClassInitBarrier0(JNIEnv *env, jclass ignore,
                                                 jclass c) {
     return JVM_NeedsClassInitBarrierForCDS(env, c);
 }
+
+JNIEXPORT jboolean JNICALL
+Java_jdk_internal_misc_CDS_isClassResolutionDeterministic0(JNIEnv *env, jclass ignore,
+                                                           jclass from, jstring input, jboolean isMethod) {
+    return JVM_IsClassResolutionDeterministic(env, from, input, isMethod);
+}

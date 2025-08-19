@@ -31,6 +31,8 @@ import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.lang.constant.ClassDesc;
+import java.lang.constant.MethodTypeDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -392,6 +394,24 @@ public class CDS {
     }
 
     private static native boolean needsClassInitBarrier0(Class<?> c);
+
+    /// Try resolve a string as a field or method type descriptor,
+    /// and check if it is deterministic.
+    public static boolean isClassResolutionDeterministic(Class<?> from, String input, boolean isMethod) {
+        assert !from.isArray() && !from.isPrimitive() : from;
+        if (isMethod) {
+            MethodTypeDesc.ofDescriptor(input);
+        } else {
+            ClassDesc.ofDescriptor(input);
+        }
+        return isClassResolutionDeterministic0(from, input, isMethod);
+    }
+
+    private static native boolean isClassResolutionDeterministic0(Class<?> from, String internalName, boolean isMethod);
+
+    private static native boolean isClassResolutionDeterministic0(Class<?> c);
+
+    private static native boolean isAssemblySafeClass
 
     /**
      * This class is used only by native JVM code at CDS dump time for loading

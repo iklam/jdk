@@ -28,105 +28,235 @@ package jdk.internal.reflect;
 import java.lang.reflect.*;
 import java.util.Set;
 
-/** Provides reflective access to the constant pools of classes.
-    Currently this is needed to provide reflective access to annotations
-    but may be used by other internal subsystems in the future. */
+import jdk.internal.vm.annotation.Stable;
 
-public class ConstantPool {
-  // Number of entries in this constant pool (= maximum valid constant pool index)
-  public int      getSize()                      { return getSize0            (constantPoolOop);        }
-  public Class<?> getClassAt         (int index) { return getClassAt0         (constantPoolOop, index); }
-  public Class<?> getClassAtIfLoaded (int index) { return getClassAtIfLoaded0 (constantPoolOop, index); }
-  // Returns a class reference index for a method or a field.
-  public int getClassRefIndexAt(int index) {
-      return getClassRefIndexAt0(constantPoolOop, index);
-  }
-  // Returns either a Method or Constructor.
-  // Static initializers are returned as Method objects.
-  public Member   getMethodAt        (int index) { return getMethodAt0        (constantPoolOop, index); }
-  public Member   getMethodAtIfLoaded(int index) { return getMethodAtIfLoaded0(constantPoolOop, index); }
-  public Field    getFieldAt         (int index) { return getFieldAt0         (constantPoolOop, index); }
-  public Field    getFieldAtIfLoaded (int index) { return getFieldAtIfLoaded0 (constantPoolOop, index); }
-  // Fetches the class name, member (field, method or interface
-  // method) name, and type descriptor as an array of three Strings
-  public String[] getMemberRefInfoAt (int index) { return getMemberRefInfoAt0 (constantPoolOop, index); }
-  // Returns a name and type reference index for a method, a field or an invokedynamic.
-  public int getNameAndTypeRefIndexAt(int index) {
-      return getNameAndTypeRefIndexAt0(constantPoolOop, index);
-  }
-  // Fetches the name and type from name_and_type index as an array of two Strings
-  public String[] getNameAndTypeRefInfoAt(int index) {
-      return getNameAndTypeRefInfoAt0(constantPoolOop, index);
-  }
-  public int      getIntAt           (int index) { return getIntAt0           (constantPoolOop, index); }
-  public long     getLongAt          (int index) { return getLongAt0          (constantPoolOop, index); }
-  public float    getFloatAt         (int index) { return getFloatAt0         (constantPoolOop, index); }
-  public double   getDoubleAt        (int index) { return getDoubleAt0        (constantPoolOop, index); }
-  public String   getStringAt        (int index) { return getStringAt0        (constantPoolOop, index); }
-  public String   getUTF8At          (int index) { return getUTF8At0          (constantPoolOop, index); }
-  public Tag getTagAt(int index) {
-      return Tag.valueOf(getTagAt0(constantPoolOop, index));
-  }
+///
+/// Provides reflective access to the constant pools of classes.
+/// Currently this is needed to provide reflective access to annotations
+/// but may be used by other internal subsystems in the future.
+/// Used by AOT Assembly phase symbolic evaluation.
+public final class ConstantPool {
+    // Number of entries in this constant pool (= maximum valid constant pool index)
+    public int getSize() {
+        return getSize0(constantPoolOop);
+    }
 
-  public static enum Tag {
-      UTF8(1),
-      INTEGER(3),
-      FLOAT(4),
-      LONG(5),
-      DOUBLE(6),
-      CLASS(7),
-      STRING(8),
-      FIELDREF(9),
-      METHODREF(10),
-      INTERFACEMETHODREF(11),
-      NAMEANDTYPE(12),
-      METHODHANDLE(15),
-      METHODTYPE(16),
-      INVOKEDYNAMIC(18),
-      INVALID(0);
+    public Class<?> getClassAt(int index) {
+        return getClassAt0(constantPoolOop, index);
+    }
 
-      private final int tagCode;
+    public Class<?> getClassAtIfLoaded(int index) {
+        return getClassAtIfLoaded0(constantPoolOop, index);
+    }
 
-      private Tag(int tagCode) {
-          this.tagCode = tagCode;
-      }
+    // Returns a class reference index for a method or a field.
+    public int getClassRefIndexAt(int index) {
+        return getClassRefIndexAt0(constantPoolOop, index);
+    }
 
-      private static Tag valueOf(byte v) {
-          for (Tag tag : Tag.values()) {
-              if (tag.tagCode == v) {
-                  return tag;
-              }
-          }
-          throw new IllegalArgumentException("Unknown constant pool tag code " + v);
-      }
-   }
-  //---------------------------------------------------------------------------
-  // Internals only below this point
-  //
+    // Returns either a Method or Constructor.
+    // Static initializers are returned as Method objects.
+    public Member getMethodAt(int index) {
+        return getMethodAt0(constantPoolOop, index);
+    }
 
-  static {
-      Reflection.registerFieldsToFilter(ConstantPool.class, Set.of("constantPoolOop"));
-  }
+    public Member getMethodAtIfLoaded(int index) {
+        return getMethodAtIfLoaded0(constantPoolOop, index);
+    }
 
-  // HotSpot-internal constant pool object (set by the VM, name known to the VM)
-  private Object constantPoolOop;
+    public Field getFieldAt(int index) {
+        return getFieldAt0(constantPoolOop, index);
+    }
 
-  private native int      getSize0            (Object constantPoolOop);
-  private native Class<?> getClassAt0         (Object constantPoolOop, int index);
-  private native Class<?> getClassAtIfLoaded0 (Object constantPoolOop, int index);
-  private native int      getClassRefIndexAt0 (Object constantPoolOop, int index);
-  private native Member   getMethodAt0        (Object constantPoolOop, int index);
-  private native Member   getMethodAtIfLoaded0(Object constantPoolOop, int index);
-  private native Field    getFieldAt0         (Object constantPoolOop, int index);
-  private native Field    getFieldAtIfLoaded0 (Object constantPoolOop, int index);
-  private native String[] getMemberRefInfoAt0 (Object constantPoolOop, int index);
-  private native int      getNameAndTypeRefIndexAt0(Object constantPoolOop, int index);
-  private native String[] getNameAndTypeRefInfoAt0(Object constantPoolOop, int index);
-  private native int      getIntAt0           (Object constantPoolOop, int index);
-  private native long     getLongAt0          (Object constantPoolOop, int index);
-  private native float    getFloatAt0         (Object constantPoolOop, int index);
-  private native double   getDoubleAt0        (Object constantPoolOop, int index);
-  private native String   getStringAt0        (Object constantPoolOop, int index);
-  private native String   getUTF8At0          (Object constantPoolOop, int index);
-  private native byte     getTagAt0           (Object constantPoolOop, int index);
+    public Field getFieldAtIfLoaded(int index) {
+        return getFieldAtIfLoaded0(constantPoolOop, index);
+    }
+
+    // Fetches the class name, member (field, method or interface
+    // method) name, and type descriptor as an array of three Strings
+    public String[] getMemberRefInfoAt(int index) {
+        return getMemberRefInfoAt0(constantPoolOop, index);
+    }
+
+    // Returns a name and type reference index for a method, a field,
+    // an invokedynamic, or a constant dynamic.
+    public int getNameAndTypeRefIndexAt(int index) {
+        return getNameAndTypeRefIndexAt0(constantPoolOop, index);
+    }
+
+    // Fetches the name and type from name_and_type index as an array of two Strings
+    public String[] getNameAndTypeRefInfoAt(int index) {
+        return getNameAndTypeRefInfoAt0(constantPoolOop, index);
+    }
+
+    public int getIntAt(int index) {
+        return getIntAt0(constantPoolOop, index);
+    }
+
+    public long getLongAt(int index) {
+        return getLongAt0(constantPoolOop, index);
+    }
+
+    public float getFloatAt(int index) {
+        return getFloatAt0(constantPoolOop, index);
+    }
+
+    public double getDoubleAt(int index) {
+        return getDoubleAt0(constantPoolOop, index);
+    }
+
+    public String getStringAt(int index) {
+        return getStringAt0(constantPoolOop, index);
+    }
+
+    public String getUTF8At(int index) {
+        return getUTF8At0(constantPoolOop, index);
+    }
+
+    public Tag getTagAt(int index) {
+        return Tag.valueOf(getTagAt0(constantPoolOop, index));
+    }
+
+    // u1 refKind value of this MethodHandle constant
+    public int getMethodHandleRefKindAt(int index) {
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.METHODHANDLE : "Bad tag %s, expected MH".formatted(getTagAt(index));
+        return getMethodHandleRefKindAt0(constantPoolOop, index);
+    }
+
+    // MemberRef CP index of this MethodHandle constant
+    public int getMethodHandleRefIndexAt(int index) {
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.METHODHANDLE : "Bad tag %s, expected MH".formatted(getTagAt(index));
+        return getMethodHandleRefIndexAt0(constantPoolOop, index);
+    }
+
+    // CP index of the MethodHandle constant in the BSM of this indy/condy
+    public int getBsmRefIndex(int index) {
+        // Trusted callers, assert avoids extra downcall overhead
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.DYNAMIC || getTagAt(index) == Tag.INVOKEDYNAMIC
+                : "Bad tag %s, expected indy/condy".formatted(getTagAt(index));
+        return getBsmRefIndex0(constantPoolOop, index);
+    }
+
+    // Number of args in the BSM entry of this indy/condy
+    public int getBsmArgSize(int index) {
+        // Trusted callers, assert avoids extra downcall overhead
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.DYNAMIC || getTagAt(index) == Tag.INVOKEDYNAMIC
+                : "Bad tag %s, expected indy/condy".formatted(getTagAt(index));
+        return getBsmArgSize0(constantPoolOop, index);
+    }
+
+    // CP index for a specific arg of the BSM entry of this indy/condy
+    public int getBsmArgIndexAt(int index, int i) {
+        // Trusted callers, assert avoids extra downcall overhead
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.DYNAMIC || getTagAt(index) == Tag.INVOKEDYNAMIC
+                : "Bad tag %s, expected indy/condy".formatted(getTagAt(index));
+        assert 0 <= i && i < getBsmArgSize(index) : "arg %d not in [0, %d)".formatted(i, getBsmArgSize(index));
+        return getBsmArgIndexAt0(constantPoolOop, index, i);
+    }
+
+    public enum Tag {
+        UTF8(1),
+        INTEGER(3),
+        FLOAT(4),
+        LONG(5),
+        DOUBLE(6),
+        CLASS(7),
+        STRING(8),
+        FIELDREF(9),
+        METHODREF(10),
+        INTERFACEMETHODREF(11),
+        NAMEANDTYPE(12),
+        METHODHANDLE(15),
+        METHODTYPE(16),
+        DYNAMIC(17),
+        INVOKEDYNAMIC(18),
+        INVALID(0); // 0, slots after long/double
+
+        private final int tagCode;
+
+        Tag(int tagCode) {
+            this.tagCode = tagCode;
+        }
+
+        private static final int CODE_MASK = 0x1F;
+        private static final @Stable Tag[] table;
+
+        static {
+            var tab = new Tag[CODE_MASK + 1];
+            for (var e : values()) {
+                tab[e.tagCode] = e;
+            }
+            table = tab;
+        }
+
+        private static Tag valueOf(byte v) {
+            Tag t;
+            if ((v & ~CODE_MASK) != 0 || (t = table[v & CODE_MASK]) == null) {
+                throw new IllegalArgumentException("Unknown constant pool tag code " + v);
+            }
+            return t;
+        }
+    }
+    //---------------------------------------------------------------------------
+    // Internals only below this point
+    //
+
+    static {
+        Reflection.registerFieldsToFilter(ConstantPool.class, Set.of("constantPoolOop"));
+    }
+
+    // HotSpot-internal constant pool object (set by the VM, name known to the VM)
+    private Object constantPoolOop;
+
+    private native int getSize0(Object constantPoolOop);
+
+    private native Class<?> getClassAt0(Object constantPoolOop, int index);
+
+    private native Class<?> getClassAtIfLoaded0(Object constantPoolOop, int index);
+
+    private native int getClassRefIndexAt0(Object constantPoolOop, int index);
+
+    private native Member getMethodAt0(Object constantPoolOop, int index);
+
+    private native Member getMethodAtIfLoaded0(Object constantPoolOop, int index);
+
+    private native Field getFieldAt0(Object constantPoolOop, int index);
+
+    private native Field getFieldAtIfLoaded0(Object constantPoolOop, int index);
+
+    private native String[] getMemberRefInfoAt0(Object constantPoolOop, int index);
+
+    private native int getNameAndTypeRefIndexAt0(Object constantPoolOop, int index);
+
+    private native String[] getNameAndTypeRefInfoAt0(Object constantPoolOop, int index);
+
+    private native int getIntAt0(Object constantPoolOop, int index);
+
+    private native long getLongAt0(Object constantPoolOop, int index);
+
+    private native float getFloatAt0(Object constantPoolOop, int index);
+
+    private native double getDoubleAt0(Object constantPoolOop, int index);
+
+    private native String getStringAt0(Object constantPoolOop, int index);
+
+    private native String getUTF8At0(Object constantPoolOop, int index);
+
+    private native byte getTagAt0(Object constantPoolOop, int index);
+
+    // Methods below are unchecked
+    private native byte getMethodHandleRefKindAt0(Object constantPoolOop, int index);
+
+    private native int getMethodHandleRefIndexAt0(Object constantPoolOop, int index);
+
+    private native int getBsmRefIndex0(Object constantPoolOop, int index);
+
+    private native int getBsmArgSize0(Object constantPoolOop, int index);
+
+    private native int getBsmArgIndexAt0(Object constantPoolOop, int index, int argIndex);
 }

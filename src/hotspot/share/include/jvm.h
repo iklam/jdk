@@ -221,6 +221,9 @@ JVM_DumpDynamicArchive(JNIEnv* env, jstring archiveName);
 JNIEXPORT jboolean JNICALL
 JVM_NeedsClassInitBarrierForCDS(JNIEnv* env, jclass cls);
 
+JNIEXPORT jboolean JNICALL
+JVM_IsClassResolutionDeterministic(JNIEnv* env, jclass from, jstring input, jboolean isMethod);
+
 /*
  * java.lang.Throwable
  */
@@ -696,6 +699,22 @@ JNIEXPORT jstring JNICALL JVM_ConstantPoolGetUTF8At
 
 JNIEXPORT jbyte JNICALL JVM_ConstantPoolGetTagAt
 (JNIEnv *env, jobject unused, jobject jcpool, jint index);
+
+// New hooks
+JNIEXPORT jbyte JNICALL JVM_ConstantPoolGetMethodHandleRefKindAt
+(JNIEnv *env, jobject jcpool, jint index);
+
+JNIEXPORT jint JNICALL JVM_ConstantPoolGetMethodHandleRefIndexAt
+(JNIEnv *env, jobject jcpool, jint index);
+
+JNIEXPORT jint JNICALL JVM_ConstantPoolGetBootstrapMethodRefIndex
+(JNIEnv *env, jobject jcpool, jint index);
+
+JNIEXPORT jint JNICALL JVM_ConstantPoolGetBootstrapMethodArgumentCount
+(JNIEnv *env, jobject jcpool, jint index);
+
+JNIEXPORT jint JNICALL JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt
+(JNIEnv *env, jobject jcpool, jint index, jint i);
 
 /*
  * Parameter reflection
