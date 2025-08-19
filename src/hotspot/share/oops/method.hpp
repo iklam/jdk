@@ -754,6 +754,9 @@ public:
   bool is_hidden() const { return constMethod()->is_hidden(); }
   void set_is_hidden() { constMethod()->set_is_hidden(); }
 
+  bool is_aot_safe_bootstrap_method() const { return constMethod()->is_aot_safe_bootstrap_method(); }
+  void set_is_aot_safe_bootstrap_method() { constMethod()->set_is_aot_safe_bootstrap_method(); }
+
   bool is_scoped() const { return constMethod()->is_scoped(); }
   void set_scoped() { constMethod()->set_is_scoped(); }
 

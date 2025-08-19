@@ -943,6 +943,7 @@ public:
     _java_lang_Deprecated_for_removal,
     _jdk_internal_vm_annotation_AOTSafeClassInitializer,
     _method_AOTRuntimeSetup,
+    _method_AOTSafeBootstrapMethod,
     _annotation_LIMIT
   };
   const Location _location;
@@ -980,6 +981,7 @@ public:
   bool is_stable() const { return has_annotation(_field_Stable); }
 
   bool has_aot_runtime_setup() const { return has_annotation(_method_AOTRuntimeSetup); }
+  bool has_aot_safe_bootstrap_method() const { return has_annotation(_method_AOTSafeBootstrapMethod); }
 };
 
 // This class also doubles as a holder for metadata cleanup.
@@ -1910,6 +1912,11 @@ AnnotationCollector::annotation_index(const ClassLoaderData* loader_data,
       if (!privileged)              break;  // only allow in privileged code
       return _method_AOTRuntimeSetup;
     }
+    case VM_SYMBOL_ENUM_NAME(jdk_internal_vm_annotation_AOTSafeBootstrapMethod_signature): {
+      if (_location != _in_method)  break;  // only allow for methods
+      if (!privileged)              break;  // only allow in privileged code
+      return _method_AOTSafeBootstrapMethod;
+    }
     default: {
       break;
     }
@@ -2684,6 +2691,15 @@ Method* ClassFileParser::parse_method(const ClassFileStream* const cfs,
       classfile_parse_error("@AOTRuntimeSetup method must be declared private static void runtimeSetup() for class %s", CHECK_NULL);
     }
     _has_aot_runtime_setup_method = true;
+  }
+  if (parsed_annotations.has_aot_safe_bootstrap_method()) {
+    /* do we need some restrictions ?? -- return type must be CallSite??
+    if (name != vmSymbols::runtimeSetup() || signature != vmSymbols::void_method_signature() ||
+        !access_flags.is_private() || !access_flags.is_static()) {
+      classfile_parse_error("@AOTRuntimeSetup method must be declared private static void runtimeSetup() for class %s", CHECK_NULL);
+    }
+    */
+    m->set_is_aot_safe_bootstrap_method();
   }
 
   // Copy annotations

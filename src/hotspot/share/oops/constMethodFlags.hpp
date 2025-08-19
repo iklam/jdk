@@ -61,6 +61,7 @@ class ConstMethodFlags {
    flag(deprecated                , 1 << 19) \
    flag(deprecated_for_removal    , 1 << 20) \
    flag(jvmti_hide_events         , 1 << 21) \
+   flag(is_aot_safe_bootstrap_method, 1 << 22) \
    /* end of list */
 
 #define CM_FLAGS_ENUM_NAME(name, value)    _misc_##name = value,
