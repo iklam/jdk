@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.lang.reflect.Array;
 import java.util.Objects;
 
+import jdk.internal.vm.annotation.AOTSafeBootstrapMethod;
 import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 
 /**
@@ -336,6 +337,7 @@ public final class LambdaMetafactory {
      *         invariants are violated, as defined {@link LambdaMetafactory above}.
      * @throws NullPointerException If any argument is {@code null}.
      */
+    @AOTSafeBootstrapMethod
     public static CallSite metafactory(MethodHandles.Lookup caller,
                                        String interfaceMethodName,
                                        MethodType factoryType,

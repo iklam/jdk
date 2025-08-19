@@ -736,6 +736,7 @@ class SerializeClosure;
   template(java_util_concurrent_ConcurrentHashMap,          "java/util/concurrent/ConcurrentHashMap")             \
   template(java_util_ArrayList,                             "java/util/ArrayList")                                \
   template(jdk_internal_vm_annotation_AOTRuntimeSetup_signature, "Ljdk/internal/vm/annotation/AOTRuntimeSetup;")  \
+  template(jdk_internal_vm_annotation_AOTSafeBootstrapMethod_signature, "Ljdk/internal/vm/annotation/AOTSafeBootstrapMethod;")  \
   template(runtimeSetup,                                    "runtimeSetup")                                       \
   template(toFileURL_name,                                  "toFileURL")                                          \
   template(toFileURL_signature,                             "(Ljava/lang/String;)Ljava/net/URL;")                 \

@@ -446,6 +446,11 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
     return false;
   }
 
+  if (!Thread::current()->is_Java_thread()) {
+    // In a safepoint, just return true -- assume that all indys resolved so far are safe to archive.
+    return true;
+  }
+
   InstanceKlass* pool_holder = cp->pool_holder();
   if (!SystemDictionaryShared::is_builtin(pool_holder)) {
     return false;
@@ -526,6 +531,21 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
     }
 
     return true;
+  }
+
+  JavaThread* current = JavaThread::current();
+  Handle class_loader(current, pool_holder->class_loader());
+  Klass* bsm_k = SystemDictionary::resolve_or_null(bsm_klass, class_loader, current);
+  if (bsm_k == nullptr || !bsm_k->is_instance_klass()) {
+    if (current->has_pending_exception()) {
+      current->clear_pending_exception();
+    }
+    return false;
+  }
+
+  Method* m = InstanceKlass::cast(bsm_k)->find_method(bsm_name, bsm_signature);
+  if (m != nullptr && m->is_aot_safe_bootstrap_method()) {
+    tty->print_cr("Found safe %p", m);
   }
 
   if (false) { // LMF
