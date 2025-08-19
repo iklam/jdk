@@ -29,6 +29,7 @@
 #include "classfile/systemDictionary.hpp"
 #include "classfile/systemDictionaryShared.hpp"
 #include "classfile/vmClasses.hpp"
+#include "classfile/vmSymbols.hpp"
 #include "interpreter/bytecodeStream.hpp"
 #include "interpreter/interpreterRuntime.hpp"
 #include "memory/resourceArea.hpp"
@@ -36,6 +37,7 @@
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.inline.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/javaCalls.hpp"
 
 // Returns true if we CAN PROVE that cp_index will always resolve to
 // the same information at both dump time and run time. This is a
@@ -65,6 +67,10 @@ bool AOTConstantPoolResolver::is_resolution_deterministic(ConstantPool* cp, int 
     }
 
     if (!k->is_instance_klass()) {
+      if (k->is_array_klass()) {
+        // There can be array clone calls like [B.clone()Ljava/lang/Object;
+        return true;
+      }
       // TODO: support non instance klasses as well.
       return false;
     }
@@ -80,8 +86,7 @@ bool AOTConstantPoolResolver::is_resolution_deterministic(ConstantPool* cp, int 
   } else if (cp->tag_at(cp_index).is_method_handle()) {
     // Not a root in preresolution, but can be referred by indy (and nested condy)
     int ref_index = cp->method_handle_index_at(cp_index);
-    auto code = method_handle_ref_kind_to_code(cp->method_handle_ref_kind_at(cp_index));
-    return cp->is_resolved(ref_index, code) && is_resolution_deterministic(cp, ref_index);
+    return is_resolution_deterministic(cp, ref_index);
   } else {
     return false;
   }
@@ -406,6 +411,7 @@ bool AOTConstantPoolResolver::check_lambda_metafactory_signature(ConstantPool* c
   //                           exclude ? "Cannot" : "Can", k->external_name());
   // }
   // return !exclude;
+  return false;
 }
 
 bool AOTConstantPoolResolver::check_lambda_metafactory_methodtype_arg(ConstantPool* cp, int bsms_attribute_index, int arg_i) {
@@ -460,9 +466,7 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
   // This is necessary but not sufficient to say the (invoke)dynamic constant is deterministic.
 
   // Ensure the BSM method is resolved and supported
-  int bsm = cp->bootstrap_method_ref_index_at(cp_index);
-  int bsm_mh_ref = cp->method_handle_index_at(bsm);
-
+  int bsm_mh_ref = cp->bootstrap_method_ref_index_at(cp_index);
 
   if (!is_resolution_deterministic(cp, bsm_mh_ref)) {
     if (log_is_enabled(Debug, aot, resolve)) {
@@ -490,7 +494,7 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
     if (!is_resolution_deterministic(cp, arg_cp_index)) {
       if (log_is_enabled(Debug, aot, resolve)) {
         ResourceMark rm;
-        log_debug(aot, resolve)("BSM arg %d/%d for BSM [%d] failed: %d", i, bsm_arg_count, bsm, arg_cp_index);
+        log_debug(aot, resolve)("BSM arg %d/%d for BSM of [%d] failed: %d", i, bsm_arg_count, cp_index, arg_cp_index);
       }
       return false;
     }
@@ -510,28 +514,10 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
 
   // Now we have cleared all prerequisites. We just have to ensure the BSM is trusted, and ask our trusted
   // BSM that the symbolic args will resolve consistently.
-
-  if (!is_indy) {
-    return false; // TODO support condy later
-  }
-
-  // We currently support only StringConcatFactory::makeConcatWithConstants() and LambdaMetafactory::metafactory()
-  // We should mark the allowed BSMs in the JDK code using a private annotation.
-  // See notes on RFE JDK-8342481.
-
-  if (false) { // StringConcatFactory
-    Symbol* factory_type_sig = cp->uncached_signature_ref_at(cp_index);
-    if (log_is_enabled(Debug, aot, resolve)) {
-      ResourceMark rm;
-      log_debug(aot, resolve)("Checking StringConcatFactory callsite signature [%d]: %s", cp_index, factory_type_sig->as_C_string());
-    }
-
-    if (!check_type_signature(cp, factory_type_sig)) {
-      return false;
-    }
-
-    return true;
-  }
+  int bsm = cp->method_handle_index_at(bsm_mh_ref);
+  Symbol* bsm_name = cp->uncached_name_ref_at(bsm);
+  Symbol* bsm_signature = cp->uncached_signature_ref_at(bsm);
+  Symbol* bsm_klass = cp->klass_name_at(cp->uncached_klass_ref_index_at(bsm));
 
   JavaThread* current = JavaThread::current();
   Handle class_loader(current, pool_holder->class_loader());
@@ -546,67 +532,23 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
   Method* m = InstanceKlass::cast(bsm_k)->find_method(bsm_name, bsm_signature);
   if (m != nullptr && m->is_aot_safe_bootstrap_method()) {
     tty->print_cr("Found safe %p", m);
-  }
-
-  if (false) { // LMF
-    /*
-     * An indy callsite is associated with the following MethodType and MethodHandles:
-     *
-     * https://github.com/openjdk/jdk/blob/580eb62dc097efeb51c76b095c1404106859b673/src/java.base/share/classes/java/lang/invoke/LambdaMetafactory.java#L293-L309
-     *
-     * MethodType factoryType         The expected signature of the {@code CallSite}.  The
-     *                                parameter types represent the types of capture variables;
-     *                                the return type is the interface to implement.   When
-     *                                used with {@code invokedynamic}, this is provided by
-     *                                the {@code NameAndType} of the {@code InvokeDynamic}
-     *
-     * MethodType interfaceMethodType Signature and return type of method to be
-     *                                implemented by the function object.
-     *
-     * MethodHandle implementation    A direct method handle describing the implementation
-     *                                method which should be called (with suitable adaptation
-     *                                of argument types and return types, and with captured
-     *                                arguments prepended to the invocation arguments) at
-     *                                invocation time.
-     *
-     * MethodType dynamicMethodType   The signature and return type that should
-     *                                be enforced dynamically at invocation time.
-     *                                In simple use cases this is the same as
-     *                                {@code interfaceMethodType}.
-     */
-    Symbol* factory_type_sig = cp->uncached_signature_ref_at(cp_index);
-    if (log_is_enabled(Debug, aot, resolve)) {
-      ResourceMark rm;
-      log_debug(aot, resolve)("Checking lambda callsite signature [%d]: %s", cp_index, factory_type_sig->as_C_string());
+    Method* validator = InstanceKlass::cast(bsm_k)->find_method(vmSymbols::validateDynamicConstant_name(), vmSymbols::validateDynamicConstant_signature());
+    if (validator != nullptr) {
+      if (log_is_enabled(Debug, aot, resolve)) {
+        ResourceMark rm;
+        log_debug(aot, resolve)("Checking validator method for CP index [%d]", cp_index);
+      }
+      JavaCallArguments args(2);
+      args.push_oop(Handle(current, bsm_k->java_mirror()));
+      args.push_int(cp_index);
+      JavaValue result(T_BOOLEAN);
+      JavaCalls::call_static(&result, bsm_k, vmSymbols::validateDynamicConstant_name(), vmSymbols::validateDynamicConstant_signature(), &args, current);
+      if (current->has_pending_exception()) {
+        current->clear_pending_exception();
+        return false;
+      }
+      return (bool) result.get_jboolean();
     }
-
-    if (!check_lambda_metafactory_signature(cp, factory_type_sig)) {
-      return false;
-    }
-
-    int bsms_attribute_index = cp->bootstrap_methods_attribute_index(cp_index);
-    int arg_count = cp->bsm_attribute_entry(bsms_attribute_index)->argument_count();
-    if (arg_count != 3) {
-      // Malformed class?
-      return false;
-    }
-
-    // interfaceMethodType
-    if (!check_lambda_metafactory_methodtype_arg(cp, bsms_attribute_index, 0)) {
-      return false;
-    }
-
-    // implementation
-    if (!check_lambda_metafactory_methodhandle_arg(cp, bsms_attribute_index, 1)) {
-      return false;
-    }
-
-    // dynamicMethodType
-    if (!check_lambda_metafactory_methodtype_arg(cp, bsms_attribute_index, 2)) {
-      return false;
-    }
-
-    return true;
   }
 
   return false;

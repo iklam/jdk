@@ -149,7 +149,7 @@ JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getMethodHandleRef
 JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmRefIndex0
 (JNIEnv *env, jobject unused, jobject jcpool, jint index)
 {
-  return JVM_ConstantPoolGetBootstrapMethodArgumentRef(env, jcpool, index);
+  return JVM_ConstantPoolGetBootstrapMethodRefIndex(env, jcpool, index);
 }
 
 JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmArgSize0

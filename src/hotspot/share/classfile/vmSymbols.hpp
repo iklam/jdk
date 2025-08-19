@@ -740,6 +740,8 @@ class SerializeClosure;
   template(runtimeSetup,                                    "runtimeSetup")                                       \
   template(toFileURL_name,                                  "toFileURL")                                          \
   template(toFileURL_signature,                             "(Ljava/lang/String;)Ljava/net/URL;")                 \
+  template(validateDynamicConstant_name,                    "validateDynamicConstant")                            \
+  template(validateDynamicConstant_signature,               "(Ljava/lang/Class;I)Z")                              \
                                                                                                                   \
   /* jcmd Thread.dump_to_file */                                                                                  \
   template(jdk_internal_vm_ThreadDumper,           "jdk/internal/vm/ThreadDumper")                                \

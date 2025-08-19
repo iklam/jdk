@@ -2693,12 +2693,10 @@ Method* ClassFileParser::parse_method(const ClassFileStream* const cfs,
     _has_aot_runtime_setup_method = true;
   }
   if (parsed_annotations.has_aot_safe_bootstrap_method()) {
-    /* do we need some restrictions ?? -- return type must be CallSite??
-    if (name != vmSymbols::runtimeSetup() || signature != vmSymbols::void_method_signature() ||
-        !access_flags.is_private() || !access_flags.is_static()) {
-      classfile_parse_error("@AOTRuntimeSetup method must be declared private static void runtimeSetup() for class %s", CHECK_NULL);
+    if (!access_flags.is_static()) {
+      // Need to verify signature etc. (first arg must be Lookup) too but we will blindly trust here...
+      classfile_parse_error("@AOTSafeBootstrapMethod method must be static in class %s", CHECK_NULL);
     }
-    */
     m->set_is_aot_safe_bootstrap_method();
   }
 

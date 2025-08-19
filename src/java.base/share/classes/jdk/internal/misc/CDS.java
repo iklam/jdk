@@ -409,10 +409,6 @@ public class CDS {
 
     private static native boolean isClassResolutionDeterministic0(Class<?> from, String internalName, boolean isMethod);
 
-    private static native boolean isClassResolutionDeterministic0(Class<?> c);
-
-    private static native boolean isAssemblySafeClass
-
     /**
      * This class is used only by native JVM code at CDS dump time for loading
      * "unregistered classes", which are archived classes that are intended to

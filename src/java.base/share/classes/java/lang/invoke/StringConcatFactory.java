@@ -31,10 +31,12 @@ import jdk.internal.access.SharedSecrets;
 import jdk.internal.constant.ClassOrInterfaceDescImpl;
 import jdk.internal.constant.ConstantUtils;
 import jdk.internal.constant.MethodTypeDescImpl;
+import jdk.internal.misc.CDS;
 import jdk.internal.misc.VM;
 import jdk.internal.util.ClassFileDumper;
 import jdk.internal.util.ReferenceKey;
 import jdk.internal.util.ReferencedKeyMap;
+import jdk.internal.vm.annotation.AOTSafeBootstrapMethod;
 import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 import jdk.internal.vm.annotation.Stable;
 import sun.invoke.util.Wrapper;
@@ -352,6 +354,7 @@ public final class StringConcatFactory {
      * @jls  5.1.11 String Conversion
      * @jls 15.18.1 String Concatenation Operator +
      */
+    @AOTSafeBootstrapMethod
     public static CallSite makeConcatWithConstants(MethodHandles.Lookup lookup,
                                                    String name,
                                                    MethodType concatType,
@@ -1784,5 +1787,24 @@ public final class StringConcatFactory {
         static boolean maybeUTF16(Class<?> cl) {
             return cl == char.class || !cl.isPrimitive();
         }
+    }
+
+    private static boolean validateDynamicConstant(Class<?> owner, int cpIndex) {
+        var cp = SharedSecrets.getJavaLangAccess().getConstantPool(owner);
+        var bsmNat = cp.getNameAndTypeRefInfoAt(cp.getNameAndTypeRefIndexAt(cp.getMethodHandleRefIndexAt(cp.getBsmRefIndex(cpIndex))));
+        if (bsmNat[0].equals("makeConcatWithConstants") && """
+                (Ljava/lang/invoke/MethodHandles$Lookup;\
+                Ljava/lang/String;\
+                Ljava/lang/invoke/MethodType;\
+                Ljava/lang/String;\
+                [Ljava/lang/invoke/Object;)Ljava/lang/invoke/CallSite;
+                """.equals(bsmNat[1])) {
+            var callType = cp.getNameAndTypeRefInfoAt(cp.getNameAndTypeRefIndexAt(cpIndex))[1];
+            if (!callType.endsWith(")Ljava/lang/String;"))
+                return false;
+            return true;
+        }
+        // Only support regular one now
+        return false;
     }
 }

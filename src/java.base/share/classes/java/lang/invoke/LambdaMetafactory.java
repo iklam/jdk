@@ -30,6 +30,8 @@ import java.util.Arrays;
 import java.lang.reflect.Array;
 import java.util.Objects;
 
+import jdk.internal.access.SharedSecrets;
+import jdk.internal.misc.CDS;
 import jdk.internal.vm.annotation.AOTSafeBootstrapMethod;
 import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 
@@ -569,6 +571,27 @@ public final class LambdaMetafactory {
             result[i] = extractArg(args, index + i, type);
         }
         return result;
+    }
+
+    private static boolean validateDynamicConstant(Class<?> owner, int cpIndex) {
+        var cp = SharedSecrets.getJavaLangAccess().getConstantPool(owner);
+        var bsmNat = cp.getNameAndTypeRefInfoAt(cp.getNameAndTypeRefIndexAt(cp.getMethodHandleRefIndexAt(cp.getBsmRefIndex(cpIndex))));
+        if (bsmNat[0].equals("metafactory") && """
+                (Ljava/lang/invoke/MethodHandles$Lookup;\
+                Ljava/lang/String;\
+                Ljava/lang/invoke/MethodType;\
+                Ljava/lang/invoke/MethodType;\
+                Ljava/lang/invoke/MethodHandle;\
+                Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;
+                """.equals(bsmNat[1])) {
+            var callType = cp.getNameAndTypeRefInfoAt(cp.getNameAndTypeRefIndexAt(cpIndex))[1];
+            if (!CDS.isClassResolutionDeterministic(owner, callType, true)) {
+                return false;
+            }
+            return true;
+        }
+        // Only support regular one now
+        return false;
     }
 
 }
