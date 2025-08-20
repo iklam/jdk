@@ -213,50 +213,50 @@ public final class ConstantPool {
     // HotSpot-internal constant pool object (set by the VM, name known to the VM)
     private Object constantPoolOop;
 
-    private native int getSize0(Object constantPoolOop);
+    private static native int getSize0(Object constantPoolOop);
 
-    private native Class<?> getClassAt0(Object constantPoolOop, int index);
+    private static native Class<?> getClassAt0(Object constantPoolOop, int index);
 
-    private native Class<?> getClassAtIfLoaded0(Object constantPoolOop, int index);
+    private static native Class<?> getClassAtIfLoaded0(Object constantPoolOop, int index);
 
-    private native int getClassRefIndexAt0(Object constantPoolOop, int index);
+    private static native int getClassRefIndexAt0(Object constantPoolOop, int index);
 
-    private native Member getMethodAt0(Object constantPoolOop, int index);
+    private static native Member getMethodAt0(Object constantPoolOop, int index);
 
-    private native Member getMethodAtIfLoaded0(Object constantPoolOop, int index);
+    private static native Member getMethodAtIfLoaded0(Object constantPoolOop, int index);
 
-    private native Field getFieldAt0(Object constantPoolOop, int index);
+    private static native Field getFieldAt0(Object constantPoolOop, int index);
 
-    private native Field getFieldAtIfLoaded0(Object constantPoolOop, int index);
+    private static native Field getFieldAtIfLoaded0(Object constantPoolOop, int index);
 
-    private native String[] getMemberRefInfoAt0(Object constantPoolOop, int index);
+    private static native String[] getMemberRefInfoAt0(Object constantPoolOop, int index);
 
-    private native int getNameAndTypeRefIndexAt0(Object constantPoolOop, int index);
+    private static native int getNameAndTypeRefIndexAt0(Object constantPoolOop, int index);
 
-    private native String[] getNameAndTypeRefInfoAt0(Object constantPoolOop, int index);
+    private static native String[] getNameAndTypeRefInfoAt0(Object constantPoolOop, int index);
 
-    private native int getIntAt0(Object constantPoolOop, int index);
+    private static native int getIntAt0(Object constantPoolOop, int index);
 
-    private native long getLongAt0(Object constantPoolOop, int index);
+    private static native long getLongAt0(Object constantPoolOop, int index);
 
-    private native float getFloatAt0(Object constantPoolOop, int index);
+    private static native float getFloatAt0(Object constantPoolOop, int index);
 
-    private native double getDoubleAt0(Object constantPoolOop, int index);
+    private static native double getDoubleAt0(Object constantPoolOop, int index);
 
-    private native String getStringAt0(Object constantPoolOop, int index);
+    private static native String getStringAt0(Object constantPoolOop, int index);
 
-    private native String getUTF8At0(Object constantPoolOop, int index);
+    private static native String getUTF8At0(Object constantPoolOop, int index);
 
-    private native byte getTagAt0(Object constantPoolOop, int index);
+    private static native byte getTagAt0(Object constantPoolOop, int index);
 
     // Methods below are unchecked
-    private native byte getMethodHandleRefKindAt0(Object constantPoolOop, int index);
+    private static native byte getMethodHandleRefKindAt0(Object constantPoolOop, int index);
 
-    private native int getMethodHandleRefIndexAt0(Object constantPoolOop, int index);
+    private static native int getMethodHandleRefIndexAt0(Object constantPoolOop, int index);
 
-    private native int getBsmRefIndex0(Object constantPoolOop, int index);
+    private static native int getBsmRefIndex0(Object constantPoolOop, int index);
 
-    private native int getBsmArgSize0(Object constantPoolOop, int index);
+    private static native int getBsmArgSize0(Object constantPoolOop, int index);
 
-    private native int getBsmArgIndexAt0(Object constantPoolOop, int index, int argIndex);
+    private static native int getBsmArgIndexAt0(Object constantPoolOop, int index, int argIndex);
 }

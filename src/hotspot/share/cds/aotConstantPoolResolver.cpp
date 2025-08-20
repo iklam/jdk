@@ -92,21 +92,6 @@ bool AOTConstantPoolResolver::is_resolution_deterministic(ConstantPool* cp, int 
   }
 }
 
-Bytecodes::Code AOTConstantPoolResolver::method_handle_ref_kind_to_code(int ref_kind) {
-  switch (ref_kind) {
-    case JVM_REF_getField:         return Bytecodes::_getfield;
-    case JVM_REF_getStatic:        return Bytecodes::_getstatic;
-    case JVM_REF_putField:         return Bytecodes::_putfield;
-    case JVM_REF_putStatic:        return Bytecodes::_putstatic;
-    case JVM_REF_invokeVirtual:    return Bytecodes::_invokevirtual;
-    case JVM_REF_invokeStatic:     return Bytecodes::_invokestatic;
-    case JVM_REF_invokeSpecial:
-    case JVM_REF_newInvokeSpecial: return Bytecodes::_invokespecial;
-    case JVM_REF_invokeInterface:  return Bytecodes::_invokeinterface;
-  }
-  return Bytecodes::_illegal;
-}
-
 bool AOTConstantPoolResolver::is_class_resolution_deterministic(InstanceKlass* cp_holder, Klass* resolved_class) {
   assert(!is_in_archivebuilder_buffer(cp_holder), "sanity");
   assert(!is_in_archivebuilder_buffer(resolved_class), "sanity");
@@ -539,7 +524,7 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
         log_debug(aot, resolve)("Checking validator method for CP index [%d]", cp_index);
       }
       JavaCallArguments args(2);
-      args.push_oop(Handle(current, bsm_k->java_mirror()));
+      args.push_oop(Handle(current, pool_holder->java_mirror()));
       args.push_int(cp_index);
       JavaValue result(T_BOOLEAN);
       JavaCalls::call_static(&result, bsm_k, vmSymbols::validateDynamicConstant_name(), vmSymbols::validateDynamicConstant_signature(), &args, current);
