@@ -3922,16 +3922,15 @@ Handle reflect_ConstantPool::create(TRAPS) {
   return k->allocate_instance_handle(THREAD);
 }
 
-
+// This oop is a jdk.internal.reflect.ConstantPool
 void reflect_ConstantPool::set_cp(oop reflect, ConstantPool* value) {
   oop mirror = value->pool_holder()->java_mirror();
   // Save the mirror to get back the constant pool.
   reflect->obj_field_put(_oop_offset, mirror);
 }
 
-ConstantPool* reflect_ConstantPool::get_cp(oop reflect) {
-
-  oop mirror = reflect->obj_field(_oop_offset);
+// This oop is a java.lang.Class
+ConstantPool* reflect_ConstantPool::get_cp(oop mirror) {
   Klass* k = java_lang_Class::as_Klass(mirror);
   assert(k->is_instance_klass(), "Must be");
 

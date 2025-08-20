@@ -574,6 +574,7 @@ public final class LambdaMetafactory {
     }
 
     private static boolean validateDynamicConstant(Class<?> owner, int cpIndex) {
+        System.out.println(owner + " " + cpIndex);
         var cp = SharedSecrets.getJavaLangAccess().getConstantPool(owner);
         var bsmNat = cp.getNameAndTypeRefInfoAt(cp.getNameAndTypeRefIndexAt(cp.getMethodHandleRefIndexAt(cp.getBsmRefIndex(cpIndex))));
         if (bsmNat[0].equals("metafactory") && """
