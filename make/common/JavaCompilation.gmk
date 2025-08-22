@@ -274,7 +274,7 @@ define SetupJavaCompilationBody
   # Tell javac to do exactly as told and no more
   PARANOIA_FLAGS := -implicit:none -Xprefer:source -XDignore.symbol.file=true
 
-  $1_FLAGS += -g -Xlint:all $$($1_TARGET_RELEASE) $$(PARANOIA_FLAGS)
+  $1_FLAGS += -g -Xlint:all -XDdev $$($1_TARGET_RELEASE) $$(PARANOIA_FLAGS)
   $1_FLAGS += $$($1_JAVAC_FLAGS)
   # Set character encoding in source
   $1_FLAGS += -encoding utf-8

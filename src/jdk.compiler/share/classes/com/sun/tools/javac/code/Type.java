@@ -1476,6 +1476,7 @@ public abstract class Type extends AnnoConstruct implements TypeMirror, PoolCons
         public List<Type> argtypes;
         public Type restype;
         public List<Type> thrown;
+        public List<Pair<Type, Type>> inferenceMapping = List.nil();
 
         /** The type annotations on the method receiver.
          */

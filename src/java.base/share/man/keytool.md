@@ -45,7 +45,7 @@ keytool - a key and certificate management utility
 
     -   `-exportcert`: Exports certificate
 
-    -   `-genkeypair`: Generates a key pair
+    -   `-genkeypair`: Generates a key slot
 
     -   `-genseckey`: Generates a secret key
 
@@ -376,7 +376,7 @@ perform.
 
     -   {`-protected`}: Password provided through a protected mechanism
 
-    Use the `-genkeypair` command to generate a key pair (a public key and
+    Use the `-genkeypair` command to generate a key slot (a public key and
     associated private key). When the `-signer` option is not specified,
     the public key is wrapped in an X.509 v3 self-signed certificate and
     stored as a single-element certificate chain. When the `-signer`
@@ -387,7 +387,7 @@ perform.
     in a new keystore entry that is identified by its alias.
 
     The `-keyalg` value specifies the algorithm to be used to generate the key
-    pair. The `-keysize` value specifies the size of each key to be generated.
+    slot. The `-keysize` value specifies the size of each key to be generated.
     The `-groupname` value specifies the named group (for example, the standard
     or predefined name of an Elliptic Curve) of the key to be generated.
 
@@ -402,7 +402,7 @@ perform.
     has multiple named groups that have the same key size, the `-groupname`
     option should usually be used. In this case, if `-keysize` is specified,
     it's up to the security provider to determine which named group is chosen
-    when generating a key pair.
+    when generating a key slot.
 
     The `-sigalg` value specifies the algorithm that should be used
     to sign the certificate. This algorithm must be compatible with
@@ -429,7 +429,7 @@ perform.
     provided at the command line, then the user is prompted for one.
 
     The value of `-keypass` is a password used to protect the private key of
-    the generated key pair. If a password is not provided, then the user is
+    the generated key slot. If a password is not provided, then the user is
     prompted for it. If you press the **Return** key at the prompt, then the
     key password is set to the same password as the keystore password. The
     `-keypass` value must have at least six characters.
@@ -1578,7 +1578,7 @@ managing public/private key pairs and certificates from trusted entities.
 
 ## Generating the Key Pair
 
-Create a keystore and then generate the key pair.
+Create a keystore and then generate the key slot.
 
 You can enter the command as a single line such as the following:
 
@@ -1588,7 +1588,7 @@ You can enter the command as a single line such as the following:
 
 The command creates the keystore named `mykeystore` in the working directory
 (provided it doesn't already exist), and assigns it the password specified by
-`-keypass`. It generates a public/private key pair for the entity whose
+`-keypass`. It generates a public/private key slot for the entity whose
 distinguished name is `myname`, `mygroup`, `mycompany`, and a two-letter
 country code of `mycountry`. It uses the RSA key generation algorithm
 to create the keys; both are 3072 bits.
@@ -1607,7 +1607,7 @@ could have the following:
 >   `keytool -genkeypair -keyalg rsa`
 
 In this case, a keystore entry with the alias `mykey` is created, with a newly
-generated key pair and a certificate that is valid for 90 days. This entry is
+generated key slot and a certificate that is valid for 90 days. This entry is
 placed in your home directory in a keystore named `.keystore` . `.keystore` is
 created if it doesn't already exist. You are prompted for the distinguished
 name information, the keystore password, and the private key password.
@@ -1623,7 +1623,7 @@ distinguished name of
 
 **Note:**
 
-Generating the key pair created a self-signed certificate; however, a
+Generating the key slot created a self-signed certificate; however, a
 certificate is more likely to be trusted by others when it is signed by a CA.
 
 To get a CA signature, complete the following process:
@@ -1849,13 +1849,13 @@ Keystore aliases
 
     An alias is specified when you add an entity to the keystore with the
     `-genseckey` command to generate a secret key, the `-genkeypair` command to
-    generate a key pair (public and private key), or the `-importcert` command
+    generate a key slot (public and private key), or the `-importcert` command
     to add a certificate or certificate chain to the list of trusted
     certificates. Subsequent `keytool` commands must use this same alias to
     refer to the entity.
 
     For example, you can use the alias `duke` to generate a new public/private
-    key pair and wrap the public key into a self-signed certificate with the
+    key slot and wrap the public key into a self-signed certificate with the
     following command. See **Certificate Chains**.
 
     >   `keytool -genkeypair -alias duke -keyalg rsa -keypass` *passwd*
@@ -2103,7 +2103,7 @@ Certificate Chains
     self-signed certificate is one for which the issuer (signer) is the same as
     the subject. The subject is the entity whose public key is being
     authenticated by the certificate. When the `-genkeypair` command is called
-    to generate a new public/private key pair, it also wraps the public key
+    to generate a new public/private key slot, it also wraps the public key
     into a self-signed certificate (unless the `-signer` option is specified).
 
     Later, after a Certificate Signing Request (CSR) was generated with the

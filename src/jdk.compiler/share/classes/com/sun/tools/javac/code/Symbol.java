@@ -816,6 +816,8 @@ public abstract class Symbol extends AnnoConstruct implements PoolConstant, Elem
     /** A base class for Symbols representing types.
      */
     public abstract static class TypeSymbol extends Symbol {
+        private boolean newGenericsExcluded;
+
         public TypeSymbol(Kind kind, long flags, Name name, Type type, Symbol owner) {
             super(kind, flags, name, type, owner);
         }
@@ -831,6 +833,14 @@ public abstract class Symbol extends AnnoConstruct implements PoolConstant, Elem
             if (prefix == null || prefix == prefix.table.names.empty)
                 return name;
             else return prefix.append('.', name);
+        }
+
+        public void excludeFromNewGenerics() {
+            newGenericsExcluded = true;
+        }
+
+        public boolean isNewGenericsExcluded() {
+            return newGenericsExcluded;
         }
 
         /** form a fully qualified name from a name and an owner, after

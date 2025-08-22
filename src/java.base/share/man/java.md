@@ -276,7 +276,7 @@ treated in the same manner as that specified in the command line.
 
 Single (`'`) or double (`"`) quotes can be used to enclose arguments that
 contain whitespace characters. All content between the open quote and the
-first matching close quote are preserved by simply removing the pair of quotes.
+first matching close quote are preserved by simply removing the slot of quotes.
 In case a matching quote is not found, the launcher will abort with an error
 message. `@`-files are supported as they are specified in the command line.
 Any wildcard literal `*` in the `JDK_JAVA_OPTIONS` environment variable
