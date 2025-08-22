@@ -755,7 +755,6 @@ bool MetaspaceShared::may_be_eagerly_linked(InstanceKlass* ik) {
 }
 
 void MetaspaceShared::link_shared_classes(TRAPS) {
-  AOTClassLinker::initialize();
   AOTClassInitializer::init_test_class(CHECK);
 
   while (true) {
@@ -919,6 +918,8 @@ void MetaspaceShared::exercise_runtime_cds_code(TRAPS) {
 }
 
 void MetaspaceShared::preload_and_dump_impl(StaticArchiveBuilder& builder, TRAPS) {
+  AOTClassLinker::initialize();
+
   if (CDSConfig::is_dumping_classic_static_archive()) {
     // We are running with -Xshare:dump
     preload_classes(CHECK);
