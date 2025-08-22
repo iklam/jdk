@@ -476,6 +476,7 @@ int DynamicArchive::num_array_klasses() {
 }
 
 void DynamicArchive::dump_impl(bool jcmd_request, const char* archive_name, TRAPS) {
+  AOTClassLinker::initialize();
   MetaspaceShared::link_shared_classes(CHECK);
   if (!jcmd_request && CDSConfig::is_dumping_regenerated_lambdaform_invokers()) {
     LambdaFormInvokers::regenerate_holder_classes(CHECK);
