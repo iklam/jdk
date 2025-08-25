@@ -716,6 +716,9 @@ JNIEXPORT jint JNICALL JVM_ConstantPoolGetBootstrapMethodArgumentCount
 JNIEXPORT jint JNICALL JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt
 (JNIEnv *env, jobject jcpool, jint index, jint i);
 
+JNIEXPORT jint JNICALL JVM_ConstantPoolGetMethodTypeDescriptorIndexAt
+(JNIEnv *env, jobject jcpool, jint index);
+
 /*
  * Parameter reflection
  */

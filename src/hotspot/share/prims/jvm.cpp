@@ -2260,6 +2260,12 @@ JVM_ENTRY(jint, JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt(JNIEnv *env, j
 }
 JVM_END
 
+JVM_ENTRY(jint, JVM_ConstantPoolGetMethodTypeDescriptorIndexAt(JNIEnv *env, jobject jcpool, jint index))
+{
+  return (jint) reflect_ConstantPool::get_cp(JNIHandles::resolve_non_null(jcpool))->method_type_index_at(index);
+}
+JVM_END
+
 // Assertion support. //////////////////////////////////////////////////////////
 
 JVM_ENTRY(jboolean, JVM_DesiredAssertionStatus(JNIEnv *env, jclass unused, jclass cls))

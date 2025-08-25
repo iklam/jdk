@@ -163,3 +163,9 @@ JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getBsmArgIndexAt0
 {
   return JVM_ConstantPoolGetBootstrapMethodArgumentIndexAt(env, jcpool, index, i);
 }
+
+JNIEXPORT jint JNICALL Java_jdk_internal_reflect_ConstantPool_getMethodTypeDescriptorIndexAt
+(JNIEnv *env, jclass unused, jobject jcpool, jint index)
+{
+  return JVM_ConstantPoolGetMethodTypeDescriptorIndexAt(env, jcpool, index);
+}

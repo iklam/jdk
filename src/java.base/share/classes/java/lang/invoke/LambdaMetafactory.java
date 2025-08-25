@@ -32,6 +32,7 @@ import java.util.Objects;
 
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.CDS;
+import jdk.internal.reflect.ConstantPool;
 import jdk.internal.vm.annotation.AOTSafeBootstrapMethod;
 import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 

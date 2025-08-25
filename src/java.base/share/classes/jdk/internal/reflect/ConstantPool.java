@@ -159,6 +159,14 @@ public final class ConstantPool {
         return getBsmArgIndexAt0(constantPoolOop, index, i);
     }
 
+    // CP index for the descriptor UTF8 in an MT
+    public int getMethodTypeDescriptorIndexAt(int index) {
+        // Trusted callers, assert avoids extra downcall overhead
+        assert 1 <= index && index <= getSize() : "CP index %d not in [1, %d)".formatted(index, getSize());
+        assert getTagAt(index) == Tag.METHODTYPE : "Bad tag %s, expected MT".formatted(getTagAt(index));
+        return getMethodTypeDescriptorIndexAt0(constantPoolOop, index);
+    }
+
     public enum Tag {
         UTF8(1),
         INTEGER(3),
@@ -259,4 +267,6 @@ public final class ConstantPool {
     private static native int getBsmArgSize0(Object constantPoolOop, int index);
 
     private static native int getBsmArgIndexAt0(Object constantPoolOop, int index, int argIndex);
+
+    private static native int getMethodTypeDescriptorIndexAt0(Object constantPoolOop, int index);
 }

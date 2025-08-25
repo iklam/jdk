@@ -498,8 +498,7 @@ bool HeapShared::is_string_concat_klass(InstanceKlass* ik) {
 }
 
 bool HeapShared::is_archivable_hidden_klass(InstanceKlass* ik) {
-  return CDSConfig::is_dumping_method_handles() &&
-    (is_lambda_form_klass(ik) || is_lambda_proxy_klass(ik) || is_string_concat_klass(ik));
+  return CDSConfig::is_dumping_method_handles();
 }
 
 
@@ -810,8 +809,6 @@ void KlassSubGraphInfo::add_subgraph_object_klass(Klass* orig_k) {
   } else if (orig_k->is_objArray_klass()) {
     Klass* abk = ObjArrayKlass::cast(orig_k)->bottom_klass();
     if (abk->is_instance_klass()) {
-      assert(InstanceKlass::cast(abk)->defined_by_boot_loader(),
-            "must be boot class");
       check_allowed_klass(InstanceKlass::cast(ObjArrayKlass::cast(orig_k)->bottom_klass()));
     }
     if (orig_k == Universe::objectArrayKlass()) {

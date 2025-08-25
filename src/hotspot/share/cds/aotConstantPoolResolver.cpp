@@ -516,7 +516,10 @@ bool AOTConstantPoolResolver::is_dynamic_resolution_deterministic(ConstantPool* 
 
   Method* m = InstanceKlass::cast(bsm_k)->find_method(bsm_name, bsm_signature);
   if (m != nullptr && m->is_aot_safe_bootstrap_method()) {
-    tty->print_cr("Found safe %p", m);
+    if (log_is_enabled(Debug, aot, resolve)) {
+      ResourceMark rm;
+      log_debug(aot, resolve)("Trusted BSM: %s %s %s", bsm_k->external_name(), bsm_name->as_C_string(), bsm_signature->as_C_string());
+    }
     Method* validator = InstanceKlass::cast(bsm_k)->find_method(vmSymbols::validateDynamicConstant_name(), vmSymbols::validateDynamicConstant_signature());
     if (validator != nullptr) {
       if (log_is_enabled(Debug, aot, resolve)) {
