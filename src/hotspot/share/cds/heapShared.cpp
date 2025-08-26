@@ -210,6 +210,23 @@ void HeapShared::reset_archived_object_states(TRAPS) {
                          CHECK);
   Handle boot_loader(THREAD, result.get_oop());
   reset_states(boot_loader(), CHECK);
+
+  // MethodHandles$Lookup::DEFAULT_DUMPER needs to be clear -- some BSMs may
+  // generate call sites that embeds a Lookup object.
+  {
+    TempNewSymbol lookup_class_name = SymbolTable::new_symbol("java/lang/invoke/MethodHandles$Lookup");
+    TempNewSymbol method_name = SymbolTable::new_symbol("resetArchivedStates");
+    InstanceKlass* k = SystemDictionaryShared::find_builtin_class(lookup_class_name);
+    if (k != nullptr) {
+      log_debug(aot)("Resetting MethodHandles$Lookup");
+      JavaValue result(T_VOID);
+      JavaCalls::call_static(&result,
+                             k,
+                             method_name,
+                             vmSymbols::void_method_signature(),
+                             CHECK);
+    }
+  }
 }
 
 HeapShared::ArchivedObjectCache* HeapShared::_archived_object_cache = nullptr;

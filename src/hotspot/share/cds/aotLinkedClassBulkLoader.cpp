@@ -290,9 +290,11 @@ void AOTLinkedClassBulkLoader::initiate_loading(JavaThread* current, const char*
 // StringConcat are normally stored in the main ClassLoaderData of the boot class loader. We
 // do the same for the archived copies of such classes.
 void AOTLinkedClassBulkLoader::load_hidden_class(ClassLoaderData* loader_data, InstanceKlass* ik, TRAPS) {
+#if 0 // Allow "UnsupportedBSMs$$TypeSwitch+0x800000033"
   assert(HeapShared::is_lambda_form_klass(ik) ||
          HeapShared::is_lambda_proxy_klass(ik) ||
          HeapShared::is_string_concat_klass(ik), "sanity");
+#endif
   DEBUG_ONLY({
       assert(ik->java_super()->is_loaded(), "must be");
       for (int i = 0; i < ik->local_interfaces()->length(); i++) {

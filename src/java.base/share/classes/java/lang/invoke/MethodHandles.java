@@ -2123,11 +2123,18 @@ public final class MethodHandles {
         // and LambdaForms and method handle internals.  They are dumped via
         // different ClassFileDumpers.
         private static ClassFileDumper defaultDumper() {
+            if ( DEFAULT_DUMPER == null) {
+                DEFAULT_DUMPER = ClassFileDumper.getInstance(
+                    "jdk.invoke.MethodHandle.dumpClassFiles", "DUMP_CLASS_FILES");
+            }
             return DEFAULT_DUMPER;
         }
 
-        private static final ClassFileDumper DEFAULT_DUMPER = ClassFileDumper.getInstance(
-                "jdk.invoke.MethodHandle.dumpClassFiles", "DUMP_CLASS_FILES");
+        @Stable private static ClassFileDumper DEFAULT_DUMPER;
+
+        private static void resetArchivedStates() {
+            DEFAULT_DUMPER = null;
+        }
 
         /**
          * This method checks the class file version and the structure of `this_class`.
