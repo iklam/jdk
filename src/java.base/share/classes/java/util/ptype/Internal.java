@@ -4,57 +4,81 @@ import jdk.internal.misc.Unsafe;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.Objects;
 import java.util.WeakHashMap;
+import java.util.ptype.model.ArrayType;
+import java.util.ptype.model.SpecializedType;
+import java.util.ptype.util.HashMap;
+import java.util.ptype.util.Optional;
+import java.util.ptype.util.Utils;
 
-final class Internal {
+/// Utility class that provides logic used internally.
+public final class Internal {
 
     private static final class Holder {
         private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
     }
 
-    private static final ClassValue<ArgList> STATIC_ARG_CACHE = new ClassValue<>() {
-        @Override
-        protected ArgList computeValue(Class<?> type) {
-            Utils.requireNonNull(type);
-            var superclass = type.getGenericSuperclass();
-            var genericInterfaces = type.getGenericInterfaces();
-            var array = new Arg[genericInterfaces.length + (superclass != null ? 1 : 0)];
-            var index = 0;
-            if (superclass != null) {
-                array[index++] = Arg.fromType(superclass);
-            }
-            for (var superinterface : genericInterfaces) {
-                array[index++] = Arg.fromType(superinterface);
-            }
-            return ArgList.of(array);
-        }
-    };
-
     private static final WeakHashMap<Object, ArrayType> ARRAY_TYPE_STORAGE = new WeakHashMap<>();
 
-    public static MethodHandles.Lookup lookup() {
-        return Holder.LOOKUP;
-    }
+    private static final WeakHashMap<Class<?>, MethodHandle> FIELD_CACHE = new WeakHashMap<>();
+    private static final WeakHashMap<Class<?>, MethodHandle> SUPER_GENERATION_CACHE = new WeakHashMap<>();
 
-    public static ArgList staticArgs(Class<?> type) {
-        Utils.requireNonNull(type);
-        synchronized (STATIC_ARG_CACHE) {
-            return STATIC_ARG_CACHE.get(type);
+    static Optional<SpecializedType> extractInformationField(Object obj) {
+        try {
+            var getter = FIELD_CACHE.get(obj.getClass());
+            if (getter == null) {
+                getter = Holder.LOOKUP.findGetter(obj.getClass(), "$typeInformation", SpecializedType.class);
+                FIELD_CACHE.put(obj.getClass(), getter);
+            }
+            return Optional.of((SpecializedType) getter.invoke(obj));
+        } catch (NoSuchFieldException e) {
+            return Optional.empty();
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
         }
     }
 
-    public static RawOptional outerThis(Object obj, Class<?> expectedClass) {
+    /// Generates the map containing the super types of a given specialized type.
+    ///
+    /// @param type the type represented by this specialized type
+    /// @param concrete the concrete specialized type
+    /// @return the map associating all the supertypes to their value
+    @SuppressWarnings("unchecked")
+    public static HashMap<Class<?>, SpecializedType> generateSuperTypes(Class<?> type, SpecializedType concrete) {
+        Utils.requireNonNull(type);
+        Utils.requireNonNull(concrete);
+        try {
+            var method = SUPER_GENERATION_CACHE.get(type);
+            if (method == null) {
+                method = Holder.LOOKUP.findStatic(
+                        type,
+                        "$computeSuper",
+                        MethodType.methodType(HashMap.class, SpecializedType.class)
+                );
+                SUPER_GENERATION_CACHE.put(type, method);
+            }
+            return (HashMap<Class<?>, SpecializedType>) method.invokeExact(concrete);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+        } catch (Throwable e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    static Optional<Object> outerThis(Object obj, Class<?> expectedClass) {
         Utils.requireNonNull(obj);
         Utils.requireNonNull(expectedClass);
         var handle = outerFieldGetter(expectedClass);
         if (handle == null) {
-            return RawOptional.empty();
+            return Optional.empty();
         }
         try {
-            return RawOptional.of(handle.invoke(obj));
+            return Optional.of(handle.invoke(obj));
         } catch (Throwable e) {
             throw new AssertionError(e);
         }
@@ -104,15 +128,6 @@ final class Internal {
             return null;
         }
         return next;
-    }
-
-    public static Class<?> findClass(String internalName) {
-        Objects.requireNonNull(internalName);
-        try {
-            return Class.forName(internalName, false, ClassLoader.getPlatformClassLoader());
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError("Could not load: " + internalName, e);
-        }
     }
 
     static {
