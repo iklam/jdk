@@ -1562,7 +1562,7 @@ bool HeapShared::walk_one_object(PendingOopStack* stack, int level, KlassSubGrap
       // defined at the top of this file.
       log_error(aot, heap)("(%d) Unknown java.lang.Class object is in the archived sub-graph", level);
       debug_trace();
-      MetaspaceShared::unrecoverable_writing_error();
+      //MetaspaceShared::unrecoverable_writing_error();
     }
   }
 

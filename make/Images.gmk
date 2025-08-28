@@ -192,7 +192,8 @@ define CreateCDSArchive
   JRE_TARGETS += $$($1_$2_gen_cds_archive_jre)
 endef
 
-ifeq ($(BUILD_CDS_ARCHIVE), true)
+# IOI: CDS archive is not usable for now. Do not generate them for the JDK build.
+ifeq ($(BUILD_CDS_ARCHIVE), true-disabled)
   $(foreach v, $(JVM_VARIANTS), \
     $(eval $(call CreateCDSArchive,$v,)) \
   )

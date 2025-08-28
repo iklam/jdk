@@ -87,7 +87,6 @@ $(CLASSLIST_FILE): $(INTERIM_IMAGE_DIR)/bin/java$(EXECUTABLE_SUFFIX) $(CLASSLIST
 	    -XX:SharedClassListFile=$@.interim -XX:SharedArchiveFile=$@.jsa \
 	    -Xmx128M -Xms128M $(LOG_INFO)
 	$(FIXPATH) $(INTERIM_IMAGE_DIR)/bin/java -XX:DumpLoadedClassList=$@.raw.2 \
-	    -XX:SharedClassListFile=$@.interim -XX:SharedArchiveFile=$@.jsa \
 	    -Djava.lang.invoke.MethodHandle.TRACE_RESOLVE=true \
 	    $(CLASSLIST_FILE_VM_OPTS) \
 	    --module-path $(SUPPORT_OUTPUTDIR)/classlist.jar \
