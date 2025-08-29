@@ -64,6 +64,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   // A list of classes need to be loaded and initialized before the archived
   // object sub-graphs can be accessed at runtime.
   GrowableArray<Klass*>* _subgraph_object_klasses;
+  GrowableArray<Klass*>* _subgraph_object_klasses_resolve_only;
   // A list of _k's static fields as the entry points of archived sub-graphs.
   // For each entry field, it is a tuple of field_offset, field_value
   GrowableArray<int>* _subgraph_entry_fields;
@@ -79,7 +80,7 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   static void check_allowed_klass(InstanceKlass* ik);
  public:
   KlassSubGraphInfo(Klass* k, bool is_full_module_graph) :
-    _k(k),  _subgraph_object_klasses(nullptr),
+    _k(k),  _subgraph_object_klasses(nullptr), _subgraph_object_klasses_resolve_only(nullptr),
     _subgraph_entry_fields(nullptr),
     _is_full_module_graph(is_full_module_graph),
     _has_non_early_klasses(false) {}
@@ -87,6 +88,9 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   ~KlassSubGraphInfo() {
     if (_subgraph_object_klasses != nullptr) {
       delete _subgraph_object_klasses;
+    }
+    if (_subgraph_object_klasses_resolve_only != nullptr) {
+      delete _subgraph_object_klasses_resolve_only;
     }
     if (_subgraph_entry_fields != nullptr) {
       delete _subgraph_entry_fields;
@@ -97,11 +101,14 @@ class KlassSubGraphInfo: public CHeapObj<mtClass> {
   GrowableArray<Klass*>* subgraph_object_klasses() {
     return _subgraph_object_klasses;
   }
+  GrowableArray<Klass*>* subgraph_object_klasses_resolve_only() {
+    return _subgraph_object_klasses_resolve_only;
+  }
   GrowableArray<int>* subgraph_entry_fields() {
     return _subgraph_entry_fields;
   }
   void add_subgraph_entry_field(int static_field_offset, oop v);
-  void add_subgraph_object_klass(Klass *orig_k);
+  void add_subgraph_object_klass(Klass *orig_k, bool resolve_only = false);
   int num_subgraph_object_klasses() {
     return _subgraph_object_klasses == nullptr ? 0 :
            _subgraph_object_klasses->length();
@@ -125,13 +132,17 @@ class ArchivedKlassSubGraphInfoRecord {
   // klasses of objects in archived sub-graphs referenced from the entry points
   // (static fields) in the containing class
   Array<Klass*>* _subgraph_object_klasses;
+
+  Array<Klass*>* _subgraph_object_klasses_resolve_only;
  public:
   ArchivedKlassSubGraphInfoRecord() :
-    _k(nullptr), _entry_field_records(nullptr), _subgraph_object_klasses(nullptr) {}
+    _k(nullptr), _entry_field_records(nullptr),
+    _subgraph_object_klasses(nullptr), _subgraph_object_klasses_resolve_only(nullptr) {}
   void init(KlassSubGraphInfo* info);
   Klass* klass() const { return _k; }
   Array<int>* entry_field_records() const { return _entry_field_records; }
   Array<Klass*>* subgraph_object_klasses() const { return _subgraph_object_klasses; }
+  Array<Klass*>* subgraph_object_klasses_resolve_only() const { return _subgraph_object_klasses_resolve_only; }
   bool is_full_module_graph() const { return _is_full_module_graph; }
   bool has_non_early_klasses() const { return _has_non_early_klasses; }
 };

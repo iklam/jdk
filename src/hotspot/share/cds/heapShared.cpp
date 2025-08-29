@@ -770,11 +770,15 @@ void KlassSubGraphInfo::add_subgraph_entry_field(int static_field_offset, oop v)
 
 // Add the Klass* for an object in the current KlassSubGraphInfo's subgraphs.
 // Only objects of boot classes can be included in sub-graph.
-void KlassSubGraphInfo::add_subgraph_object_klass(Klass* orig_k) {
+void KlassSubGraphInfo::add_subgraph_object_klass(Klass* orig_k, bool resolve_only) {
   assert(CDSConfig::is_dumping_heap(), "dump time only");
 
   if (_subgraph_object_klasses == nullptr) {
     _subgraph_object_klasses =
+      new (mtClass) GrowableArray<Klass*>(50, mtClass);
+  }
+  if (_subgraph_object_klasses_resolve_only == nullptr) {
+    _subgraph_object_klasses_resolve_only =
       new (mtClass) GrowableArray<Klass*>(50, mtClass);
   }
 
@@ -826,13 +830,25 @@ void KlassSubGraphInfo::add_subgraph_object_klass(Klass* orig_k) {
   }
 
   if (log_is_enabled(Debug, aot, heap)) {
-    if (!_subgraph_object_klasses->contains(orig_k)) {
-      ResourceMark rm;
-      log_debug(aot, heap)("Adding klass %s", orig_k->external_name());
+    if (resolve_only) {
+      if (!_subgraph_object_klasses_resolve_only->contains(orig_k)) {
+        ResourceMark rm;
+        log_debug(aot, heap)("Adding klass %s (resolve only)", orig_k->external_name());
+      }
+    } else {
+      if (!_subgraph_object_klasses->contains(orig_k)) {
+        ResourceMark rm;
+        log_debug(aot, heap)("Adding klass %s", orig_k->external_name());
+      }
     }
   }
 
-  _subgraph_object_klasses->append_if_missing(orig_k);
+  if (resolve_only) {
+    _subgraph_object_klasses_resolve_only->append_if_missing(orig_k);
+  } else {
+    _subgraph_object_klasses_resolve_only->remove_if_existing(orig_k);
+    _subgraph_object_klasses->append_if_missing(orig_k);
+  }
   _has_non_early_klasses |= is_non_early_klass(orig_k);
 }
 
@@ -928,6 +944,7 @@ void ArchivedKlassSubGraphInfoRecord::init(KlassSubGraphInfo* info) {
     }
   }
 
+  int n = 0;
   // <recorded_klasses> has the Klasses of all the objects that are referenced by this subgraph.
   // Copy those that need to be explicitly initialized into <_subgraph_object_klasses>.
   GrowableArray<Klass*>* recorded_klasses = info->subgraph_object_klasses();
@@ -945,7 +962,7 @@ void ArchivedKlassSubGraphInfoRecord::init(KlassSubGraphInfo* info) {
 
     _subgraph_object_klasses = ArchiveBuilder::new_ro_array<Klass*>(num_to_copy);
     bool is_special = (_k == ArchiveBuilder::get_buffered_klass(vmClasses::Object_klass()));
-    for (int i = 0, n = 0; i < recorded_klasses->length(); i++) {
+    for (int i = 0; i < recorded_klasses->length(); i++) {
       Klass* subgraph_k = ArchiveBuilder::get_buffered_klass(recorded_klasses->at(i));
       if (subgraph_k->has_aot_initialized_mirror()) {
         continue;
@@ -963,6 +980,29 @@ void ArchivedKlassSubGraphInfoRecord::init(KlassSubGraphInfo* info) {
       _subgraph_object_klasses->at_put(n, subgraph_k);
       ArchivePtrMarker::mark_pointer(_subgraph_object_klasses->adr_at(n));
       n++;
+    }
+  }
+
+
+  GrowableArray<Klass*>* recorded_klasses_resolve_only = info->subgraph_object_klasses_resolve_only();
+  if (recorded_klasses_resolve_only != nullptr) {
+    int num_to_copy = recorded_klasses_resolve_only->length();
+    _subgraph_object_klasses_resolve_only = ArchiveBuilder::new_ro_array<Klass*>(num_to_copy);
+    bool is_special = (_k == ArchiveBuilder::get_buffered_klass(vmClasses::Object_klass()));
+    for (int i = 0; i < num_to_copy; i++, n++) {
+      Klass* subgraph_k = ArchiveBuilder::get_buffered_klass(recorded_klasses_resolve_only->at(i));
+      if (log_is_enabled(Info, aot, heap)) {
+        ResourceMark rm;
+        const char* owner_name =  is_special ? "<special>" : _k->external_name();
+        if (subgraph_k->is_instance_klass()) {
+          InstanceKlass* src_ik = InstanceKlass::cast(ArchiveBuilder::current()->get_source_addr(subgraph_k));
+        }
+        log_info(aot, heap)(
+          "Archived object klass %s (%2d) => %s (resolve only)",
+          owner_name, n, subgraph_k->external_name());
+      }
+      _subgraph_object_klasses_resolve_only->at_put(i, subgraph_k);
+      ArchivePtrMarker::mark_pointer(_subgraph_object_klasses_resolve_only->adr_at(i));
     }
   }
 
@@ -1280,6 +1320,23 @@ HeapShared::resolve_or_init_classes_for_subgraph_of(Klass* k, bool do_init, TRAP
         resolve_or_init(klass, do_init, CHECK_NULL);
       }
     }
+
+    // These are the klasses of the java mirrors that are referenced by
+    // this subgraph. We need to make sure that these klasses are resolved
+    // before this subgraph is used by Java code. However, there's no need
+    // to initialize them -- initialization will happen on demand when the
+    // mirrors are actually used by the Java code (e.g., when calling
+    // java.lang.Class::newInstance())
+    klasses = record->subgraph_object_klasses();
+    if (!do_init && klasses != nullptr) {
+      for (int i = 0; i < klasses->length(); i++) {
+        Klass* klass = klasses->at(i);
+        if (!klass->is_shared()) {
+          return nullptr;
+        }
+        resolve_or_init(klass, do_init, CHECK_NULL);
+      }
+    }
   }
 
   return record;
@@ -1557,12 +1614,16 @@ bool HeapShared::walk_one_object(PendingOopStack* stack, int level, KlassSubGrap
       orig_obj = scratch_java_mirror(orig_obj);
       assert(orig_obj != nullptr, "must be archived");
     } else {
-      // If you get an error here, you probably made a change in the JDK library that has added a Class
-      // object that is referenced (directly or indirectly) by an ArchivableStaticFieldInfo
-      // defined at the top of this file.
-      log_error(aot, heap)("(%d) Unknown java.lang.Class object is in the archived sub-graph", level);
-      debug_trace();
-      //MetaspaceShared::unrecoverable_writing_error();
+      // One of the non-default subgraphs has a reference to a Java mirror. We need to make
+      // sure <k> is resolved before this subgraph is accessed by Java code.
+      // Note that we don't need to initialize <k> when loading the subgraph
+      // at runtime (unless there are actually instances of <k> inside this subgraph).
+      // Hence we pass resolve_only=true
+      Klass* k = java_lang_Class::as_Klass(orig_obj);
+      subgraph_info->add_subgraph_object_klass(k, /*resolve_only=*/true);
+
+      // No need to scan the static fields of <k>
+      return true;
     }
   }
 
@@ -1739,9 +1800,14 @@ void HeapShared::verify_reachable_objects_from(oop obj) {
   }
   if (!has_been_seen_during_subgraph_recording(obj)) {
     set_has_been_seen_during_subgraph_recording(obj);
-    assert(has_been_archived(obj), "must be");
-    VerifySharedOopClosure walker;
-    obj->oop_iterate(&walker);
+    if (!java_lang_Class::is_instance(obj)) {
+      // mirrors that were discovered with resolve_only=true won't
+      // be archived until later when HeapShared::scan_java_mirror()
+      // is called.
+      assert(has_been_archived(obj), "must be");
+      VerifySharedOopClosure walker;
+      obj->oop_iterate(&walker);
+    }
   }
 }
 #endif
