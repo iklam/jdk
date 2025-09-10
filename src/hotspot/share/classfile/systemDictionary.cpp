@@ -1012,6 +1012,150 @@ bool SystemDictionary::is_shared_class_visible_impl(Symbol* class_name,
   return visible;
 }
 
+/*
+
+C++ template iterators with early termination.
+
+
+Some of our iterator templates uses the return value of the function for early
+termination. E.g.
+
+  boolean outer() {
+    HashTable<Key, Value> h;
+    int count = 0;
+    h.iterate([&] (Value v) {
+        if (check(v)) {
+          return false; // stop iterating;
+        }
+        count ++;
+        return true; // keep on iterating
+     });
+    ...
+    return (count == 0) ? true : false;
+  }
+
+These "return" statements in the inner function are confusing and could be interpreted as
+returning from the outer function.
+
+Yes, there's the STL style template like GrowableArrayIterator, but it's difficult
+to implement when you need to iterate over a complex data structure -- e.g., super
+types of a class.
+
+Even for semi-regular data structures like Hashtable, if we use the style,
+GrowableArrayIterator, we need to maintain several states in the iterator and
+the code will be difficult to understand. E.g., Try splitting HashTable::iterate()
+into 3 parts.
+
+Something like this would be ideal:
+
+    h.iterate([&] (value v) {
+        if (check(v)) {
+          break;
+        }
+        ...
+
+But since "break" is a keyword that cannot be overloaded, maybe we can do this:
+
+  boolean outer() {
+    HashTable<Key, Value> h;
+    HashTableIterator iter(h);
+    iter.iterate([&] (Value v) {
+        if (check(v)) {
+          iter.stop(); // Tell the iterator to stop.
+          return;
+        }
+        count ++;
+     });
+    ...
+
+The "return" inside the inner function can be omitted in simple cases 
+
+    iter.iterate([&] (Value v) {
+        if (check(v)) {
+          iter.stop();
+        } else {
+          count ++;
+        }
+     });
+
+But that may make the code less obvious. An alternative is to have a macro like
+
+#define BREAK_ITERATION(iterator) (iterator).stop(); return
+
+    iter.iterate([&] (Value v) {
+        if (check(v)) {
+          BREAK_ITERATION(iter);
+        } else {
+          count ++;
+        }
+     });
+
+*/
+
+
+
+class BaseIterator {
+  bool _has_stopped;
+public:
+  BaseIterator() : _has_stopped(false) {}
+
+  void stop() {
+    _has_stopped = true;
+  }
+
+  bool has_stopped() const {
+    return _has_stopped;
+  }
+};
+
+class SuperTypeIterator : public BaseIterator {
+  InstanceKlass* _ik;
+
+  template <bool MAY_THROW, typename FUNCTION>
+  void apply_impl(FUNCTION f, TRAPS) {
+    if (_ik->super() != nullptr) {
+      if constexpr (MAY_THROW) {
+        f(_ik->super(), CHECK);
+      } else {
+        f(_ik->super());
+      }
+      if (has_stopped()) {
+        return;
+      }
+    }
+
+    Array<InstanceKlass*>* interfaces = _ik->local_interfaces();
+    int num_interfaces = interfaces->length();
+    for (int index = 0; index < num_interfaces; index++) {
+      if constexpr (MAY_THROW) {
+        f(interfaces->at(index), CHECK);
+      } else {
+        f(interfaces->at(index));
+      }
+      if (has_stopped()) {
+        return;
+      }
+    }
+  }
+
+public:
+  SuperTypeIterator(InstanceKlass* ik) : BaseIterator(), _ik(ik) {}
+
+  template <typename FUNCTION>
+  void apply(FUNCTION f, TRAPS) {
+    apply_impl<true, FUNCTION>(f, CHECK);
+  }
+
+  template <typename FUNCTION>
+  void apply(FUNCTION f) {
+    // apply_impl will NEVER use the CHECK macro, so passing in nullptr is OK.
+    apply_impl<false, FUNCTION>(f, nullptr);
+  }
+};
+
+#define BREAK_ITERATION(iterator) (iterator).stop(); return
+
+
 bool SystemDictionary::check_shared_class_super_type(InstanceKlass* klass, InstanceKlass* super_type,
                                                      Handle class_loader, bool is_superclass, TRAPS) {
   assert(super_type->in_aot_cache(), "must be");
@@ -1040,6 +1184,14 @@ bool SystemDictionary::check_shared_class_super_type(InstanceKlass* klass, Insta
   }
 }
 
+// silly example
+void print_all_immediate_supers(InstanceKlass* ik) {
+  ResourceMark rm;
+  SuperTypeIterator(ik).apply([&] (InstanceKlass* supertype) {
+    tty->print_cr("Supertype %p = %s", supertype, supertype->external_name());
+  });
+}
+
 bool SystemDictionary::check_shared_class_super_types(InstanceKlass* ik, Handle class_loader, TRAPS) {
   // Check the superclass and interfaces. They must be the same
   // as in dump time, because the layout of <ik> depends on
@@ -1047,27 +1199,19 @@ bool SystemDictionary::check_shared_class_super_types(InstanceKlass* ik, Handle 
   //
   // If unexpected superclass or interfaces are found, we cannot
   // load <ik> from the shared archive.
-
-  if (ik->super() != nullptr) {
-    bool check_super = check_shared_class_super_type(ik, ik->super(),
-                                                     class_loader, true,
-                                                     CHECK_false);
-    if (!check_super) {
-      return false;
+  SuperTypeIterator iterator(ik);
+  bool result = true;
+  iterator.apply([&] (InstanceKlass* supertype, TRAPS) {
+    bool ok = check_shared_class_super_type(ik, supertype, class_loader,
+                                            supertype == ik->super(), // is_superclass
+                                            CHECK);
+    if (!ok) {
+      result = false;
+      BREAK_ITERATION(iterator);
     }
-  }
+  }, CHECK_false);
 
-  Array<InstanceKlass*>* interfaces = ik->local_interfaces();
-  int num_interfaces = interfaces->length();
-  for (int index = 0; index < num_interfaces; index++) {
-    bool check_interface = check_shared_class_super_type(ik, interfaces->at(index), class_loader, false,
-                                                         CHECK_false);
-    if (!check_interface) {
-      return false;
-    }
-  }
-
-  return true;
+  return result;
 }
 
 InstanceKlass* SystemDictionary::load_shared_class(InstanceKlass* ik,
@@ -1132,6 +1276,9 @@ InstanceKlass* SystemDictionary::load_shared_class(InstanceKlass* ik,
 }
 
 void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData* loader_data) {
+  if (ik->name()->equals("java/lang/Number")) {
+    print_all_immediate_supers(ik);
+  }
   ik->print_class_load_logging(loader_data, nullptr, nullptr);
 
   // For boot loader, ensure that GetSystemPackage knows that a class in this
