@@ -53,6 +53,8 @@ import jdk.internal.module.ServicesCatalog;
 import jdk.internal.misc.CDS;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
+import jdk.internal.vm.annotation.AOTRuntimeSetup;
+import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 import jdk.internal.vm.annotation.Stable;
 
 /**
@@ -145,6 +147,7 @@ import jdk.internal.vm.annotation.Stable;
  * @see Module#getLayer()
  */
 
+@AOTSafeClassInitializer
 public final class ModuleLayer {
 
     // the empty layer (may be initialized from the CDS archive)
@@ -977,5 +980,14 @@ public final class ModuleLayer {
     }
 
     // the list of layers with modules defined to a class loader
-    private static final ClassLoaderValue<List<ModuleLayer>> CLV = new ClassLoaderValue<>();
+    @Stable private static ClassLoaderValue<List<ModuleLayer>> CLV;
+
+    static {
+        runtimeSetup();
+    }
+
+    @AOTRuntimeSetup
+    private static void runtimeSetup() {
+        CLV = new ClassLoaderValue<>();
+    }
 }

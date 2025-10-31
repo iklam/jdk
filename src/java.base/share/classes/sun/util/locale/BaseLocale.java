@@ -35,11 +35,14 @@ package sun.util.locale;
 import jdk.internal.misc.CDS;
 import jdk.internal.util.ReferencedKeySet;
 import jdk.internal.util.StaticProperty;
+import jdk.internal.vm.annotation.AOTRuntimeSetup;
+import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 import jdk.internal.vm.annotation.Stable;
 
 import java.util.StringJoiner;
 import java.util.function.Supplier;
 
+@AOTSafeClassInitializer
 public final class BaseLocale {
 
     public static @Stable BaseLocale[] constantBaseLocales;
@@ -64,6 +67,7 @@ public final class BaseLocale {
             CANADA_FRENCH = 18,
             NUM_CONSTANTS = 19;
     static {
+        // Legacy CDS archive support (to be deprecated)
         CDS.initializeFromArchive(BaseLocale.class);
         BaseLocale[] baseLocales = constantBaseLocales;
         if (baseLocales == null) {
@@ -92,13 +96,7 @@ public final class BaseLocale {
     }
 
     // Interned BaseLocale cache
-    private static final LazyConstant<ReferencedKeySet<BaseLocale>> CACHE =
-            LazyConstant.of(new Supplier<>() {
-                @Override
-                public ReferencedKeySet<BaseLocale> get() {
-                    return ReferencedKeySet.create(true, ReferencedKeySet.concurrentHashMapSupplier());
-                }
-            });
+    @Stable private static LazyConstant<ReferencedKeySet<BaseLocale>> CACHE;
 
     public static final String SEP = "_";
 
@@ -114,9 +112,22 @@ public final class BaseLocale {
      * The system property "java.locale.useOldISOCodes" is not security sensitive,
      * so no need to ensure privileged access here.
      */
-    private static final boolean OLD_ISO_CODES = StaticProperty.javaLocaleUseOldISOCodes()
-            .equalsIgnoreCase("true");
+    @Stable private static boolean OLD_ISO_CODES;
     static {
+        runtimeSetup();
+    }
+
+    @AOTRuntimeSetup
+    private static void runtimeSetup() {
+        CACHE =
+            LazyConstant.of(new Supplier<>() {
+                @Override
+                public ReferencedKeySet<BaseLocale> get() {
+                    return ReferencedKeySet.create(true, ReferencedKeySet.concurrentHashMapSupplier());
+                }
+            });
+
+        OLD_ISO_CODES = StaticProperty.javaLocaleUseOldISOCodes().equalsIgnoreCase("true");
         if (OLD_ISO_CODES) {
             System.err.println("WARNING: The use of the system property \"java.locale.useOldISOCodes\"" +
                 " is deprecated. It will be removed in a future release of the JDK.");
