@@ -197,6 +197,24 @@ static int initAgent(int indx) {
         callbacks.VMInit = &VMInitB;
         break;
     }
+
+
+    {
+      jvmtiCapabilities caps;
+      memset(&caps, 0, sizeof(jvmtiCapabilities));
+      caps.can_support_virtual_threads = 1;
+      caps.can_generate_early_vmstart = 1;
+      caps.can_tag_objects = 1;
+
+      err = jvmti[indx]->AddCapabilities(&caps);
+      if (err != JVMTI_ERROR_NONE) {
+        NSK_COMPLAIN1("TEST FAILURE: failed to set capabilities: %s\n",
+            TranslateError(err));
+        result = STATUS_FAILED;
+        return STATUS_FAILED;
+      }
+    }
+
     err = jvmti[indx]->SetEventCallbacks(&callbacks, sizeof(callbacks));
     if (err != JVMTI_ERROR_NONE) {
         NSK_COMPLAIN1("TEST FAILURE: failed to set event callbacks: %s\n",
@@ -217,6 +235,8 @@ static int initAgent(int indx) {
     NSK_DISPLAY2("\nagent %s initializer: enabling events done, returning exit code %d\n",
         (indx == 0) ? "A" : "B", exitCode);
 
+    // Cannot start the agent thread, because JNI AttachCurrentThread doesn't work yet!
+    // startAgent(0);
     return exitCode;
 }
 
@@ -247,6 +267,26 @@ static void startAgent(int indx) {
 
     NSK_DISPLAY1("\nstartAgent: the agent %s thread started\n",
         (indx == 0) ? "A" : "B");
+}
+
+static jvmtiIterationControl JNICALL
+HeapRoot(jvmtiHeapRootKind root_kind, jlong class_tag, jlong size,
+        jlong *tag_ptr, void *user_data) {
+    return JVMTI_ITERATION_CONTINUE;
+}
+
+static jvmtiIterationControl JNICALL
+StackReference(jvmtiHeapRootKind root_kind, jlong class_tag, jlong size,
+        jlong *tag_ptr, jlong thread_tag, jint depth, jmethodID method,
+        jint slot, void *user_data) {
+    return JVMTI_ITERATION_CONTINUE;
+}
+
+static jvmtiIterationControl JNICALL
+ObjectReference(jvmtiObjectReferenceKind reference_kind, jlong class_tag,
+        jlong size, jlong *tag_ptr, jlong referrer_tag,
+        jint referrer_index, void *user_data) {
+    return JVMTI_ITERATION_CONTINUE;
 }
 
 /* agent thread procedures */
@@ -286,6 +326,15 @@ static int agentA(void *context) {
     NSK_DISPLAY0("\nagent A: waiting for the redirection in agent B ...\n");
     do {
         THREAD_sleep(1);
+        jint dummy_user_data = 0;
+
+        NSK_COMPLAIN0("HACK >>> IterateOverReachableObjects\n");
+        if (!NSK_JVMTI_VERIFY(jvmti[0]->IterateOverReachableObjects(
+            HeapRoot, StackReference, ObjectReference, &dummy_user_data))) {
+            NSK_COMPLAIN0("HACK FAILURE ***\n");
+            exit(STATUS_FAILED);
+        }
+
         tries++;
         if (tries > TRIES) {
             NSK_COMPLAIN1("TEST FAILURE: failed to wait for the redirection in agent B after %d attempts\n",
@@ -385,6 +434,12 @@ void JNICALL
 VMInitA(jvmtiEnv *jvmti_env, JNIEnv *env, jthread thread) {
     NSK_DISPLAY0("\nagent A: VMInit event\n");
 
+    // This is the earliest time an agent can safely start a thread, but we
+    // are already past HeapShared::resolve_classes(), which has made all "dormant"
+    // archived oops unreachable.
+    //
+    // dormant oops are those whose class has not been loaded. Search for "dormant"
+    // in jvmtiTagMap.cpp
     startAgent(0);
 }
 
