@@ -25,10 +25,12 @@
 package jdk.internal.module;
 
 import jdk.internal.misc.CDS;
+import jdk.internal.vm.annotation.AOTSafeClassInitializer;
 
 /**
  * Used by ModuleBootstrap for archiving the boot layer.
  */
+@AOTSafeClassInitializer
 class ArchivedBootLayer {
     private static ArchivedBootLayer archivedBootLayer;
 

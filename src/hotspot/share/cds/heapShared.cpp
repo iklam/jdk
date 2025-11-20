@@ -210,14 +210,13 @@ static bool is_subgraph_root_class_of(ArchivableStaticFieldInfo fields[], Instan
 
 bool HeapShared::is_subgraph_root_class(InstanceKlass* ik) {
   assert(CDSConfig::is_dumping_heap(), "dump-time only");
-  if (!CDSConfig::is_dumping_aot_linked_classes() &&
-      is_subgraph_root_class_of(archive_subgraph_entry_fields, ik)) {
-    return true;
+  if (!CDSConfig::is_dumping_aot_linked_classes()) {
+    // Legacy CDS archive support (to be deprecated)
+    return is_subgraph_root_class_of(archive_subgraph_entry_fields, ik) ||
+           is_subgraph_root_class_of(fmg_archive_subgraph_entry_fields, ik);
+  } else {
+    return false;
   }
-  if (is_subgraph_root_class_of(fmg_archive_subgraph_entry_fields, ik)) {
-    return true;
-  }
-  return false;
 }
 
 oop HeapShared::CachedOopInfo::orig_referrer() const {
@@ -944,10 +943,13 @@ void HeapShared::archive_subgraphs() {
   if (!CDSConfig::is_dumping_aot_linked_classes()) {
     archive_object_subgraphs(archive_subgraph_entry_fields,
                              false /* is_full_module_graph */);
+    if (CDSConfig::is_dumping_full_module_graph()) {
+      archive_object_subgraphs(fmg_archive_subgraph_entry_fields,
+                               true /* is_full_module_graph */);
+    }
   }
+
   if (CDSConfig::is_dumping_full_module_graph()) {
-    archive_object_subgraphs(fmg_archive_subgraph_entry_fields,
-                             true /* is_full_module_graph */);
     Modules::verify_archived_modules();
   }
 }
@@ -1305,8 +1307,8 @@ void HeapShared::resolve_classes(JavaThread* current) {
   }
   if (!CDSConfig::is_using_aot_linked_classes()) {
     resolve_classes_for_subgraphs(current, archive_subgraph_entry_fields);
+    resolve_classes_for_subgraphs(current, fmg_archive_subgraph_entry_fields);
   }
-  resolve_classes_for_subgraphs(current, fmg_archive_subgraph_entry_fields);
 }
 
 void HeapShared::resolve_classes_for_subgraphs(JavaThread* current, ArchivableStaticFieldInfo fields[]) {
@@ -2148,9 +2150,9 @@ void HeapShared::init_subgraph_entry_fields(TRAPS) {
   _dump_time_subgraph_info_table = new (mtClass)DumpTimeKlassSubGraphInfoTable();
   if (!CDSConfig::is_dumping_aot_linked_classes()) {
     init_subgraph_entry_fields(archive_subgraph_entry_fields, CHECK);
-  }
-  if (CDSConfig::is_dumping_full_module_graph()) {
-    init_subgraph_entry_fields(fmg_archive_subgraph_entry_fields, CHECK);
+    if (CDSConfig::is_dumping_full_module_graph()) {
+      init_subgraph_entry_fields(fmg_archive_subgraph_entry_fields, CHECK);
+    }
   }
 }
 
