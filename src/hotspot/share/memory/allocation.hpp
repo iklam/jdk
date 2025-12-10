@@ -327,7 +327,8 @@ class MetaspaceObj {
   enum Type {
     // Types are MetaspaceObj::ClassType, MetaspaceObj::SymbolType, etc
     METASPACE_OBJ_TYPES_DO(METASPACE_OBJ_TYPE_DECLARE)
-    _number_of_types
+    _number_of_types,
+    InvalidType,
   };
 
   static const char * type_name(Type type) {

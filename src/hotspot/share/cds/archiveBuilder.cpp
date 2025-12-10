@@ -559,6 +559,12 @@ ArchiveBuilder::FollowMode ArchiveBuilder::get_follow_mode(MetaspaceClosure::Ref
              ref->msotype() == MetaspaceObj::KlassTrainingDataType ||
              ref->msotype() == MetaspaceObj::MethodTrainingDataType ||
              ref->msotype() == MetaspaceObj::CompileTrainingDataType) {
+    if (ref->msotype() == MetaspaceObj::MethodCountersType) {
+        address enclosing_obj = ref->enclosing_obj();
+        tty->print_cr("%-25s %p => %p",
+                      (enclosing_obj == obj) ? "** sentinel **" : MetaspaceObj::type_name(ref->enclosing_obj_msotype()),
+                      enclosing_obj, obj);
+    }
     return (TrainingData::need_data() || TrainingData::assembling_data()) ? make_a_copy : set_to_null;
   } else if (ref->msotype() == MetaspaceObj::AdapterHandlerEntryType) {
     return CDSConfig::is_dumping_adapters() ? make_a_copy : set_to_null;

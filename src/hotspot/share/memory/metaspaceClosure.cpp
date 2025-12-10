@@ -28,6 +28,7 @@ void MetaspaceClosure::push_impl(MetaspaceClosure::Ref* ref) {
   if (_enclosing_ref != nullptr) {
     assert(_nest_level > 0, "sanity");
     ref->set_enclosing_obj(_enclosing_ref->obj());
+    ref->set_enclosing_obj_msotype(_enclosing_ref->msotype());
   } else {
     assert(_nest_level == 0, "sanity");
   }

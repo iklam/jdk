@@ -119,13 +119,14 @@ public:
   // and manipulate its parts with strip_tags(), decode_tags() and add_tags()
   class Ref : public CHeapObj<mtMetaspace> {
     Writability _writability;
+    MetaspaceObj::Type _enclosing_obj_msotype;
     address _enclosing_obj;
     Ref* _next;
     NONCOPYABLE(Ref);
 
   protected:
     virtual void** mpp() const = 0;
-    Ref(Writability w) : _writability(w), _enclosing_obj(nullptr), _next(nullptr) {}
+    Ref(Writability w) : _writability(w), _enclosing_obj_msotype(MetaspaceObj::InvalidType), _enclosing_obj(nullptr), _next(nullptr) {}
   public:
     virtual bool not_null() const = 0;
     virtual int size() const = 0;
@@ -149,6 +150,13 @@ public:
     }
     void set_enclosing_obj(address obj) {
       _enclosing_obj = obj;
+    }
+    MetaspaceObj::Type enclosing_obj_msotype() const {
+      precond(_enclosing_obj != nullptr);
+      return _enclosing_obj_msotype;
+    }
+    void set_enclosing_obj_msotype(MetaspaceObj::Type type) {
+      _enclosing_obj_msotype = type;
     }
 
     Writability writability() const { return _writability; };
