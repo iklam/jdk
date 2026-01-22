@@ -69,10 +69,14 @@ CompileTrainingData::CompileTrainingData() : _level(-1), _compile_id(-1) {
 void TrainingData::initialize() {
   // this is a nop if training modes are not enabled
   if (have_data() || need_data()) {
-    // Data structures that we have do not currently support iterative training. So you cannot replay
-    // and train at the same time. Going forward we may want to adjust iteration/search to enable that.
-    guarantee(have_data() != need_data(), "Iterative training is not supported");
     TrainingDataLocker::initialize();
+  }
+
+  if (have_data() && need_data()) {
+    TrainingDataLocker l;
+    archived_training_data_dictionary()->iterate_all([&](TrainingData* td) {
+      training_data_set()->install(td);
+    });
   }
 }
 
@@ -83,7 +87,7 @@ static void verify_archived_entry(TrainingData* td, const TrainingData::Key* k) 
 }
 
 void TrainingData::verify() {
-  if (TrainingData::have_data() && !TrainingData::assembling_data()) {
+  if (have_data() && !need_data() && !assembling_data()) {
     archived_training_data_dictionary()->iterate_all([&](TrainingData* td) {
       if (td->is_KlassTrainingData()) {
         KlassTrainingData* ktd = td->as_KlassTrainingData();
@@ -102,7 +106,7 @@ void TrainingData::verify() {
       }
     });
   }
-  if (TrainingData::need_data()) {
+  if (need_data()) {
     TrainingDataLocker l;
     training_data_set()->iterate([&](TrainingData* td) {
       if (td->is_KlassTrainingData()) {
@@ -164,7 +168,7 @@ MethodTrainingData* MethodTrainingData::make(const methodHandle& method, bool nu
   TrainingData* td = nullptr;
 
   Key key(method());
-  if (have_data()) {
+  if (have_data() && !need_data()) {
     td = lookup_archived_training_data(&key);
     if (td != nullptr) {
       mtd = td->as_MethodTrainingData();
@@ -395,7 +399,7 @@ KlassTrainingData* KlassTrainingData::make(InstanceKlass* holder, bool null_if_n
     return nullptr;
   }
   Key key(holder);
-  TrainingData* td = CDS_ONLY(have_data() ? lookup_archived_training_data(&key) :) nullptr;
+  TrainingData* td = CDS_ONLY((have_data() && !need_data()) ? lookup_archived_training_data(&key) :) nullptr;
   KlassTrainingData* ktd = nullptr;
   if (td != nullptr) {
     ktd = td->as_KlassTrainingData();
@@ -483,8 +487,7 @@ void KlassTrainingData::notice_fully_initialized() {
 }
 
 void TrainingData::init_dumptime_table(TRAPS) {
-  precond((!assembling_data() && !need_data()) || need_data() != assembling_data());
-  if (assembling_data()) {
+  if (assembling_data() && !need_data()) {
     _dumptime_training_data_dictionary = new DumptimeTrainingDataDictionary();
     _archived_training_data_dictionary.iterate_all([&](TrainingData* record) {
       _dumptime_training_data_dictionary->append(record);
@@ -735,6 +738,7 @@ uint TrainingData::Key::cds_hash(const Key* const& k) {
 }
 
 TrainingData* TrainingData::lookup_archived_training_data(const Key* k) {
+  assert(!need_data(), "Should be used only in read-only mode");
   // For this to work, all components of the key must be in shared metaspace.
   if (!TrainingData::Key::can_compute_cds_hash(k) || _archived_training_data_dictionary.empty()) {
     return nullptr;
@@ -792,6 +796,7 @@ void TrainingData::DepList<T>::prepare() {
     for (int i = 0; i < len; i++) {
       _deps->at_put(i, _deps_dyn->at(i)); // copy
     }
+    _deps_dyn = nullptr;
   }
 }
 
