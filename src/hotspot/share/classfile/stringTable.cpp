@@ -983,33 +983,30 @@ void StringTable::serialize_shared_table_header(SerializeClosure* soc) {
   if (soc->writing()) {
     // Sanity. Make sure we don't use the shared table at dump time
     _shared_table.reset();
-  } else if (AOTMappedHeapLoader::is_in_use()) {
-
-#if 0
-void StringTable::load_shared_strings_array() {
-  _shared_strings_array = OopHandle(Universe::vm_global(), HeapShared::get_root(_shared_strings_array_root_index));
-  if (CDSConfig::is_dumping_final_static_archive()) {
-    JavaThread* THREAD = JavaThread::current();
-    HandleMark hm(THREAD);  // cleanup strings created
-    u4 count = checked_cast<u4>(_shared_table.entry_count());
-    for (u4 i = 0; i < count; i++) {
-      oop string = read_string_from_compact_hashtable(/*unused*/nullptr, i);
-      int length = java_lang_String::length(string);
-      Handle h_string (THREAD, string);
-      StringWrapper name(h_string, length);
-      unsigned int hash = hash_wrapped_string(name);
-
-      assert(!_alt_hash, "too early");
-      oop interned = do_intern(name, hash, THREAD);
-      assert(string == interned, "must be");
-    }
+  } else if (!AOTMappedHeapLoader::is_in_use()) {
     _shared_table.reset();
-    _shared_strings_array.release(Universe::vm_global());
   }
 }
-#endif
-  } else {
-    _shared_table.reset();
-  }
+
+void StringTable::move_shared_strings_into_runtime_table() {
+  precond(CDSConfig::is_dumping_final_static_archive());
+  JavaThread* THREAD = JavaThread::current();
+  HandleMark hm(THREAD);
+
+  int n = 0;
+  _shared_table.iterate_all([&](oop string) {
+    int length = java_lang_String::length(string);
+    Handle h_string (THREAD, string);
+    StringWrapper name(h_string, length);
+    unsigned int hash = hash_wrapped_string(name);
+
+    assert(!_alt_hash, "too early");
+    oop interned = do_intern(name, hash, THREAD);
+    assert(string == interned, "must be");
+    n++;
+  });
+
+  _shared_table.reset();
+  log_info(aot)("Moved %d interned strings to runtime table", n);
 }
 #endif //INCLUDE_CDS_JAVA_HEAP

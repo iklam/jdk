@@ -463,6 +463,10 @@ void AOTMappedHeapLoader::finish_initialization(FileMapInfo* info) {
       assert(segment_oop->is_objArray(), "Must be");
       add_root_segment((objArrayOop)segment_oop);
     }
+
+    if (CDSConfig::is_dumping_final_static_archive()) {
+      StringTable::move_shared_strings_into_runtime_table();
+    }
   }
 }
 
