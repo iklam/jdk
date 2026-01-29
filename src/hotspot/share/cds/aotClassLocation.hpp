@@ -83,13 +83,13 @@ private:
   size_t path_offset()       const { return header_size(); }
   size_t manifest_offset()   const { return path_offset() + _path_length + 1; }
   static char* read_manifest(JavaThread* current, const char* path, size_t& manifest_length);
+  const char* recorded_path() const { return ((const char*)this) + path_offset();  }
 
 public:
   static AOTClassLocation* allocate(JavaThread* current, const char* path, int index, Group group,
                                     bool from_cpattr = false, bool is_jrt = false);
 
   size_t total_size()                const { return manifest_offset() + _manifest_length + 1; }
-  const char* path()                 const { return ((const char*)this) + path_offset();  }
   size_t manifest_length()           const { return _manifest_length; }
   const char* manifest()             const { return ((const char*)this) + manifest_offset(); }
   bool must_exist()                  const { return _file_type != FileType::NOT_EXIST; }
@@ -105,6 +105,7 @@ public:
   // Only boot/app classpaths can contain unnamed module
   bool has_unnamed_module()          const { return from_boot_classpath() || from_app_classpath(); }
 
+  const char* path() const;
   char* get_cpattr() const;
   AOTClassLocation* write_to_archive() const;
 
