@@ -25,6 +25,7 @@
 #ifndef SHARE_CDS_ARCHIVEBUILDER_HPP
 #define SHARE_CDS_ARCHIVEBUILDER_HPP
 
+#include "cds/aotCompressedPointers.hpp"
 #include "cds/archiveUtils.hpp"
 #include "cds/dumpAllocStats.hpp"
 #include "memory/metaspace.hpp"
