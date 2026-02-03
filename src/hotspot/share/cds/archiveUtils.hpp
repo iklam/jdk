@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -154,7 +154,6 @@ private:
   char* _base;
   char* _top;
   char* _end;
-  uintx _max_delta;
   bool _is_packed;
   ReservedSpace* _rs;
   VirtualSpace* _vs;
@@ -162,9 +161,9 @@ private:
   void commit_to(char* newtop);
 
 public:
-  DumpRegion(const char* name, uintx max_delta = 0)
+  DumpRegion(const char* name)
     : _name(name), _base(nullptr), _top(nullptr), _end(nullptr),
-      _max_delta(max_delta), _is_packed(false),
+      _is_packed(false),
       _rs(nullptr), _vs(nullptr) {}
 
   char* expand_top_to(char* newtop);

@@ -175,10 +175,10 @@ ArchiveBuilder::ArchiveBuilder() :
   _mapped_static_archive_bottom(nullptr),
   _mapped_static_archive_top(nullptr),
   _buffer_to_requested_delta(0),
-  _pz_region("pz", ArchiveUtils::MaxMetadataOffsetBytes), // protection zone -- used only during dumping; does NOT exist in cds archive.
-  _rw_region("rw", ArchiveUtils::MaxMetadataOffsetBytes),
-  _ro_region("ro", ArchiveUtils::MaxMetadataOffsetBytes),
-  _ac_region("ac", ArchiveUtils::MaxMetadataOffsetBytes),
+  _pz_region("pz"), // protection zone -- used only during dumping; does NOT exist in cds archive.
+  _rw_region("rw"),
+  _ro_region("ro"),
+  _ac_region("ac"),
   _ptrmap(mtClassShared),
   _rw_ptrmap(mtClassShared),
   _ro_ptrmap(mtClassShared),
@@ -992,13 +992,13 @@ void ArchiveBuilder::make_training_data_shareable() {
   _src_obj_table.iterate_all(clean_td);
 }
 
-uintx ArchiveBuilder::buffer_to_offset(address p) const {
+uintx ArchiveBuilder::buffer_to_raw_offset(address p) const {
   address requested_p = to_requested(p);
   assert(requested_p >= _requested_static_archive_bottom, "must be");
   return requested_p - _requested_static_archive_bottom;
 }
 
-uintx ArchiveBuilder::any_to_offset(address p) const {
+uintx ArchiveBuilder::any_to_raw_offset(address p) const {
   if (is_in_mapped_static_archive(p)) {
     assert(CDSConfig::is_dumping_dynamic_archive(), "must be");
     return p - _mapped_static_archive_bottom;
@@ -1007,7 +1007,7 @@ uintx ArchiveBuilder::any_to_offset(address p) const {
     // p must be a "source" address
     p = get_buffered_addr(p);
   }
-  return buffer_to_offset(p);
+  return buffer_to_raw_offset(p);
 }
 
 address ArchiveBuilder::offset_to_buffered_address(u4 offset_units) const {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -120,16 +120,16 @@ private:
   bool    _compressed_class_ptrs;                 // save the flag UseCompressedClassPointers
   int     _narrow_klass_pointer_bits;             // save number of bits in narrowKlass
   int     _narrow_klass_shift;                    // save shift width used to pre-compute narrowKlass IDs in archived heap objects
-  size_t  _cloned_vtables_offset;                 // The address of the first cloned vtable
-  size_t  _early_serialized_data_offset;          // Data accessed using {ReadClosure,WriteClosure}::serialize()
-  size_t  _serialized_data_offset;                // Data accessed using {ReadClosure,WriteClosure}::serialize()
+  u4      _cloned_vtables_offset;                 // The address of the first cloned vtable
+  u4      _early_serialized_data_offset;          // Data accessed using {ReadClosure,WriteClosure}::serialize()
+  u4      _serialized_data_offset;                // Data accessed using {ReadClosure,WriteClosure}::serialize()
 
   // The following fields are all sanity checks for whether this archive
   // will function correctly with this JVM and the bootclasspath it's
   // invoked with.
   char  _jvm_ident[JVM_IDENT_MAX];  // identifier string of the jvm that created this dump
 
-  size_t _class_location_config_offset;
+  u4    _class_location_config_offset;
 
   bool   _verify_local;                 // BytecodeVerificationLocal setting
   bool   _verify_remote;                // BytecodeVerificationRemote setting
@@ -158,11 +158,12 @@ private:
   bool    _type_profile_casts;
   int     _spec_trap_limit_extra_entries;
 
-  template <typename T> T from_mapped_offset(size_t offset) const {
-    return (T)(mapped_base_address() + offset);
+  template <typename T> T from_mapped_offset(u4 offset) const {
+    // Too early to call ArchiveUtils::offset_to_archived_address()
+    return (T)(mapped_base_address() + (offset << ArchiveUtils::MetadataOffsetShift));
   }
-  void set_as_offset(char* p, size_t *offset);
-  template <typename T> void set_as_offset(T p, size_t *offset) {
+  void set_as_offset(char* p, u4 *offset);
+  template <typename T> void set_as_offset(T p, u4 *offset) {
     set_as_offset((char*)p, offset);
   }
 

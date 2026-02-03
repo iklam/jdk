@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,6 +25,7 @@
 #ifndef SHARE_CLASSFILE_SYSTEMDICTIONARYSHARED_HPP
 #define SHARE_CLASSFILE_SYSTEMDICTIONARYSHARED_HPP
 
+#include "cds/archiveUtils.hpp"
 #include "cds/cds_globals.hpp"
 #include "cds/dumpTimeClassInfo.hpp"
 #include "cds/filemap.hpp"
@@ -313,9 +314,8 @@ public:
   template <typename T>
   static unsigned int hash_for_shared_dictionary_quick(T* ptr) {
     assert(MetaspaceObj::in_aot_cache((const MetaspaceObj*)ptr), "must be");
-    assert(ptr > (T*)SharedBaseAddress, "must be");
-    uintx offset = uintx(ptr) - uintx(SharedBaseAddress);
-    return primitive_hash<uintx>(offset);
+    u4 offset = ArchiveUtils::archived_address_to_offset(ptr);
+    return primitive_hash<u4>(offset);
   }
 
   static unsigned int hash_for_shared_dictionary(address ptr);

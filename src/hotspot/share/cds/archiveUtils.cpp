@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -200,18 +200,6 @@ char* DumpRegion::expand_top_to(char* newtop) {
 
   commit_to(newtop);
   _top = newtop;
-
-  if (_max_delta > 0) {
-    uintx delta = ArchiveBuilder::current()->buffer_to_offset((address)(newtop-1));
-    if (delta > _max_delta) {
-      // This is just a sanity check and should not appear in any real world usage. This
-      // happens only if you allocate more than 2GB of shared objects and would require
-      // millions of shared classes.
-      aot_log_error(aot)("Out of memory in the CDS archive: Please reduce the number of shared classes.");
-      AOTMetaspace::unrecoverable_writing_error();
-    }
-  }
-
   return _top;
 }
 
@@ -227,6 +215,10 @@ void DumpRegion::commit_to(char* newtop) {
   size_t min_bytes = need_committed_size - has_committed_size;
   size_t preferred_bytes = 1 * M;
   size_t uncommitted = _vs->reserved_size() - has_committed_size;
+  if (uncommitted < min_bytes) {
+    aot_log_error(aot)("Out of memory in the AOT cache: Please reduce the number of classes.");
+    AOTMetaspace::unrecoverable_writing_error();
+  }
 
   size_t commit = MAX2(min_bytes, preferred_bytes);
   commit = MIN2(commit, uncommitted);
@@ -324,7 +316,8 @@ void WriteClosure::do_ptr(void** p) {
   }
   // null pointers do not need to be converted to offsets
   if (ptr != nullptr) {
-    ptr = (address)ArchiveBuilder::current()->buffer_to_offset(ptr);
+    u4 encoded_offset = ArchiveBuilder::current()->buffer_to_offset_u4(ptr);
+    ptr = (address)checked_cast<intptr_t>(encoded_offset);
   }
   _dump_region->append_intptr_t((intptr_t)ptr, false);
 }
@@ -332,8 +325,9 @@ void WriteClosure::do_ptr(void** p) {
 void ReadClosure::do_ptr(void** p) {
   assert(*p == nullptr, "initializing previous initialized pointer.");
   intptr_t obj = nextPtr();
-  assert(obj >= 0, "sanity.");
-  *p = (obj != 0) ? (void*)(_base_address + obj) : (void*)obj;
+  assert(obj >= 0 && obj <= 0xffffffff, "sanity.");
+  // Too early to call ArchiveUtils::offset_to_archived_address_or_null()
+  *p = (obj != 0) ? (void*)(_base_address + (obj << ArchiveUtils::MetadataOffsetShift)) : (void*)obj;
 }
 
 void ReadClosure::do_u4(u4* p) {

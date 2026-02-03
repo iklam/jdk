@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -298,11 +298,11 @@ void FileMapHeader::print(outputStream* st) {
   st->print_cr("- compressed_class_ptrs:                    %d", _compressed_class_ptrs);
   st->print_cr("- narrow_klass_pointer_bits:                %d", _narrow_klass_pointer_bits);
   st->print_cr("- narrow_klass_shift:                       %d", _narrow_klass_shift);
-  st->print_cr("- cloned_vtables_offset:                    0x%zx", _cloned_vtables_offset);
-  st->print_cr("- early_serialized_data_offset:             0x%zx", _early_serialized_data_offset);
-  st->print_cr("- serialized_data_offset:                   0x%zx", _serialized_data_offset);
+  st->print_cr("- cloned_vtables_offset:                    0x%x", _cloned_vtables_offset);
+  st->print_cr("- early_serialized_data_offset:             0x%x", _early_serialized_data_offset);
+  st->print_cr("- serialized_data_offset:                   0x%x", _serialized_data_offset);
   st->print_cr("- jvm_ident:                                %s", _jvm_ident);
-  st->print_cr("- class_location_config_offset:             0x%zx", _class_location_config_offset);
+  st->print_cr("- class_location_config_offset:             0x%x", _class_location_config_offset);
   st->print_cr("- verify_local:                             %d", _verify_local);
   st->print_cr("- verify_remote:                            %d", _verify_remote);
   st->print_cr("- has_platform_or_app_classes:              %d", _has_platform_or_app_classes);
@@ -1767,8 +1767,8 @@ void FileMapInfo::print(outputStream* st) const {
   }
 }
 
-void FileMapHeader::set_as_offset(char* p, size_t *offset) {
-  *offset = ArchiveBuilder::current()->any_to_offset((address)p);
+void FileMapHeader::set_as_offset(char* p, u4 *offset) {
+  *offset = ArchiveBuilder::current()->any_to_offset_u4((address)p);
 }
 
 int FileMapHeader::compute_crc() {

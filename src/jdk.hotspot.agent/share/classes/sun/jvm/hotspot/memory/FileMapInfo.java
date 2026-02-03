@@ -101,6 +101,11 @@ public class FileMapInfo {
     // CppVtableInfo** vtablesIndex = mapped_base_address + cloned_vtable_offset;
     mapped_base_address = get_AddressField(FileMapHeader_type, header, "_mapped_base_address");
     long cloned_vtable_offset = get_CIntegerField(FileMapHeader_type, header, "_cloned_vtables_offset");
+    if (VM.getVM().getAddressSize() == 8) {
+        // 64-bit
+        System.out.println("cloned_vtable_offset = " + cloned_vtable_offset);
+        cloned_vtable_offset <<= 3;
+    }
     vtablesIndex = mapped_base_address.addOffsetTo(cloned_vtable_offset);
 
     // CDSFileMapRegion* rw_region = &header->_region[rw];

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1266,8 +1266,8 @@ void SystemDictionaryShared::copy_linking_constraints_from_preimage(InstanceKlas
 
 unsigned int SystemDictionaryShared::hash_for_shared_dictionary(address ptr) {
   if (ArchiveBuilder::is_active() && ArchiveBuilder::current()->is_in_buffer_space(ptr)) {
-    uintx offset = ArchiveBuilder::current()->any_to_offset(ptr);
-    unsigned int hash = primitive_hash<uintx>(offset);
+    u4 offset = ArchiveBuilder::current()->any_to_offset_u4(ptr);
+    unsigned int hash = primitive_hash<u4>(offset);
     DEBUG_ONLY({
         if (MetaspaceObj::in_aot_cache((const MetaspaceObj*)ptr)) {
           assert(hash == SystemDictionaryShared::hash_for_shared_dictionary_quick(ptr), "must be");
