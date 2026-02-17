@@ -39,9 +39,6 @@ public:
   // regions using a 32-bit offset from the bottom of the mapped AOT metaspace. Since metadata
   // objects are 8-byte aligned, we store scaled offset units (offset_bytes >> 3) to address
   // up to ~32GB on 64-bit platforms.
-  //
-  // Note: This encoding is ONLY for compact hashtable values. General pointer serialization
-  // (WriteClosure/ReadClosure::do_ptr) uses raw byte offsets without scaling.
   enum class narrowPtr : u4;
   static constexpr size_t MetadataOffsetShift = LP64_ONLY(3) NOT_LP64(0);
   static constexpr size_t MaxMetadataOffsetBytes = LP64_ONLY(3584ULL * M) NOT_LP64(0x7FFFFFFF);
