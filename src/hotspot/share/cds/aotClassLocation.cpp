@@ -41,6 +41,7 @@
 #include "oops/array.hpp"
 #include "oops/objArrayKlass.hpp"
 #include "runtime/arguments.hpp"
+#include "runtime/os.hpp"
 #include "utilities/classpathStream.hpp"
 #include "utilities/formatBuffer.hpp"
 #include "utilities/stringUtils.hpp"
@@ -51,6 +52,11 @@
 Array<ClassPathZipEntry*>* AOTClassLocationConfig::_dumptime_jar_files = nullptr;
 AOTClassLocationConfig* AOTClassLocationConfig::_dumptime_instance = nullptr;
 const AOTClassLocationConfig* AOTClassLocationConfig::_runtime_instance = nullptr;
+
+// The actual location of boot/app paths may be different than recorded in _runtime_instance due to
+// lcp matching.
+static char** _actual_boot_and_app_locations = nullptr;
+static int _actual_boot_and_app_locations_size = 0;
 
 // A ClassLocationStream represents a list of code locations, which can be iterated using
 // start() and has_next().
@@ -96,8 +102,17 @@ public:
     return _array.at(_current++);
   }
 
+  int length() const { return _array.length(); }
   int current() const { return _current; }
   bool is_empty() const { return _array.length() == 0; }
+
+  char** copy_locations() {
+    char** locs = NEW_C_HEAP_ARRAY(char*, _array.length(), mtClassShared);
+    for (int i = 0; i < _array.length(); i++) {
+      locs[i] = os::strdup_check_oom(_array.at(i));
+    }
+    return locs;
+  }
 };
 
 class BootCpClassLocationStream : public ClassLocationStream {
@@ -381,6 +396,16 @@ const char* AOTClassLocation::file_type_string() const {
   case FileType::DIR: return "dir";
   case FileType::NOT_EXIST: default: return "not-exist";
   }
+}
+
+const char* AOTClassLocation::path() const {
+  if (_actual_boot_and_app_locations != nullptr && _index > 0) {
+    int i = _index - 1; // Skip the AOTClassLocation for the JRT, which is at index 0.
+    if (i < _actual_boot_and_app_locations_size) {
+      return _actual_boot_and_app_locations[i];
+    }
+  }
+  return recorded_path();
 }
 
 bool AOTClassLocation::check(const char* runtime_path, bool has_aot_linked_classes) const {
@@ -1025,6 +1050,8 @@ bool AOTClassLocationConfig::validate(const char* cache_filename, bool has_aot_l
 
   if (success) {
     _runtime_instance = this;
+    _actual_boot_and_app_locations = all_css.boot_and_app_cp().copy_locations();
+    _actual_boot_and_app_locations_size = all_css.boot_and_app_cp().length();
   } else {
     const char* mismatch_msg = "shared class paths mismatch";
     const char* hint_msg = log_is_enabled(Info, class, path) ?
