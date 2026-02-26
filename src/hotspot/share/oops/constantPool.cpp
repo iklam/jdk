@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -544,8 +544,7 @@ void ConstantPool::remove_resolved_klass_if_non_deterministic(int cp_index) {
   } else {
     k = resolved_klass_at(cp_index);
     if (k == nullptr) {
-      // We'd come here if the referenced class has been excluded via
-      // SystemDictionaryShared::is_excluded_class(). As a result, ArchiveBuilder
+      // We'd come here if the referenced class has been excluded and ArchiveBuilder
       // has cleared the resolved_klasses()->at(...) pointer to null. Thus, we
       // need to revert the tag to JVM_CONSTANT_UnresolvedClass.
       can_archive = false;

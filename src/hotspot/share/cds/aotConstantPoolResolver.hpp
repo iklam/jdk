@@ -65,6 +65,7 @@ class AOTConstantPoolResolver :  AllStatic {
 
   static void resolve_string(constantPoolHandle cp, int cp_index, TRAPS) NOT_CDS_JAVA_HEAP_RETURN;
   static bool is_class_resolution_deterministic(InstanceKlass* cp_holder, Klass* resolved_class);
+  static bool is_class_resolution_deterministic_impl(InstanceKlass* cp_holder, Klass* resolved_class);
   static bool is_indy_resolution_deterministic(ConstantPool* cp, int cp_index);
 
   static Klass* find_loaded_class(Thread* current, oop class_loader, Symbol* name);

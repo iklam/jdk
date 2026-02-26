@@ -219,6 +219,7 @@ bool SystemDictionaryShared::should_be_excluded_impl(InstanceKlass* k, DumpTimeC
 // The return value indicates whether we want to keep on iterating or not.
 template<typename Function>
 void SystemDictionaryShared::iterate_verification_constraint_names(InstanceKlass* k, DumpTimeClassInfo* info, Function func) {
+  assert(k->is_linked(), "verification constraints are available only after linking");
   int n = info->num_verifier_constraints();
   bool cont; // continue iterating?
   for (int i = 0; i < n; i++) {
@@ -277,13 +278,20 @@ class SystemDictionaryShared::ExclusionCheckCandidates
     }
 
     if (CDSConfig::is_preserving_verification_constraints()) {
-      SystemDictionaryShared::iterate_verification_constraint_names(k, info, [&] (Symbol* constraint_class_name) {
-        Klass* constraint_bottom_class = find_verification_constraint_bottom_class(k, constraint_class_name);
-        if (constraint_bottom_class != nullptr && constraint_bottom_class->is_instance_klass()) {
-          add_candidate(InstanceKlass::cast(constraint_bottom_class));
-        }
-        return true; // Keep iterating.
-      });
+      if (!k->is_linked()) {
+        // We come to here from SystemDictionaryShared::finish_exclusion_checks(). We are
+        // already in a safepoint so we cannot link k to see its verification constraints.
+        // k will eventually be excluded.
+        precond(CDSConfig::is_at_aot_safepoint());
+      } else {
+        SystemDictionaryShared::iterate_verification_constraint_names(k, info, [&] (Symbol* constraint_class_name) {
+          Klass* constraint_bottom_class = find_verification_constraint_bottom_class(k, constraint_class_name);
+          if (constraint_bottom_class != nullptr && constraint_bottom_class->is_instance_klass()) {
+            add_candidate(InstanceKlass::cast(constraint_bottom_class));
+          }
+          return true; // Keep iterating.
+        });
+      }
     }
   }
 
@@ -494,6 +502,11 @@ bool SystemDictionaryShared::check_dependencies_exclusion(InstanceKlass* k, Dump
 
   if (CDSConfig::is_preserving_verification_constraints()) {
     bool excluded = false;
+    if (!k->is_linked()) {
+      ResourceMark rm;
+      aot_log_info(aot)("Skipping %s: not linked", k->name()->as_C_string());
+      return true;
+    }
 
     iterate_verification_constraint_names(k, info, [&] (Symbol* constraint_class_name) {
       if (check_verification_constraint_exclusion(k, constraint_class_name)) {
@@ -956,14 +969,6 @@ void SystemDictionaryShared::finish_exclusion_checks() {
   if (CDSConfig::is_dumping_lambdas_in_legacy_mode()) {
     LambdaProxyClassDictionary::cleanup_dumptime_table();
   }
-}
-
-bool SystemDictionaryShared::is_excluded_class(InstanceKlass* k) {
-  assert(!class_loading_may_happen(), "class loading must be disabled");
-  assert_lock_strong(DumpTimeTable_lock);
-  assert(CDSConfig::is_dumping_archive(), "sanity");
-  DumpTimeClassInfo* p = get_info_locked(k);
-  return p->is_excluded();
 }
 
 void SystemDictionaryShared::set_excluded_locked(InstanceKlass* k) {

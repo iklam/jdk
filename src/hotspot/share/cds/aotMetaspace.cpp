@@ -909,7 +909,6 @@ void AOTMetaspace::link_all_loaded_classes(JavaThread* current) {
 }
 
 void AOTMetaspace::link_shared_classes(TRAPS) {
-  AOTClassLinker::initialize();
   AOTClassInitializer::init_test_class(CHECK);
 
   if (CDSConfig::is_dumping_final_static_archive()) {
@@ -1071,6 +1070,8 @@ bool AOTMetaspace::preimage_static_archive_dumped() {
 }
 
 void AOTMetaspace::dump_static_archive_impl(StaticArchiveBuilder& builder, TRAPS) {
+  AOTClassLinker::initialize();
+
   if (CDSConfig::is_dumping_preimage_static_archive()) {
     // When dumping to the AOT configuration file ensure this function is only executed once.
     // Multiple invocations may happen via JCmd, during VM exit or other means (in the future)

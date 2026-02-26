@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -275,7 +275,6 @@ public:
 
   static bool should_be_excluded(Klass* k);
   static void validate_before_archiving(InstanceKlass* k);
-  static bool is_excluded_class(InstanceKlass* k);
   static void set_excluded(InstanceKlass* k);
   static void set_excluded_locked(InstanceKlass* k);
   static void set_from_class_file_load_hook(InstanceKlass* k) NOT_CDS_RETURN;

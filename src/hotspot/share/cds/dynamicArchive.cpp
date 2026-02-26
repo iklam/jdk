@@ -122,6 +122,7 @@ public:
 
     // Block concurrent class unloading from changing the _dumptime_table
     MutexLocker ml(DumpTimeTable_lock, Mutex::_no_safepoint_check_flag);
+    AOTClassLinker::initialize();
 
     if (SystemDictionaryShared::is_dumptime_table_empty()) {
       log_warning(cds, dynamic)("There is no class to be included in the dynamic archive.");

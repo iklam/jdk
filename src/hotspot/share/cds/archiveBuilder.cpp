@@ -531,20 +531,7 @@ void ArchiveBuilder::gather_source_objs() {
 }
 
 bool ArchiveBuilder::is_excluded(Klass* klass) {
-  if (klass->is_instance_klass()) {
-    InstanceKlass* ik = InstanceKlass::cast(klass);
-    return SystemDictionaryShared::is_excluded_class(ik);
-  } else if (klass->is_objArray_klass()) {
-    Klass* bottom = ObjArrayKlass::cast(klass)->bottom_klass();
-    if (CDSConfig::is_dumping_dynamic_archive() && AOTMetaspace::in_aot_cache_static_region(bottom)) {
-      // The bottom class is in the static archive so it's clearly not excluded.
-      return false;
-    } else if (bottom->is_instance_klass()) {
-      return SystemDictionaryShared::is_excluded_class(InstanceKlass::cast(bottom));
-    }
-  }
-
-  return false;
+  return SystemDictionaryShared::should_be_excluded(klass);
 }
 
 ArchiveBuilder::FollowMode ArchiveBuilder::get_follow_mode(MetaspaceClosure::Ref *ref) {
