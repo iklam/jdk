@@ -52,4 +52,24 @@ inline void* Array<T>::operator new(size_t size, int length, MemTag flags) throw
   return p;
 }
 
+#if 0
+template <typename T>
+template <typename U, ENABLE_IF(!std::is_pointer<U>::value && !HAS_METASPACE_POINTERS_DO(U))>
+void Array<T>::metaspace_pointers_do_impl(MetaspaceClosure* it) {
+}
+
+
+template <typename T>
+template <typename U, ENABLE_IF(!std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(U))>
+void Array<T>::metaspace_pointers_do_impl(MetaspaceClosure* it) {
+}
+
+template <typename T>
+template <typename U, ENABLE_IF(std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(typename std::remove_pointer<U>::type))>
+void Array<T>::metaspace_pointers_do_impl(MetaspaceClosure* it) {
+}
+
+#endif
+
+
 #endif // SHARE_OOPS_ARRAY_INLINE_HPP

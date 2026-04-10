@@ -696,7 +696,7 @@ void TrainingData::print_archived_training_data_on(outputStream* st) {
 }
 
 void TrainingData::Key::metaspace_pointers_do(MetaspaceClosure *iter) {
-  iter->push(const_cast<Metadata**>(&_meta));
+//  iter->push(const_cast<Metadata**>(&_meta));
 }
 
 void TrainingData::metaspace_pointers_do(MetaspaceClosure* iter) {

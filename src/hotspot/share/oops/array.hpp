@@ -160,34 +160,21 @@ protected:
     st->print("Array<T>(" PTR_FORMAT ")", p2i(this));
   }
 
-
-  template <typename U = T, ENABLE_IF(!HAS_METASPACE_POINTERS_DO(U))>
-  void metaspace_pointers_do(MetaspaceClosure* it);
-
-  template <typename U = T, ENABLE_IF(HAS_METASPACE_POINTERS_DO(U))>
-  void metaspace_pointers_do(MetaspaceClosure* it);
-
-  template <typename U = T, ENABLE_IF(std::is_pointer<U>::value)>
-  void metaspace_pointers_do(MetaspaceClosure* it);
-
-
-
-#if 0
-  template <typename T, ENABLE_IF(HAS_METASPACE_POINTERS_DO(T))>
-  void push(Array<T>** mpp, Writability w = _default) {
-    push_with_ref<MSOArrayRef<T>>(mpp, w);
+  void metaspace_pointers_do(MetaspaceClosure* it) {
+    metaspace_pointers_do_impl<T>(it);
   }
 
-  template <typename T>
-  void push(Array<T*>** mpp, Writability w = _default) {
-    static_assert(HAS_METASPACE_POINTERS_DO(T), "Do not push Arrays of arbitrary pointer types");
-    push_with_ref<MSOPointerArrayRef<T>>(mpp, w);
-  }
-#endif
+  //template <typename U, typename = void>
+  //void metaspace_pointers_do_impl(MetaspaceClosure* it);
 
+  template <typename U, ENABLE_IF(!std::is_pointer<U>::value && !HAS_METASPACE_POINTERS_DO(U))>
+  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
 
+  template <typename U, ENABLE_IF(!std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(U))>
+  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
 
-
+  template <typename U, ENABLE_IF(std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(typename std::remove_pointer<U>::type))>
+  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
 
   MetaspaceClosureType type() const { return as_type(MetaspaceObj::array_type(sizeof(T))); }
 
