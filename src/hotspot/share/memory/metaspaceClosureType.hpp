@@ -43,8 +43,17 @@ enum class MetaspaceClosureType : int {
   _number_of_types
 };
 
-// This macro just check for the existence of a member with the name "metaspace_pointers_do". If the
-// parameter list is not (MetaspaceClosure* it), you will get a compilation error.
+inline MetaspaceClosureType as_type(MetaspaceClosureType t) {
+  return t;
+}
+
+inline MetaspaceClosureType as_type(MetaspaceObj::Type msotype) {
+  precond(msotype < MetaspaceObj::_number_of_types);
+  return (MetaspaceClosureType)msotype;
+}
+
+// This macro checks for the existence of a member with the name metaspace_pointers_do.
+// and a parameter list of (MetaspaceClosure* it).
 #define HAS_METASPACE_POINTERS_DO(T) HasMetaspacePointersDo<T>::value
 
 template<typename T>
@@ -55,14 +64,5 @@ class HasMetaspacePointersDo {
 public:
   static constexpr bool value = std::is_pointer_v<test_type>;
 };
-
-inline MetaspaceClosureType as_type(MetaspaceClosureType t) {
-  return t;
-}
-
-inline MetaspaceClosureType as_type(MetaspaceObj::Type msotype) {
-  precond(msotype < MetaspaceObj::_number_of_types);
-  return (MetaspaceClosureType)msotype;
-}
 
 #endif // SHARE_MEMORY_METASPACECLOSURETYPE_HPP

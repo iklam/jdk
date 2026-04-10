@@ -164,17 +164,16 @@ protected:
     metaspace_pointers_do_impl<T>(it);
   }
 
-  //template <typename U, typename = void>
-  //void metaspace_pointers_do_impl(MetaspaceClosure* it);
-
   template <typename U, ENABLE_IF(!std::is_pointer<U>::value && !HAS_METASPACE_POINTERS_DO(U))>
-  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
+  void metaspace_pointers_do_impl(MetaspaceClosure* it) {
+    // No pointers to follow
+  }
 
   template <typename U, ENABLE_IF(!std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(U))>
-  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
+  void metaspace_pointers_do_impl(MetaspaceClosure* it);
 
   template <typename U, ENABLE_IF(std::is_pointer<U>::value && HAS_METASPACE_POINTERS_DO(typename std::remove_pointer<U>::type))>
-  void metaspace_pointers_do_impl(MetaspaceClosure* it) {}
+  void metaspace_pointers_do_impl(MetaspaceClosure* it);
 
   MetaspaceClosureType type() const { return as_type(MetaspaceObj::array_type(sizeof(T))); }
 
