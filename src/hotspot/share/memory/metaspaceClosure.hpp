@@ -38,19 +38,6 @@
 #include "utilities/macros.hpp"
 #include "utilities/resizableHashTable.hpp"
 
-// This macro just check for the existence of a member with the name "metaspace_pointers_do". If the
-// parameter list is not (MetaspaceClosure* it), you will get a compilation error.
-#define HAS_METASPACE_POINTERS_DO(T) HasMetaspacePointersDo<T>::value
-
-template<typename T>
-class HasMetaspacePointersDo {
-  template<typename U> static void* test(decltype(&U::metaspace_pointers_do));
-  template<typename> static int test(...);
-  using test_type = decltype(test<T>(nullptr));
-public:
-  static constexpr bool value = std::is_pointer_v<test_type>;
-};
-
 // class MetaspaceClosure --
 //
 // This class is used for iterating the class metadata objects. It
@@ -193,15 +180,6 @@ private:
     return obj->size_in_heapwords();
   }
 
-  static MetaspaceClosureType as_type(MetaspaceClosureType t) {
-    return t;
-  }
-
-  static MetaspaceClosureType as_type(MetaspaceObj::Type msotype) {
-    precond(msotype < MetaspaceObj::_number_of_types);
-    return (MetaspaceClosureType)msotype;
-  }
-
   // MSORef -- iterate an instance of T, where T::metaspace_pointers_do() exists.
   template <class T> class MSORef : public Ref {
     T** _mpp;
@@ -226,6 +204,7 @@ private:
     }
   };
 
+#if 0
   //---------------------
   // Support for Array<T>
   //---------------------
@@ -301,6 +280,7 @@ private:
       }
     }
   };
+#endif
 
   //--------------------------------
   // Support for AOTGrowableArray<T>
@@ -455,10 +435,11 @@ public:
   // --- Regular iterable objects
   template <typename T>
   void push(T** mpp, Writability w = _default) {
-    static_assert(HAS_METASPACE_POINTERS_DO(T), "Do not push pointers of arbitrary types");
+    //static_assert(HAS_METASPACE_POINTERS_DO(T), "Do not push pointers of arbitrary types");
     push_with_ref<MSORef<T>>(mpp, w);
   }
 
+#if 0
   // --- Array<T>
   template <typename T, ENABLE_IF(!HAS_METASPACE_POINTERS_DO(T))>
   void push(Array<T>** mpp, Writability w = _default) {
@@ -475,6 +456,7 @@ public:
     static_assert(HAS_METASPACE_POINTERS_DO(T), "Do not push Arrays of arbitrary pointer types");
     push_with_ref<MSOPointerArrayRef<T>>(mpp, w);
   }
+#endif
 
   // --- The buffer of AOTGrowableArray<T>
   template <typename T, ENABLE_IF(!HAS_METASPACE_POINTERS_DO(T))>

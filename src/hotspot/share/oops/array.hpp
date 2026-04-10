@@ -25,6 +25,7 @@
 #ifndef SHARE_OOPS_ARRAY_HPP
 #define SHARE_OOPS_ARRAY_HPP
 
+#include "memory/metaspaceClosureType.hpp"
 #include "runtime/atomicAccess.hpp"
 #include "utilities/align.hpp"
 #include "utilities/exceptions.hpp"
@@ -159,8 +160,36 @@ protected:
     st->print("Array<T>(" PTR_FORMAT ")", p2i(this));
   }
 
-  // This function does nothing. The iteration of the elements are done inside metaspaceClosure.hpp
-  void metaspace_pointers_do(MetaspaceClosure* it) {}
+
+  template <typename U = T, ENABLE_IF(!HAS_METASPACE_POINTERS_DO(U))>
+  void metaspace_pointers_do(MetaspaceClosure* it);
+
+  template <typename U = T, ENABLE_IF(HAS_METASPACE_POINTERS_DO(U))>
+  void metaspace_pointers_do(MetaspaceClosure* it);
+
+  template <typename U = T, ENABLE_IF(std::is_pointer<U>::value)>
+  void metaspace_pointers_do(MetaspaceClosure* it);
+
+
+
+#if 0
+  template <typename T, ENABLE_IF(HAS_METASPACE_POINTERS_DO(T))>
+  void push(Array<T>** mpp, Writability w = _default) {
+    push_with_ref<MSOArrayRef<T>>(mpp, w);
+  }
+
+  template <typename T>
+  void push(Array<T*>** mpp, Writability w = _default) {
+    static_assert(HAS_METASPACE_POINTERS_DO(T), "Do not push Arrays of arbitrary pointer types");
+    push_with_ref<MSOPointerArrayRef<T>>(mpp, w);
+  }
+#endif
+
+
+
+
+
+  MetaspaceClosureType type() const { return as_type(MetaspaceObj::array_type(sizeof(T))); }
 
 #ifndef PRODUCT
   void print(outputStream* st) {
