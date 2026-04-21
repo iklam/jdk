@@ -571,6 +571,7 @@ static void rewrite_bytecodes(const methodHandle& method) {
     Bytecodes::Code opcode = bcs.next();
     // Use current opcode as the default value of new_code
     new_code = opcode;
+    bool force = false;
     switch(opcode) {
     case Bytecodes::_getfield: {
       uint rfe_index = bcs.get_index_u2();
@@ -594,7 +595,7 @@ static void rewrite_bytecodes(const methodHandle& method) {
           break;
         }
       } else {
-        new_code = Bytecodes::_nofast_getfield;
+        new_code = Bytecodes::_getfield; force = 1;
       }
       break;
     }
@@ -619,23 +620,23 @@ static void rewrite_bytecodes(const methodHandle& method) {
           break;
         }
       } else {
-        new_code = Bytecodes::_nofast_putfield;
+        new_code = Bytecodes::_putfield; force = 1;
       }
       break;
     }
     case Bytecodes::_aload_0:
       // Revert _fast_Xaccess_0 or _aload_0 to _nofast_aload_0
-      new_code = Bytecodes::_nofast_aload_0;
+      new_code = Bytecodes::_aload_0; force = 1;
       break;
     case Bytecodes::_iload:
       if (!bcs.is_wide()) {
-        new_code = Bytecodes::_nofast_iload;
+        new_code = Bytecodes::_iload; force = 1;
       }
       break;
     default:
       break;
     }
-    if (opcode != new_code) {
+    if (opcode != new_code || force) {
       *bcs.bcp() = new_code;
       if (lsh.is_enabled()) {
         lsh.print_cr("%d:%s -> %s", bcs.bci(), Bytecodes::name(opcode), Bytecodes::name(new_code));
