@@ -341,15 +341,15 @@ void AOTMetaspace::initialize_for_static_dump() {
 void AOTMetaspace::open_output_mapinfo() {
   const char* static_archive = CDSConfig::output_archive_path();
   assert(static_archive != nullptr, "sanity");
-  _output_mapinfo = new FileMapInfo(static_archive, true);
+  _output_mapinfo = FileMapInfo::allocate_output_archive(static_archive, true);
   _output_mapinfo->open_as_output();
 }
 
 // Called by universe_post_init()
 void AOTMetaspace::post_initialize(TRAPS) {
   if (CDSConfig::is_using_archive()) {
-    FileMapInfo *static_mapinfo = FileMapInfo::current_info();
-    FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_info();
+    FileMapInfo *static_mapinfo = FileMapInfo::static_input_archive();
+    FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_input_archive();
 
     if (AOTMapLogger::is_logging_at_bootstrap()) {
       // The map logging needs to be done here, as it requires some stubs on Windows,
@@ -1007,7 +1007,7 @@ void AOTMetaspace::init_heap_settings() {
     } else if (CDSConfig::is_dumping_final_static_archive()) {
       // Obey the command-line switch. Do not override
     } else if (CDSConfig::is_using_archive()) {
-      precond(FileMapInfo::current_info() == nullptr);
+      precond(FileMapInfo::static_input_archive() == nullptr);
       FileMapInfo* static_mapinfo = open_static_archive();
       if (static_mapinfo != nullptr && static_mapinfo->header()->compatible_oop_compression()) {
         // Use the same setting as recorded in the archive.
@@ -1197,9 +1197,6 @@ void AOTMetaspace::dump_static_archive_impl(StaticArchiveBuilder& builder, TRAPS
 #endif
 
   if (!CDSConfig::is_dumping_preimage_static_archive()) {
-    if (CDSConfig::is_dumping_final_static_archive()) {
-      FileMapInfo::free_current_info(); // FIXME: should not free current info
-    }
     open_output_mapinfo();
   }
 
@@ -1518,7 +1515,7 @@ void AOTMetaspace::initialize_runtime_shared_and_meta_spaces() {
   assert(CDSConfig::is_using_archive(), "Must be called when UseSharedSpaces is enabled");
   MapArchiveResult result = MAP_ARCHIVE_OTHER_FAILURE;
 
-  FileMapInfo* static_mapinfo = FileMapInfo::current_info(); // may have been opened by init_heap_settings()
+  FileMapInfo* static_mapinfo = FileMapInfo::static_input_archive(); // may have been opened by init_heap_settings()
   if (static_mapinfo == nullptr) {
     static_mapinfo = open_static_archive();
   }
@@ -1591,7 +1588,7 @@ void AOTMetaspace::initialize_runtime_shared_and_meta_spaces() {
 FileMapInfo* AOTMetaspace::open_static_archive() {
   const char* static_archive = CDSConfig::input_static_archive_path();
   assert(static_archive != nullptr, "sanity");
-  FileMapInfo* mapinfo = new FileMapInfo(static_archive, true);
+  FileMapInfo* mapinfo = FileMapInfo::allocate_static_input_archive(static_archive);
   if (!mapinfo->open_as_input()) {
     delete(mapinfo);
     log_info(cds)("Opening of static archive %s failed", static_archive);
@@ -1609,7 +1606,7 @@ FileMapInfo* AOTMetaspace::open_dynamic_archive() {
     return nullptr;
   }
 
-  FileMapInfo* mapinfo = new FileMapInfo(dynamic_archive, false);
+  FileMapInfo* mapinfo = FileMapInfo::allocate_dynamic_input_archive(dynamic_archive);
   if (!mapinfo->open_as_input()) {
     delete(mapinfo);
     if (RequireSharedSpaces) {
@@ -2158,8 +2155,8 @@ class CountSharedSymbols : public SymbolClosure {
 // serialize it out to its various destinations.
 
 void AOTMetaspace::initialize_shared_spaces() {
-  FileMapInfo *static_mapinfo = FileMapInfo::current_info();
-  FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_info();
+  FileMapInfo *static_mapinfo = FileMapInfo::static_input_archive();
+  FileMapInfo *dynamic_mapinfo = FileMapInfo::dynamic_input_archive();
 
   // Verify various attributes of the archive, plus initialize the
   // shared string/symbol tables.
@@ -2228,7 +2225,7 @@ void AOTMetaspace::initialize_shared_spaces() {
       tty->print_cr("Number of shared strings: %zu", StringTable::shared_entry_count());
     }
     tty->print_cr("VM version: %s\r\n", static_mapinfo->vm_version());
-    if (FileMapInfo::current_info() == nullptr || _archive_loading_failed) {
+    if (_archive_loading_failed) {
       tty->print_cr("archive is invalid");
       vm_exit(1);
     } else {
@@ -2244,12 +2241,12 @@ bool AOTMetaspace::remap_shared_readonly_as_readwrite() {
 
   if (CDSConfig::is_using_archive()) {
     // remap the shared readonly space to shared readwrite, private
-    FileMapInfo* mapinfo = FileMapInfo::current_info();
+    FileMapInfo* mapinfo = FileMapInfo::static_input_archive();
     if (!mapinfo->remap_shared_readonly_as_readwrite()) {
       return false;
     }
-    if (FileMapInfo::dynamic_info() != nullptr) {
-      mapinfo = FileMapInfo::dynamic_info();
+    if (FileMapInfo::dynamic_input_archive() != nullptr) {
+      mapinfo = FileMapInfo::dynamic_input_archive();
       if (!mapinfo->remap_shared_readonly_as_readwrite()) {
         return false;
       }

@@ -79,17 +79,12 @@ DEBUG_ONLY(static bool _cds_ergo_initialize_started = false);
 void CDSConfig::ergo_initialize() {
   DEBUG_ONLY(_cds_ergo_initialize_started = true);
 
-  if (is_dumping_static_archive() && !is_dumping_final_static_archive()) {
-    // Note: -Xshare and -XX:AOTMode flags are mutually exclusive.
+  if (is_dumping_classic_static_archive()) {
     // - Classic workflow: -Xshare:on and -Xshare:dump cannot take effect at the same time.
-    // - JEP 483 workflow: -XX:AOTMode:record and -XX:AOTMode=on cannot take effect at the same time.
-    // So we can never come to here with RequireSharedSpaces==true.
     assert(!RequireSharedSpaces, "sanity");
 
     // If dumping the classic archive, or making an AOT training run (dumping a preimage archive),
     // for sanity, parse all classes from classfiles.
-    // TODO: in the future, if we want to support re-training on top of an existing AOT cache, this
-    // needs to be changed.
     UseSharedSpaces = false;
   }
 
@@ -558,14 +553,17 @@ void CDSConfig::check_aotmode_record() {
     }
   }
 
-  if (!FLAG_IS_DEFAULT(AOTCache)) {
-    vm_exit_during_initialization("AOTCache must not be specified when using -XX:AOTMode=record");
-  }
-
   substitute_aot_filename(FLAG_MEMBER_ENUM(AOTConfiguration));
 
-  UseSharedSpaces = false;
-  RequireSharedSpaces = false;
+  if (FLAG_IS_DEFAULT(AOTCache)) {
+    UseSharedSpaces = false;
+    RequireSharedSpaces = false;
+  } else {
+    // Re-training -- we must be able to load the specified AOTCache
+    UseSharedSpaces = true;
+    RequireSharedSpaces = true;
+  }
+
   _is_dumping_static_archive = true;
   _is_dumping_preimage_static_archive = true;
 

@@ -43,13 +43,13 @@ void* AOTCacheAccess::allocate_aot_code_region(size_t size) {
 
 size_t AOTCacheAccess::get_aot_code_region_size() {
   assert(CDSConfig::is_using_archive(), "must be");
-  FileMapInfo* mapinfo = FileMapInfo::current_info();
+  FileMapInfo* mapinfo = FileMapInfo::static_input_archive();
   assert(mapinfo != nullptr, "must be");
   return mapinfo->region_at(AOTMetaspace::ac)->used_aligned();
 }
 
 bool AOTCacheAccess::map_aot_code_region(ReservedSpace rs) {
-  FileMapInfo* static_mapinfo = FileMapInfo::current_info();
+  FileMapInfo* static_mapinfo = FileMapInfo::static_input_archive();
   assert(UseSharedSpaces && static_mapinfo != nullptr, "must be");
   return static_mapinfo->map_aot_code_region(rs);
 }

@@ -307,7 +307,7 @@ bool HeapShared::is_archived_heap_in_use() {
 }
 
 bool HeapShared::can_use_archived_heap() {
-  FileMapInfo* static_mapinfo = FileMapInfo::current_info();
+  FileMapInfo* static_mapinfo = FileMapInfo::static_input_archive();
   if (static_mapinfo == nullptr) {
     return false;
   }
