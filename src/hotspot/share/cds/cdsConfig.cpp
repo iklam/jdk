@@ -982,6 +982,19 @@ bool CDSConfig::is_loading_heap() {
   return HeapShared::is_archived_heap_in_use();
 }
 
+bool CDSConfig::can_allocate_scratch_oops() {
+  if (CDSConfig::is_using_aot_linked_classes()) {
+    // AOTLinkedClassBulkLoader::preload_classes() is called before the heap is ready
+    // for allocation. The scratch oops for the preloaded classes will be allocated later
+    // inside AOTLinkedClassBulkLoader::link_classes_impl().
+    return Universe::is_fully_initialized();
+  } else {
+    // When not loading aot-linked classes, we try to allocate scratch oops only when
+    // the the heap is ready for allocation.
+    return true;
+  }
+}
+
 bool CDSConfig::is_dumping_klass_subgraphs() {
   if (is_dumping_aot_linked_classes()) {
     // KlassSubGraphs (see heapShared.cpp) is a legacy mechanism for archiving oops. It
