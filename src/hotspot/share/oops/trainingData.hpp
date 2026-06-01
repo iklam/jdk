@@ -338,7 +338,7 @@ private:
       TrainingDataLocker::assert_locked_or_snapshotted();
       if (_deps != nullptr && _deps_dyn == nullptr) {
         _deps_dyn = new GrowableArrayCHeap<E, mtCompiler>(length() + INITIAL_CAPACITY);
-        for (int i = 0; _deps->length(); i++) {
+        for (int i = 0; i < _deps->length(); i++) {
           _deps_dyn->append(_deps->at(i));
         }
         _deps = nullptr;
