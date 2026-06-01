@@ -737,7 +737,12 @@ void CDSConfig::setup_compiler_args() {
   if (is_dumping_preimage_static_archive() && can_dump_profile_and_compiled_code) {
     // JEP 483 workflow -- training
     FLAG_SET_ERGO_IF_DEFAULT(AOTRecordTraining, true);
-    FLAG_SET_ERGO(AOTReplayTraining, false);
+    if (is_using_archive()) {
+      // Re-training
+      FLAG_SET_ERGO(AOTReplayTraining, false); // FIXME
+    } else {
+      FLAG_SET_ERGO(AOTReplayTraining, false);
+    }
     AOTCodeCache::disable_caching(); // No AOT code generation during training run
   } else if (is_dumping_final_static_archive() && can_dump_profile_and_compiled_code) {
     // JEP 483 workflow -- assembly
