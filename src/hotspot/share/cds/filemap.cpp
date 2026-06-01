@@ -128,7 +128,9 @@ FileMapInfo::FileMapInfo(const char* full_path, bool is_static) :
 
 
 FileMapInfo::~FileMapInfo() {
-  if (_is_static) {
+  if (_output_archive == this) {
+    _output_archive = nullptr;
+  } else if (_is_static) {
     assert(_static_input_archive == this, "must be singleton"); // not thread safe
     _static_input_archive = nullptr;
   } else {

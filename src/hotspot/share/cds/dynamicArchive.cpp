@@ -199,10 +199,6 @@ void DynamicArchiveBuilder::init_header() {
 }
 
 void DynamicArchiveBuilder::release_header() {
-  // We temporarily allocated a dynamic FileMapInfo for dumping, which makes it appear we
-  // have mapped a dynamic archive, but we actually have not. We are in a safepoint now.
-  // Let's free it so that if class loading happens after we leave the safepoint, nothing
-  // bad will happen.
   assert(SafepointSynchronize::is_at_safepoint(), "must be");
   FileMapInfo *mapinfo = FileMapInfo::output_archive();
   assert(mapinfo != nullptr && _header == mapinfo->dynamic_header(), "must be");
