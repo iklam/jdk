@@ -765,7 +765,7 @@ void VM_PopulateDumpSharedSpace::doit() {
   CDSConfig::set_is_at_aot_safepoint(true);
 
   if (!CDSConfig::is_dumping_final_static_archive()) {
-    guarantee(!CDSConfig::is_using_archive(), "We should not be using an archive when we dump");
+    //guarantee(!CDSConfig::is_using_archive(), "We should not be using an archive when we dump");
   }
 
   DEBUG_ONLY(SystemDictionaryShared::NoClassLoadingMark nclm);
@@ -1377,7 +1377,7 @@ bool AOTMetaspace::try_link_class(JavaThread* current, InstanceKlass* ik) {
   JavaThread* THREAD = current; // For exception macros.
   assert(CDSConfig::is_dumping_archive(), "sanity");
 
-  if (ik->in_aot_cache() && !CDSConfig::is_dumping_final_static_archive()) {
+  if (ik->in_aot_cache() && !CDSConfig::is_dumping_final_static_archive() && 0) {
     assert(CDSConfig::is_dumping_dynamic_archive(), "must be");
     return false;
   }

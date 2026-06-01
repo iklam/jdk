@@ -30,6 +30,15 @@
 AOTLinkedClassTable AOTLinkedClassTable::_instance;
 
 void AOTLinkedClassTable::serialize(SerializeClosure* soc) {
+  if (soc->writing() && CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+    void* foo = nullptr;
+    soc->do_ptr((void**)&foo);
+    soc->do_ptr((void**)&foo);
+    soc->do_ptr((void**)&foo);
+    soc->do_ptr((void**)&foo);
+    return;
+  }
+
   soc->do_ptr((void**)&_boot1);
   soc->do_ptr((void**)&_boot2);
   soc->do_ptr((void**)&_platform);

@@ -558,6 +558,8 @@ void CDSConfig::check_aotmode_record() {
   if (FLAG_IS_DEFAULT(AOTCache)) {
     UseSharedSpaces = false;
     RequireSharedSpaces = false;
+    _is_using_optimized_module_handling = false;
+    _is_using_full_module_graph = false;
   } else {
     // Re-training -- we must be able to load the specified AOTCache
     UseSharedSpaces = true;
@@ -569,8 +571,6 @@ void CDSConfig::check_aotmode_record() {
 
   // At VM exit, the module graph may be contaminated with program states.
   // We will rebuild the module graph when dumping the CDS final image.
-  _is_using_optimized_module_handling = false;
-  _is_using_full_module_graph = false;
   _is_dumping_full_module_graph = false;
 }
 
@@ -622,6 +622,7 @@ void CDSConfig::ergo_init_aot_paths() {
   assert(_cds_ergo_initialize_started, "sanity");
   if (is_dumping_static_archive()) {
     if (is_dumping_preimage_static_archive()) {
+      _input_static_archive_path = AOTCache; // non-null when re-training
       _output_archive_path = AOTConfiguration;
     } else {
       assert(is_dumping_final_static_archive(), "must be");
@@ -847,6 +848,9 @@ bool CDSConfig::is_dumping_regenerated_lambdaform_invokers() {
     // The base archive has aot-linked classes that may have AOT-resolved CP references
     // that point to the lambda form invokers in the base archive. Such pointers will
     // be invalid if lambda form invokers are regenerated in the dynamic archive.
+    return false;
+  } else if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+    // TODO -- don't do it when re-training
     return false;
   } else {
     return is_dumping_archive();

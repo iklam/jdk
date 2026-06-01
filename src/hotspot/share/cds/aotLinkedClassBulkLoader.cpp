@@ -139,10 +139,32 @@ void AOTLinkedClassBulkLoader::link_classes(JavaThread* current) {
   }
 }
 
+static void create_scratch_mirror(Klass* k, TRAPS) {
+#if INCLUDE_CDS_JAVA_HEAP
+  // Re-training
+  java_lang_Class::create_scratch_mirror(k, CHECK);
+  for (ArrayKlass* ak = k->array_klass_or_null(); ak != nullptr; ak = ak->higher_dimension()) {
+    java_lang_Class::create_scratch_mirror(ak, CHECK);
+  }
+#endif
+}
+
 void AOTLinkedClassBulkLoader::link_classes_impl(TRAPS) {
   precond(CDSConfig::is_using_aot_linked_classes());
 
   AOTLinkedClassTable* table = AOTLinkedClassTable::get();
+
+  if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+    create_scratch_mirror(Universe::fillerArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::boolArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::charArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::floatArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::doubleArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::byteArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::shortArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::intArrayKlass(), CHECK);
+    create_scratch_mirror(Universe::longArrayKlass(), CHECK);
+  }
 
   link_classes_in_table(table->boot1(), CHECK);
   link_classes_in_table(table->boot2(), CHECK);
@@ -170,6 +192,9 @@ void AOTLinkedClassBulkLoader::link_classes_in_table(Array<InstanceKlass*>* clas
       // at this point.
       InstanceKlass* ik = classes->at(i);
       ik->link_class(CHECK);
+      if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+        create_scratch_mirror(ik, CHECK);
+      }
     }
   }
 }
