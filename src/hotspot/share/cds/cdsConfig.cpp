@@ -562,6 +562,8 @@ void CDSConfig::check_aotmode_record() {
     _is_using_full_module_graph = false;
   } else {
     // Re-training -- we must be able to load the specified AOTCache
+    log_info(aot)("re-training: loading AOTCache=%s and writing AOTConfiguration=%s",
+                  AOTCache, AOTConfiguration);
     UseSharedSpaces = true;
     RequireSharedSpaces = true;
   }
@@ -855,7 +857,7 @@ bool CDSConfig::is_dumping_regenerated_lambdaform_invokers() {
     // be invalid if lambda form invokers are regenerated in the dynamic archive.
     return false;
   } else if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
-    // TODO -- don't do it when re-training
+    // TODO -- explain why we don't do it when re-training
     return false;
   } else {
     return is_dumping_archive();
