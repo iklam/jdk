@@ -741,7 +741,7 @@ void CDSConfig::setup_compiler_args() {
     FLAG_SET_ERGO_IF_DEFAULT(AOTRecordTraining, true);
     if (is_using_archive()) {
       // Re-training
-      FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
+      FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, false);
     } else {
       FLAG_SET_ERGO(AOTReplayTraining, false);
     }
