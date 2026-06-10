@@ -446,7 +446,8 @@ private:
 
 #if INCLUDE_CDS
   virtual void remove_unshareable_info() {}
-  static void iterate_roots(MetaspaceClosure* it);
+  static void dumptime_iterate_roots(MetaspaceClosure* it);
+  static void runtime_iterate_roots(MetaspaceClosure* it);
   static void dump_training_data();
   static void cleanup_training_data();
   static void serialize(SerializeClosure* soc);

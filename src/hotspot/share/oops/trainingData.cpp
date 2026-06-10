@@ -584,11 +584,20 @@ void TrainingData::init_dumptime_table(TRAPS) {
   }
 }
 
-void TrainingData::iterate_roots(MetaspaceClosure* it) {
+void TrainingData::dumptime_iterate_roots(MetaspaceClosure* it) {
   if (_dumptime_training_data_dictionary != nullptr) {
     for (int i = 0; i < _dumptime_training_data_dictionary->length(); i++) {
       _dumptime_training_data_dictionary->at(i).metaspace_pointers_do(it);
     }
+  }
+}
+
+void TrainingData::runtime_iterate_roots(MetaspaceClosure* it) {
+  if (have_data()) {
+    TrainingDataLocker l;
+    archived_training_data_dictionary()->iterate_all([&](TrainingData* td) {
+      td->metaspace_pointers_do(it);
+    });
   }
 }
 

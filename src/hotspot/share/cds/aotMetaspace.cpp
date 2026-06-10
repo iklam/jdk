@@ -697,7 +697,7 @@ public:
     SystemDictionaryShared::dumptime_classes_do(it);
     Universe::metaspace_pointers_do(it);
     vmSymbols::metaspace_pointers_do(it);
-    TrainingData::iterate_roots(it);
+    TrainingData::dumptime_iterate_roots(it);
     if (CDSConfig::is_dumping_full_module_graph()) {
       ClassLoaderDataShared::iterate_roots(it);
     }

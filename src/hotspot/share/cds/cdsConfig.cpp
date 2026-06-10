@@ -454,6 +454,12 @@ void CDSConfig::check_aot_flags() {
     return;
   }
 
+  if (has_mode && strcmp(AOTMode, "create") == 0) {
+    if (has_cache && has_cache_output) {
+      vm_exit_during_initialization("Only one of AOTCache or AOTCacheOutput can be specified");
+    }
+  }
+
   if ((!has_mode || strcmp(AOTMode, "auto") == 0) && has_cache_output) {
     // If AOTCacheOutput has been set, effective mode is "record".
     // Default value for AOTConfiguration, if necessary, will be assigned in check_aotmode_record().
@@ -721,37 +727,49 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
       BytecodeVerificationRemote = true;
       aot_log_info(aot)("All non-system classes will be verified (-Xverify:remote) during CDS dump time.");
     }
+    aot_log_info(aot)("AOT class linking is %s", is_dumping_aot_linked_classes() ? "enabled" : "disabled"); 
   }
 
   return true;
 }
 
 void CDSConfig::setup_compiler_args() {
-  // AOT profiles and AOT-compiled code are supported only in the JEP 483 workflow.
-  bool can_dump_profile_and_compiled_code = AOTClassLinking && new_aot_flags_used();
+  bool can_dump_profile_and_compiled_code = is_dumping_aot_linked_classes() && new_aot_flags_used();
 
-  if (is_dumping_preimage_static_archive() && can_dump_profile_and_compiled_code) {
+  if (is_dumping_preimage_static_archive()) {
     // JEP 483 workflow -- training
-    FLAG_SET_ERGO_IF_DEFAULT(AOTRecordTraining, true);
-    if (is_using_archive()) {
-      // Re-training
-      FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
+    if (AOTClassLinking) {
+      FLAG_SET_ERGO_IF_DEFAULT(AOTRecordTraining, true);
+      if (is_using_archive()) {
+        // Re-training
+        FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
+      } else {
+        FLAG_SET_ERGO(AOTReplayTraining, false);
+      }
     } else {
       FLAG_SET_ERGO(AOTReplayTraining, false);
+      FLAG_SET_ERGO(AOTRecordTraining, false);
     }
     AOTCodeCache::disable_caching(); // No AOT code generation during training run
-  } else if (is_dumping_final_static_archive() && can_dump_profile_and_compiled_code) {
+  } else if (is_dumping_final_static_archive()) {
     // JEP 483 workflow -- assembly
-    FLAG_SET_ERGO(AOTRecordTraining, false);
-    FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
-    AOTCodeCache::enable_caching(); // Generate AOT code during assembly phase.
-    disable_dumping_aot_code();     // Don't dump AOT code until metadata and heap are dumped.
+    if (is_dumping_aot_linked_classes()) {
+      FLAG_SET_ERGO(AOTRecordTraining, false);
+      FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
+      AOTCodeCache::enable_caching(); // Generate AOT code during assembly phase.
+      disable_dumping_aot_code();     // Don't dump AOT code until metadata and heap are dumped.
+    } else {
+      FLAG_SET_ERGO(AOTReplayTraining, false);
+      FLAG_SET_ERGO(AOTRecordTraining, false);
+      AOTCodeCache::disable_caching();
+    }
   } else if (is_using_archive() && new_aot_flags_used()) {
     // JEP 483 workflow -- production
     FLAG_SET_ERGO(AOTRecordTraining, false);
     FLAG_SET_ERGO_IF_DEFAULT(AOTReplayTraining, true);
     AOTCodeCache::enable_caching();
   } else {
+    // Old CDS workflows
     FLAG_SET_ERGO(AOTReplayTraining, false);
     FLAG_SET_ERGO(AOTRecordTraining, false);
     AOTCodeCache::disable_caching();

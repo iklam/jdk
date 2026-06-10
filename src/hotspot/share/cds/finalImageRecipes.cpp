@@ -35,6 +35,7 @@
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.inline.hpp"
+#include "oops/trainingData.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 
@@ -240,6 +241,11 @@ void FinalImageRecipes::apply_recipes(TRAPS) {
 
 void FinalImageRecipes::apply_recipes_impl(TRAPS) {
   load_all_classes(CHECK);
+
+  if (AOTVerifyTrainingData) {
+    TrainingData::verify();
+  }
+
   apply_recipes_for_constantpool(THREAD);
 }
 
