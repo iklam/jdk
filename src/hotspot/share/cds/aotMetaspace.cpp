@@ -1276,7 +1276,8 @@ static int exec_jvm_with_java_tool_options(const char* java_launcher_path, TRAPS
   // Pass all arguments. These include those from JAVA_TOOL_OPTIONS and _JAVA_OPTIONS.
   for (int i = 0; i < Arguments::num_jvm_args(); i++) {
     const char* arg = Arguments::jvm_args_array()[i];
-    if (strstr(arg, "-XX:AOTCacheOutput=") == arg || // arg starts with ...
+    if (strstr(arg, "-XX:AOTCache=") == arg || // arg starts with ...
+        strstr(arg, "-XX:AOTCacheOutput=") == arg ||
         strstr(arg, "-XX:AOTConfiguration=") == arg ||
         strstr(arg, "-XX:AOTMode=") == arg) {
       // Filter these out. They wiill be set below.

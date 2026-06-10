@@ -454,17 +454,11 @@ void CDSConfig::check_aot_flags() {
     return;
   }
 
-  if (has_cache && has_cache_output) {
-    vm_exit_during_initialization("Only one of AOTCache or AOTCacheOutput can be specified");
-  }
-
-  if (!has_cache && (!has_mode || strcmp(AOTMode, "auto") == 0)) {
-    if (has_cache_output) {
-      // If AOTCacheOutput has been set, effective mode is "record".
-      // Default value for AOTConfiguration, if necessary, will be assigned in check_aotmode_record().
-      log_info(aot)("Selected AOTMode=record because AOTCacheOutput is specified");
-      FLAG_SET_ERGO(AOTMode, "record");
-    }
+  if ((!has_mode || strcmp(AOTMode, "auto") == 0) && has_cache_output) {
+    // If AOTCacheOutput has been set, effective mode is "record".
+    // Default value for AOTConfiguration, if necessary, will be assigned in check_aotmode_record().
+    log_info(aot)("Selected AOTMode=record because AOTCacheOutput is specified");
+    FLAG_SET_ERGO(AOTMode, "record");
   }
 
   // At least one AOT flag has been used
