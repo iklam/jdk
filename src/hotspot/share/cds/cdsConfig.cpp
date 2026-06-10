@@ -727,7 +727,7 @@ bool CDSConfig::check_vm_args_consistency(bool patch_mod_javabase, bool mode_fla
       BytecodeVerificationRemote = true;
       aot_log_info(aot)("All non-system classes will be verified (-Xverify:remote) during CDS dump time.");
     }
-    aot_log_info(aot)("AOT class linking is %s", is_dumping_aot_linked_classes() ? "enabled" : "disabled"); 
+    aot_log_info(aot)("AOT class linking is %s", is_dumping_aot_linked_classes() ? "enabled" : "disabled");
   }
 
   return true;
