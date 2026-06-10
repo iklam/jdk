@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, 2026, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2024, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,7 +35,6 @@
 #include "memory/oopFactory.hpp"
 #include "memory/resourceArea.hpp"
 #include "oops/constantPool.inline.hpp"
-#include "oops/trainingData.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/mutexLocker.hpp"
 
@@ -241,11 +240,6 @@ void FinalImageRecipes::apply_recipes(TRAPS) {
 
 void FinalImageRecipes::apply_recipes_impl(TRAPS) {
   load_all_classes(CHECK);
-
-  if (AOTVerifyTrainingData) {
-    TrainingData::verify();
-  }
-
   apply_recipes_for_constantpool(THREAD);
 }
 

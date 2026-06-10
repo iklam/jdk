@@ -184,10 +184,6 @@ void AOTLinkedClassBulkLoader::link_classes_impl(TRAPS) {
   link_classes_in_table(table->platform(), CHECK);
   link_classes_in_table(table->app(), CHECK);
 
-  if (AOTVerifyTrainingData) {
-    TrainingData::verify();
-  }
-
   init_classes_for_loader(Handle(), AOTLinkedClassTable::get()->boot1(), /*early_only=*/true, CHECK);
   init_classes_for_loader(Handle(), AOTLinkedClassTable::get()->boot2(), /*early_only=*/true, CHECK);
   init_classes_for_loader(Handle(), AOTLinkedClassTable::get()->platform(), /*early_only=*/true, CHECK);
