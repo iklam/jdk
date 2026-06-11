@@ -1323,7 +1323,8 @@ void VM_Version::get_processor_features() {
     FLAG_SET_DEFAULT(UseSHA512Intrinsics, false);
   }
 
-  if (UseSHA && supports_evex() && supports_avx512bw()) {
+  if (UseSHA && ((supports_evex() && supports_avx512vlbw()) ||
+      (EnableX86ECoreOpts && !supports_hybrid()))) {
     if (FLAG_IS_DEFAULT(UseSHA3Intrinsics)) {
       FLAG_SET_DEFAULT(UseSHA3Intrinsics, true);
     }
@@ -1404,6 +1405,10 @@ void VM_Version::get_processor_features() {
       warning("Intrinsics for Polynomial crypto functions not available on this CPU.");
     }
     FLAG_SET_DEFAULT(UseIntPolyIntrinsics, false);
+  }
+
+  if (FLAG_IS_DEFAULT(UseIntPoly25519Intrinsics)) {
+    UseIntPoly25519Intrinsics = true;
   }
 
   if (FLAG_IS_DEFAULT(UseMultiplyToLenIntrinsic)) {
