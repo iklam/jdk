@@ -1360,6 +1360,7 @@ void AOTMetaspace::fork_and_dump_final_static_archive(TRAPS) {
   int status = exec_jvm_with_java_tool_options(cmd, CHECK);
   if (status != 0) {
     log_error(aot)("Child process failed; status = %d", status);
+    vm_exit(status);
     // We leave the temp config file for debugging
   } else if (CDSConfig::has_temp_aot_config_file()) {
     const char* tmp_config = AOTConfiguration;
