@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.List;
 import jdk.test.lib.JDKToolFinder;
+import jdk.test.lib.Utils;
 
 /**
  * .jasm and .jcod files are usually compiled with the "@compile" tag in jtreg. However,
@@ -42,7 +43,6 @@ import jdk.test.lib.JDKToolFinder;
 public class ClassFileAssembler {
     private static final String JAVA_PATH = JDKToolFinder.getJDKTool("java");
     private static final int COMPILE_TIMEOUT = 60;
-    private static final float timeoutFactor = Float.parseFloat(System.getProperty("test.timeout.factor", "1.0"));
 
     public static void main(String... args) throws Exception {
         for (String file : args) {
@@ -115,8 +115,7 @@ public class ClassFileAssembler {
         int exitCode;
         try {
             Process process = builder.start();
-            long timeout = COMPILE_TIMEOUT * (long)timeoutFactor;
-            boolean exited = process.waitFor(timeout, TimeUnit.SECONDS);
+            boolean exited = process.waitFor(Utils.adjustTimeout(COMPILE_TIMEOUT), TimeUnit.SECONDS);
             if (!exited) {
                 process.destroyForcibly();
                 System.out.println("Timeout: compile command: " + String.join(" ", command));

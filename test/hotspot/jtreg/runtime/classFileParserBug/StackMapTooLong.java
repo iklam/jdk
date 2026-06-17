@@ -48,7 +48,7 @@ public class StackMapTooLong {
             writer.write(tail);
         }
 
-        // Generate a StackMapTable that's larger than to Metaspace::max_allocation_word_size()
+        // Generate a StackMapTable that's larger than Metaspace::max_allocation_word_size()
         ClassFileAssembler.compileJcod(jcodFile);
 
         URL url = new File(System.getProperty("user.dir")).toURI().toURL();
