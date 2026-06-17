@@ -35,7 +35,6 @@
  */
 
 import java.io.File;
-import java.nio.file.Path;
 import jdk.test.lib.cds.CDSTestUtils;
 import jdk.test.lib.helpers.ClassFileInstaller;
 import jdk.test.lib.process.OutputAnalyzer;
@@ -49,7 +48,7 @@ public class AssemblySubProcessFailure {
 
     public static void main(String[] args) throws Exception {
         // The main training run process should report the failure if the AOT assembly
-        // sub-processes has failed.
+        // sub-process has failed.
         //
         // The easiest way to trigger a failure is to pass a bad VM option, only to the
         // sub-process using JDK_AOT_VM_OPTIONS.
@@ -58,7 +57,7 @@ public class AssemblySubProcessFailure {
             "-XX:AOTCacheOutput=" + aotCacheFile,
             "-cp", appJar, helloClass);
         pb.environment().put("JDK_AOT_VM_OPTIONS", "-XX:+NoSuchOption");
-        OutputAnalyzer out = CDSTestUtils.executeAndLog(pb, "ontstep-train");
+        OutputAnalyzer out = CDSTestUtils.executeAndLog(pb, "onestep-train");
 
         out.shouldContain("Hello World");
         out.shouldContain("Temporary AOTConfiguration recorded: " + aotConfigFile);
@@ -66,6 +65,7 @@ public class AssemblySubProcessFailure {
         out.shouldContain("Picked up JDK_AOT_VM_OPTIONS: -XX:+NoSuchOption");
         out.shouldContain("Unrecognized VM option 'NoSuchOption'");
         out.shouldContain("Error: Could not create the Java Virtual Machine.");
+        out.shouldNotContain("AOTCache creation is complete");
         out.shouldHaveExitValue(1);
 
         if (!(new File(aotConfigFile)).exists()) {
