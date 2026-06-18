@@ -45,23 +45,23 @@ public class StackMapTooLong {
     }
 
     static class LargeStackMapTable extends Attribute {
-      LargeStackMapTable() {
-          super("StackMapTable");
-      }
+        LargeStackMapTable() {
+            super("StackMapTable");
+        }
 
-      @Override
-      public boolean isCodeAttribute() {
-          return true;
-      }
+        @Override
+        public boolean isCodeAttribute() {
+            return true;
+        }
 
-      @Override
-      protected ByteVector write(ClassWriter cw, byte[] code,
-                                 int codeLength, int maxStack, int maxLocals) {
-          int len = 16 * 1024 * 1024 + 1; // Too large to be allocated by Metaspace::allocate()
-          ByteVector bv = new ByteVector();
-          bv.putByteArray(new byte[len], 0, len);
-          return bv;
-      }
+        @Override
+        protected ByteVector write(ClassWriter cw, byte[] code,
+                                   int codeLength, int maxStack, int maxLocals) {
+            int len = 16 * 1024 * 1024 + 1; // Too large to be allocated by Metaspace::allocate()
+            ByteVector bv = new ByteVector();
+            bv.putByteArray(new byte[len], 0, len);
+            return bv;
+        }
     }
 
     private static byte[] dumpBadClass() throws Exception {
@@ -72,14 +72,14 @@ public class StackMapTooLong {
                         null);
 
       {
-        methodVisitor =
-            classWriter.visitMethod(ACC_PUBLIC | ACC_STATIC, "main",
-                                    "([Ljava/lang/String;)V", null, null);
-        methodVisitor.visitCode();
-        methodVisitor.visitInsn(RETURN);
-        methodVisitor.visitAttribute(new LargeStackMapTable());
-        methodVisitor.visitMaxs(0, 1);
-        methodVisitor.visitEnd();
+          methodVisitor =
+              classWriter.visitMethod(ACC_PUBLIC | ACC_STATIC, "main",
+                                      "([Ljava/lang/String;)V", null, null);
+          methodVisitor.visitCode();
+          methodVisitor.visitInsn(RETURN);
+          methodVisitor.visitAttribute(new LargeStackMapTable());
+          methodVisitor.visitMaxs(0, 1);
+          methodVisitor.visitEnd();
       }
       classWriter.visitEnd();
 
