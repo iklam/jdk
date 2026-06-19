@@ -65,24 +65,24 @@ public class StackMapTooLong {
     }
 
     private static byte[] dumpBadClass() throws Exception {
-      ClassWriter classWriter = new ClassWriter(0);
-      MethodVisitor methodVisitor;
+        ClassWriter classWriter = new ClassWriter(0);
+        MethodVisitor methodVisitor;
 
-      classWriter.visit(51, ACC_SUPER, BadClass, null, "java/lang/Object",
-                        null);
+        classWriter.visit(51, ACC_SUPER, BadClass, null, "java/lang/Object",
+                          null);
 
-      {
-          methodVisitor =
-              classWriter.visitMethod(ACC_PUBLIC | ACC_STATIC, "main",
-                                      "([Ljava/lang/String;)V", null, null);
-          methodVisitor.visitCode();
-          methodVisitor.visitInsn(RETURN);
-          methodVisitor.visitAttribute(new LargeStackMapTable());
-          methodVisitor.visitMaxs(0, 1);
-          methodVisitor.visitEnd();
-      }
-      classWriter.visitEnd();
+        {
+            methodVisitor =
+                classWriter.visitMethod(ACC_PUBLIC | ACC_STATIC, "main",
+                                        "([Ljava/lang/String;)V", null, null);
+            methodVisitor.visitCode();
+            methodVisitor.visitInsn(RETURN);
+            methodVisitor.visitAttribute(new LargeStackMapTable());
+            methodVisitor.visitMaxs(0, 1);
+            methodVisitor.visitEnd();
+        }
+        classWriter.visitEnd();
 
-      return classWriter.toByteArray();
+        return classWriter.toByteArray();
     }
 }
