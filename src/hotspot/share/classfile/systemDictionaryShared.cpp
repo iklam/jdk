@@ -399,7 +399,7 @@ bool SystemDictionaryShared::check_self_exclusion(InstanceKlass* k) {
 
 const char* SystemDictionaryShared::check_self_exclusion_helper(InstanceKlass* k, bool& log_warning) {
   assert_lock_strong(DumpTimeTable_lock);
-  if (CDSConfig::is_dumping_final_static_archive() && k->defined_by_other_loaders()
+  if ((CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) && k->defined_by_other_loaders()
       && k->in_aot_cache()) {
     return nullptr; // Do not exclude: unregistered classes are passed from preimage to final image.
   }
@@ -698,7 +698,7 @@ InstanceKlass* SystemDictionaryShared::get_unregistered_class(Symbol* name) {
 }
 
 void SystemDictionaryShared::copy_unregistered_class_size_and_crc32(InstanceKlass* klass) {
-  precond(CDSConfig::is_dumping_final_static_archive());
+  precond(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()));
   precond(klass->in_aot_cache());
 
   // A shared class must have a RunTimeClassInfo record
@@ -710,6 +710,21 @@ void SystemDictionaryShared::copy_unregistered_class_size_and_crc32(InstanceKlas
   DumpTimeClassInfo* info = get_info(klass);
   info->_clsfile_size = record->crc()->_clsfile_size;
   info->_clsfile_crc32 = record->crc()->_clsfile_crc32;
+}
+
+void SystemDictionaryShared::copy_unregistered_classes_for_retraining(JavaThread* current) {
+  precond(CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive());
+
+  // This function is called before any Java code is executed, so we must have not yet added
+  // any unregistered. As a result, we must be able to install all unregistered classes
+  // from the AOT cache into _unregistered_classes_table.
+  precond(_unregistered_classes_table == nullptr);
+  _info_for_static_archive._unregistered_dictionary.iterate_all([&](const RunTimeClassInfo* info) {
+    init_dumptime_info(info->klass());
+    bool added = add_unregistered_class(current, info->klass());
+    precond(added);
+    copy_unregistered_class_size_and_crc32(info->klass());
+  });
 }
 
 void SystemDictionaryShared::set_shared_class_misc_info(InstanceKlass* k, ClassFileStream* cfs) {
@@ -771,6 +786,11 @@ void SystemDictionaryShared::handle_class_unloading(InstanceKlass* klass) {
 }
 
 void SystemDictionaryShared::init_dumptime_info_from_preimage(InstanceKlass* k) {
+  if (CDSConfig::is_dumping_preimage_static_archive() && k->defined_by_other_loaders()) {
+    // FIXME: do we need to copy the verifier/linking constraints??
+    return;
+  }
+
   init_dumptime_info(k);
   copy_verification_info_from_preimage(k);
   copy_linking_constraints_from_preimage(k);
@@ -1008,7 +1028,7 @@ void SystemDictionaryShared::dumptime_classes_do(MetaspaceClosure* it) {
   assert_lock_strong(DumpTimeTable_lock);
 
   auto do_klass = [&] (InstanceKlass* k, DumpTimeClassInfo& info) {
-    if (CDSConfig::is_dumping_final_static_archive() && !k->is_loaded()) {
+    if ((CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) && !k->is_loaded()) {
       assert(k->defined_by_other_loaders(), "must be");
       info.metaspace_pointers_do(it);
     } else if (k->is_loader_alive() && !info.is_excluded()) {

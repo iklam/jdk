@@ -85,6 +85,10 @@ void AOTLinkedClassBulkLoader::preload_classes_impl(TRAPS) {
   initiate_loading(THREAD, "app", h_system_loader, table->boot2());
   initiate_loading(THREAD, "app", h_system_loader, table->platform());
   preload_classes_in_table(table->app(), "app", h_system_loader, CHECK);
+
+  if (CDSConfig::is_dumping_preimage_static_archive()) {
+   SystemDictionaryShared::copy_unregistered_classes_for_retraining(THREAD);
+  }
 }
 
 void AOTLinkedClassBulkLoader::preload_classes_in_table(Array<InstanceKlass*>* classes,

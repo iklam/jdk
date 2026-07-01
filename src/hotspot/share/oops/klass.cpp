@@ -829,7 +829,7 @@ void Klass::remove_java_mirror() {
     Klass* src_k = ArchiveBuilder::current()->get_source_addr(this);
     oop orig_mirror = src_k->java_mirror();
     if (orig_mirror == nullptr) {
-      assert(CDSConfig::is_dumping_final_static_archive(), "sanity");
+      assert(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()), "sanity");
       if (is_instance_klass()) {
         assert(InstanceKlass::cast(this)->defined_by_other_loaders(), "sanity");
       } else {

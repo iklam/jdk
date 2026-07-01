@@ -66,11 +66,12 @@ abstract public class CDSAppTester {
     private final String tempBaseArchiveFile;
     private int numProductionRuns = 0;
     private String whiteBoxJar = null;
-    private boolean inOneStepTraining = false;
     private boolean isAOTRetraining = false;
     private boolean generateBaseArchive = false;
     private String[] baseArchiveOptions = new String[0];
 
+    private final String aotConfigurationFileForRetraining;
+    private final String aotConfigurationFileForRetrainingLog;
     private final String aotCacheFileForRetraining;
     private final String aotCacheFileForRetrainingLog;
 
@@ -104,6 +105,8 @@ abstract public class CDSAppTester {
         tempBaseArchiveFile = name() + ".temp-base.jsa";
 
         // The following are used in AOT-Retrain -- load this AOTCache when training the app.
+        aotConfigurationFileForRetraining = name() + ".base.aotconfig";
+        aotConfigurationFileForRetrainingLog = logFileName(aotConfigurationFileForRetraining);;
         aotCacheFileForRetraining = name() + ".base.aot";
         aotCacheFileForRetrainingLog = logFileName(aotCacheFileForRetraining);;
     }
@@ -282,11 +285,21 @@ abstract public class CDSAppTester {
         return cmdLine;
     }
 
-    private OutputAnalyzer createAOTCacheFileForRetraining(boolean runAppInBaseCache) throws Exception {
+    private void createAOTCacheFileForRetraining(String args[], boolean runAppInBaseCache) throws Exception {
+        boolean oneStep = isOneStepTraining(args);
         String mode = runAppInBaseCache ? "(run the app once)" : "(--version only)";
+        String steps = oneStep ? " in one step" : " in two steps";
         System.out.println("\n============== Creating " + aotCacheFileForRetraining + " "
-                           + mode + ", to be used for re-training");
+                           + mode + steps + ", to be used for re-training");
 
+        if (oneStep) {
+            createAOTCacheFileForRetrainingOneStep(runAppInBaseCache);
+        } else {
+            createAOTCacheFileForRetrainingTwoStep(runAppInBaseCache);
+        }
+    }
+
+    private void createAOTCacheFileForRetrainingOneStep(boolean runAppInBaseCache) throws Exception {
         RunMode runMode = RunMode.TRAINING;
         String[] cmdLine = StringArrayUtils.concat(vmArgs(runMode),
                                                    "-XX:AOTMode=record",
@@ -306,7 +319,47 @@ abstract public class CDSAppTester {
             out =  execute(cmdLine, runMode, aotCacheFileForRetraining, aotCacheFileForRetrainingLog);
         }
         listOutputFile(aotCacheFileForRetrainingLog + ".0"); // the log file for the training run
-        return out;
+    }
+
+    private void createAOTCacheFileForRetrainingTwoStep(boolean runAppInBaseCache) throws Exception {
+        // Training step
+        RunMode runMode = RunMode.TRAINING;
+        String[] cmdLine = StringArrayUtils.concat(vmArgs(runMode),
+                                                   "-XX:AOTMode=record",
+                                                   "-XX:AOTConfiguration=" + aotConfigurationFileForRetraining,
+                                                   logToFile(aotConfigurationFileForRetrainingLog,
+                                                             "class+load=debug",
+                                                             "aot=debug",
+                                                             "cds=debug",
+                                                             "aot+class=debug"));
+        cmdLine = addCommonVMArgs(runMode, cmdLine);
+        OutputAnalyzer out;
+        if (runAppInBaseCache) {
+            cmdLine = StringArrayUtils.concat(cmdLine, appCommandLine(runMode));
+            out =  executeAndCheck(cmdLine, runMode, aotConfigurationFileForRetraining, aotConfigurationFileForRetrainingLog);
+        } else {
+            cmdLine = StringArrayUtils.concat(cmdLine, "--version");
+            out =  execute(cmdLine, runMode, aotConfigurationFileForRetraining, aotConfigurationFileForRetrainingLog);
+        }
+
+        // Assembly step
+        runMode = RunMode.ASSEMBLY;
+        cmdLine = StringArrayUtils.concat(vmArgs(runMode),
+                                                   "-Xlog:aot",
+                                                   "-Xlog:aot+heap=error",
+                                                   "-Xlog:cds",
+                                                   "-XX:AOTMode=create",
+                                                   "-XX:AOTConfiguration=" + aotConfigurationFileForRetraining,
+                                                   "-XX:AOTCache=" + aotCacheFileForRetraining,
+                                                   logToFile(aotCacheFileForRetrainingLog,
+                                                             "cds=debug",
+                                                             "aot=debug",
+                                                             "aot+class=debug",
+                                                             "aot+heap=warning",
+                                                             "aot+resolve=debug"));
+        cmdLine = addCommonVMArgs(runMode, cmdLine);
+        cmdLine = StringArrayUtils.concat(cmdLine, appCommandLine(runMode));
+        executeAndCheck(cmdLine, runMode, aotCacheFileForRetraining, aotCacheFileForRetrainingLog);
     }
 
     private OutputAnalyzer recordAOTConfiguration() throws Exception {
@@ -548,21 +601,16 @@ abstract public class CDSAppTester {
         productionRun();
     }
 
-    // See JEP 483
-    public void runAOTWorkflow(String... args) throws Exception {
-        this.workflow = Workflow.AOT;
-
-        // By default use twostep training -- tests are much easier to write this way, as
-        // the stdout/stderr of the training run is clearly separated from the assembly phase.
-        //
-        // Many older test cases written before JEP 514 were not aware of one step treaining
-        // and may not check the stdout/stderr correctly.
+    // By default use twostep training -- tests are much easier to write this way, as
+    // the stdout/stderr of the training run is clearly separated from the assembly phase.
+    //
+    // Many older test cases written before JEP 514 were not aware of one step treaining
+    // and may not check the stdout/stderr correctly.
+    private static boolean isOneStepTraining(String[] args) {
         boolean oneStepTraining = false;
 
-        if (System.getProperty("CDSAppTester.two.step.training") != null) {
-            oneStepTraining = false;
-        }
-        if (System.getProperty("CDSAppTester.one.step.training") != null) {
+        if (System.getProperty("CDSAppTester.two.step.training") == null &&
+            System.getProperty("CDSAppTester.one.step.training") != null) {
             oneStepTraining = true;
         }
 
@@ -578,13 +626,15 @@ abstract public class CDSAppTester {
             }
         }
 
-        if (oneStepTraining) {
-            try {
-                inOneStepTraining = true;
-                createAOTCacheOneStep();
-            } finally {
-                inOneStepTraining = false;
-            }
+        return oneStepTraining;
+    }
+
+    // See JEP 483
+    public void runAOTWorkflow(String... args) throws Exception {
+        this.workflow = Workflow.AOT;
+
+        if (isOneStepTraining(args)) {
+            createAOTCacheOneStep();
         } else {
             recordAOTConfiguration();
             createAOTCache();
@@ -595,7 +645,7 @@ abstract public class CDSAppTester {
     public void runAOTRetrainWorkflow(boolean runAppInBaseCache, String... args) throws Exception {
         this.workflow = Workflow.AOT;
 
-        createAOTCacheFileForRetraining(runAppInBaseCache);
+        createAOTCacheFileForRetraining(args, runAppInBaseCache);
 
         try {
             isAOTRetraining = true;
@@ -603,6 +653,10 @@ abstract public class CDSAppTester {
         } finally {
             isAOTRetraining = false;
         }
+    }
+    
+    public boolean isAOTRetraining() {
+        return this.isAOTRetraining;
     }
 
     // See JEP 483; stop at the assembly run; do not execute production run

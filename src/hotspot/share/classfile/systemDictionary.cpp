@@ -854,7 +854,7 @@ InstanceKlass* SystemDictionary::resolve_class_from_stream(
  InstanceKlass* k = nullptr;
 
 #if INCLUDE_CDS
-  if (!CDSConfig::is_dumping_static_archive()) {
+  if (!CDSConfig::is_dumping_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) {
     k = SystemDictionaryShared::lookup_from_stream(class_name,
                                                    class_loader,
                                                    cl_info.protection_domain(),
