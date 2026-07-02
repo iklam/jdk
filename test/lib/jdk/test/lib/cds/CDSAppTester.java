@@ -654,7 +654,7 @@ abstract public class CDSAppTester {
             isAOTRetraining = false;
         }
     }
-    
+
     public boolean isAOTRetraining() {
         return this.isAOTRetraining;
     }
