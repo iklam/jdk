@@ -399,7 +399,7 @@ bool SystemDictionaryShared::check_self_exclusion(InstanceKlass* k) {
 
 const char* SystemDictionaryShared::check_self_exclusion_helper(InstanceKlass* k, bool& log_warning) {
   assert_lock_strong(DumpTimeTable_lock);
-  if ((CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) && k->defined_by_other_loaders()
+  if ((CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration()) && k->defined_by_other_loaders()
       && k->in_aot_cache()) {
     return nullptr; // Do not exclude: unregistered classes are passed from preimage to final image.
   }
@@ -698,7 +698,7 @@ InstanceKlass* SystemDictionaryShared::get_unregistered_class(Symbol* name) {
 }
 
 void SystemDictionaryShared::copy_unregistered_class_size_and_crc32(InstanceKlass* klass) {
-  precond(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()));
+  precond(CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration());
   precond(klass->in_aot_cache());
 
   // A shared class must have a RunTimeClassInfo record
@@ -713,7 +713,7 @@ void SystemDictionaryShared::copy_unregistered_class_size_and_crc32(InstanceKlas
 }
 
 void SystemDictionaryShared::copy_unregistered_classes_for_retraining(JavaThread* current) {
-  precond(CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive());
+  precond(CDSConfig::is_redumping_aot_configuration());
 
   // This function is called before any Java code is executed, so we must have not yet added
   // any unregistered. As a result, we must be able to install all unregistered classes
@@ -730,7 +730,7 @@ void SystemDictionaryShared::copy_unregistered_classes_for_retraining(JavaThread
 // In both cases, we should never see two classes with the same name.
 void SystemDictionaryShared::copy_cached_unregistered_class(JavaThread* current, InstanceKlass* k) {
   precond(k->in_aot_cache());
-  precond(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()));
+  precond(CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration());
   init_dumptime_info(k);
   bool added = add_unregistered_class(current, k);
   assert(added, "must not have duplicates");
@@ -1043,7 +1043,7 @@ void SystemDictionaryShared::dumptime_classes_do(MetaspaceClosure* it) {
   assert_lock_strong(DumpTimeTable_lock);
 
   auto do_klass = [&] (InstanceKlass* k, DumpTimeClassInfo& info) {
-    if ((CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) && !k->is_loaded()) {
+    if ((CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration()) && !k->is_loaded()) {
       assert(k->defined_by_other_loaders(), "must be");
       info.metaspace_pointers_do(it);
     } else if (k->is_loader_alive() && !info.is_excluded()) {

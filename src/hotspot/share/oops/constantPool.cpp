@@ -447,7 +447,7 @@ void ConstantPool::remove_unshareable_info() {
   if (!src_cp->pool_holder()->is_loaded()) {
     precond(src_holder->in_aot_cache());
     precond(src_holder->defined_by_other_loaders());
-    precond(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()));
+    precond(CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration());
     // <src_cp> is a cached unregistered class that has been entered into
     // SystemDictionaryShared::_dumptime_table, but it has not been actually
     // loaded in this JVM lifetime. The resolved reference length should have already

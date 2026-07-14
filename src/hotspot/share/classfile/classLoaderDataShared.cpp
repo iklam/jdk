@@ -65,7 +65,7 @@ public:
   }
 
   void serialize(SerializeClosure* f) {
-    if (f->writing() && CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+    if (f->writing() && CDSConfig::is_redumping_aot_configuration()) {
       void* foo = nullptr;
       f->do_ptr((void**)&foo);
       f->do_ptr((void**)&foo);
@@ -253,7 +253,7 @@ void ClassLoaderDataShared::serialize(SerializeClosure* f) {
   _archived_platform_loader_data.serialize(f);
   _archived_system_loader_data.serialize(f);
 
-  if (f->writing() && CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+  if (f->writing() && CDSConfig::is_redumping_aot_configuration()) {
     void* foo = nullptr;
     f->do_ptr((void**)&foo);
     f->do_ptr((void**)&foo);

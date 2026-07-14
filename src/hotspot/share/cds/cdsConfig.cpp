@@ -868,7 +868,7 @@ bool CDSConfig::is_dumping_regenerated_lambdaform_invokers() {
     // that point to the lambda form invokers in the base archive. Such pointers will
     // be invalid if lambda form invokers are regenerated in the dynamic archive.
     return false;
-  } else if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+  } else if (CDSConfig::is_redumping_aot_configuration()) {
     // TODO -- explain why we don't do it when re-training
     return false;
   } else {

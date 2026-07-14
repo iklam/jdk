@@ -465,7 +465,7 @@ void AOTMappedHeapLoader::finish_initialization(FileMapInfo* info) {
       add_root_segment((objArrayOop)segment_oop);
     }
 
-    if (CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) {
+    if (CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration()) {
       StringTable::move_shared_strings_into_runtime_table();
     }
   }

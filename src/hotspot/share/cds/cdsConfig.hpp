@@ -142,6 +142,13 @@ public:
   static bool is_dumping_preimage_static_archive()           NOT_CDS_RETURN_(false);
   static bool is_dumping_final_static_archive()              NOT_CDS_RETURN_(false);
 
+  // New names:
+  static bool is_dumping_aot_configuration() { return is_dumping_preimage_static_archive(); }
+  static bool is_dumping_aot_cache()         { return is_dumping_final_static_archive(); }
+
+  // Iterative training
+  static bool is_redumping_aot_configuration() { return is_dumping_aot_configuration() && is_using_archive(); }
+
   // dynamic_archive
   static bool is_dumping_dynamic_archive()                   { return CDS_ONLY(_is_dumping_dynamic_archive) NOT_CDS(false); }
   static void enable_dumping_dynamic_archive(const char* output_path) NOT_CDS_RETURN;

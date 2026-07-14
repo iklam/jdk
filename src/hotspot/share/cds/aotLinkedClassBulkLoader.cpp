@@ -171,7 +171,7 @@ void AOTLinkedClassBulkLoader::link_classes_impl(TRAPS) {
 
   AOTLinkedClassTable* table = AOTLinkedClassTable::get();
 
-  if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+  if (CDSConfig::is_redumping_aot_configuration()) {
     allocate_scratch_oops(Universe::fillerArrayKlass(), CHECK);
     allocate_scratch_oops(Universe::boolArrayKlass(), CHECK);
     allocate_scratch_oops(Universe::charArrayKlass(), CHECK);
@@ -209,7 +209,7 @@ void AOTLinkedClassBulkLoader::link_classes_in_table(Array<InstanceKlass*>* clas
       // at this point.
       InstanceKlass* ik = classes->at(i);
       ik->link_class(CHECK);
-      if (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()) {
+      if (CDSConfig::is_redumping_aot_configuration()) {
         allocate_scratch_oops(ik, CHECK);
       }
     }

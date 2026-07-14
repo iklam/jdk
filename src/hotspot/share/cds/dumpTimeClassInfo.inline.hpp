@@ -44,7 +44,7 @@ void DumpTimeSharedClassTable::iterate_all_live_classes(Function function) const
   auto wrapper = [&] (InstanceKlass* k, DumpTimeClassInfo& info) {
     assert(SafepointSynchronize::is_at_safepoint(), "invariant");
     assert_lock_strong(DumpTimeTable_lock);
-    if ((CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive())) && !k->is_loaded()) {
+    if ((CDSConfig::is_dumping_final_static_archive() || CDSConfig::is_redumping_aot_configuration()) && !k->is_loaded()) {
       assert(k->defined_by_other_loaders(), "must be");
       function(k, info);
     } else if (k->is_loader_alive()) {
