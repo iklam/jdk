@@ -500,7 +500,7 @@ bool SystemDictionaryShared::check_dependencies_exclusion(InstanceKlass* k, Dump
     return true;
   }
 
-  if (CDSConfig::is_preserving_verification_constraints()) {
+  if (CDSConfig::is_preserving_verification_constraints() && !k->defined_by_other_loaders()) {
     bool excluded = false;
 
     iterate_verification_constraint_names(k, info, [&] (Symbol* constraint_class_name) {
@@ -720,11 +720,23 @@ void SystemDictionaryShared::copy_unregistered_classes_for_retraining(JavaThread
   // from the AOT cache into _unregistered_classes_table.
   precond(_unregistered_classes_table == nullptr);
   _info_for_static_archive._unregistered_dictionary.iterate_all([&](const RunTimeClassInfo* info) {
-    init_dumptime_info(info->klass());
-    bool added = add_unregistered_class(current, info->klass());
-    precond(added);
-    copy_unregistered_class_size_and_crc32(info->klass());
+    copy_cached_unregistered_class(current, info->klass());
   });
+}
+
+// This function is called early in VM bootstrap to copy unregistered classes
+// (a) from the AOT config file (in assembly phase), or
+// (b) from the AOT cache file (in retraining run)
+// In both cases, we should never see two classes with the same name.
+void SystemDictionaryShared::copy_cached_unregistered_class(JavaThread* current, InstanceKlass* k) {
+  precond(k->in_aot_cache());
+  precond(CDSConfig::is_dumping_final_static_archive() || (CDSConfig::is_dumping_preimage_static_archive() && CDSConfig::is_using_archive()));
+  init_dumptime_info(k);
+  bool added = add_unregistered_class(current, k);
+  assert(added, "must not have duplicates");
+  copy_unregistered_class_size_and_crc32(k);
+  copy_verification_info_from_preimage(k);
+  copy_linking_constraints_from_preimage(k);
 }
 
 void SystemDictionaryShared::set_shared_class_misc_info(InstanceKlass* k, ClassFileStream* cfs) {
@@ -787,8 +799,11 @@ void SystemDictionaryShared::handle_class_unloading(InstanceKlass* klass) {
 
 void SystemDictionaryShared::init_dumptime_info_from_preimage(InstanceKlass* k) {
   if (CDSConfig::is_dumping_preimage_static_archive() && k->defined_by_other_loaders()) {
-    // FIXME: do we need to copy the verifier/linking constraints??
-    return;
+    DEBUG_ONLY({
+        DumpTimeClassInfo* info = _dumptime_table->get(k);
+        guarantee(info != nullptr, "Already added in SystemDictionaryShared::copy_unregistered_classes_for_retraining()");
+      });
+    return; // Already inited
   }
 
   init_dumptime_info(k);
