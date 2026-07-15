@@ -172,19 +172,25 @@ static traceid get_source(const AOTClassLocation* cl, JavaThread* jt) {
   return JfrSymbolTable::add(url);
 }
 
-void JfrClassDefineEvent::on_restoration(const InstanceKlass* ik, JavaThread* jt) {
+void JfrClassDefineEvent::on_restoration(const InstanceKlass* ik, JavaThread* jt, const ClassFileStream* st) {
   assert(ik != nullptr, "invariant");
   assert(ik->trace_id() != 0, "invariant");
   assert(jt != nullptr, "invariant");
 
   if (EventClassDefine::is_enabled()) {
-    ResourceMark rm(jt);
-    assert(is_not_retransforming(ik, jt), "invariant");
-    const int index = ik->shared_classpath_index();
-    assert(index >= 0, "invariant");
-    const AOTClassLocation* const cl = AOTClassLocationConfig::runtime()->class_location_at(index);
-    assert(cl != nullptr, "invariant");
-    send_event(ik, cl->is_modules_image() ? module_path(ik, jt) : get_source(cl, jt));
+    if (st != nullptr) {
+      precond(ik->defined_by_other_loaders());
+      assert(st->source() != nullptr, "Enforced in SystemDictionaryShared::lookup_from_stream()");
+      send_event(ik, JfrSymbolTable::add(st->source()));
+    } else {
+      ResourceMark rm(jt);
+      assert(is_not_retransforming(ik, jt), "invariant");
+      const int index = ik->shared_classpath_index();
+      assert(index >= 0, "invariant");
+      const AOTClassLocation* const cl = AOTClassLocationConfig::runtime()->class_location_at(index);
+      assert(cl != nullptr, "invariant");
+      send_event(ik, cl->is_modules_image() ? module_path(ik, jt) : get_source(cl, jt));
+    }
   }
 }
 #endif

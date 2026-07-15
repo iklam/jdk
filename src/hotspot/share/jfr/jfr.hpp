@@ -35,6 +35,7 @@ class CallInfo;
 class ciKlass;
 class ciMethod;
 class ClassFileParser;
+class ClassFileStream;
 class GraphBuilder;
 class InstanceKlass;
 class JavaThread;
@@ -80,7 +81,7 @@ class Jfr : AllStatic {
   static bool has_sample_request(JavaThread* jt);
   static void check_and_process_sample_request(JavaThread* jt);
   static void on_report_java_out_of_memory();
-  CDS_ONLY(static void on_restoration(const Klass* k, JavaThread* jt);)
+  CDS_ONLY(static void on_restoration(const Klass* k, JavaThread* jt, const ClassFileStream *cfs);)
 };
 
 #endif // SHARE_JFR_JFR_HPP

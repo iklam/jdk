@@ -1125,11 +1125,11 @@ InstanceKlass* SystemDictionary::load_shared_class(InstanceKlass* ik,
     ik->restore_unshareable_info(loader_data, protection_domain, pkg_entry, CHECK_NULL);
   }
 
-  load_shared_class_misc(ik, loader_data);
+  load_shared_class_misc(ik, loader_data, cfs);
   return ik;
 }
 
-void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData* loader_data) {
+void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData* loader_data, const ClassFileStream *cfs) {
   ik->print_class_load_logging(loader_data, nullptr, nullptr);
 
   // For boot loader, ensure that GetSystemPackage knows that a class in this
@@ -1145,6 +1145,8 @@ void SystemDictionary::load_shared_class_misc(InstanceKlass* ik, ClassLoaderData
   if (CDSConfig::is_dumping_final_static_archive()) {
     SystemDictionaryShared::init_dumptime_info_from_preimage(ik);
   }
+
+  JFR_ONLY(Jfr::on_restoration(ik, JavaThread::current(), ik->defined_by_other_loaders() ? cfs : nullptr);)
 }
 
 // This is much more lightweight than SystemDictionary::resolve_or_null

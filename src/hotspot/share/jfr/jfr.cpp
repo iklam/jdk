@@ -176,11 +176,11 @@ void Jfr::on_report_java_out_of_memory() {
 }
 
 #if INCLUDE_CDS
-void Jfr::on_restoration(const Klass* k, JavaThread* jt) {
+void Jfr::on_restoration(const Klass* k, JavaThread* jt, const ClassFileStream *cfs) {
   assert(k != nullptr, "invariant");
   JfrTraceId::restore(k);
   if (k->is_instance_klass()) {
-    JfrClassDefineEvent::on_restoration(InstanceKlass::cast(k), jt);
+    JfrClassDefineEvent::on_restoration(InstanceKlass::cast(k), jt, cfs);
   }
 }
 #endif
