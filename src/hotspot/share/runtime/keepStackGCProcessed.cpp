@@ -24,7 +24,7 @@
 
 #include "runtime/keepStackGCProcessed.hpp"
 #include "runtime/safepoint.hpp"
-#include "runtime/stackWatermark.inline.hpp"
+//NONEED #include "runtime/stackWatermark.inline.hpp"
 #include "runtime/stackWatermarkSet.inline.hpp"
 
 KeepStackGCProcessedMark::KeepStackGCProcessedMark(JavaThread* jt) :

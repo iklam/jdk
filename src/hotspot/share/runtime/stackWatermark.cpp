@@ -24,7 +24,7 @@
 
 #include "logging/log.hpp"
 #include "runtime/atomicAccess.hpp"
-#include "runtime/frame.inline.hpp"
+//NONEED #include "runtime/frame.inline.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/osThread.hpp"
 #include "runtime/safepoint.hpp"
