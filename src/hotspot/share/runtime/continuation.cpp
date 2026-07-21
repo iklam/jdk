@@ -24,7 +24,7 @@
 
 #include "classfile/vmSymbols.hpp"
 #include "gc/shared/barrierSetNMethod.hpp"
-//NONEED #include "oops/method.inline.hpp"
+/*NEED*/#include "oops/method.inline.hpp"
 //NONEED #include "oops/oop.inline.hpp"
 #include "prims/jvmtiThreadState.inline.hpp"
 #include "runtime/continuation.hpp"

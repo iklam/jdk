@@ -30,7 +30,7 @@
 //NONEED #include "interpreter/interpreter.hpp"
 #include "interpreter/linkResolver.hpp"
 //NONEED #include "memory/universe.hpp"
-//NONEED #include "oops/method.inline.hpp"
+/*NEED*/#include "oops/method.inline.hpp"
 //NONEED #include "oops/oop.inline.hpp"
 //NONEED #include "prims/jniCheck.hpp"
 #include "prims/jvmtiExport.hpp"
