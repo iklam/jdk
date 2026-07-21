@@ -561,6 +561,12 @@ void CDSConfig::check_aotmode_record() {
     _is_using_optimized_module_handling = false;
     _is_using_full_module_graph = false;
   } else {
+    if (!FLAG_IS_DEFAULT(AOTMode)) {
+      FLAG_SET_ERGO_IF_DEFAULT(AOTClassLinking, true);
+    }
+    if (!AOTClassLinking) {
+      vm_exit_during_initialization("AOTClassLinking cannot be disabled when both AOTCache and AOTConfiguration are specified");
+    }
     // Re-training -- we must be able to load the specified AOTCache
     log_info(aot)("re-training: loading AOTCache=%s and writing AOTConfiguration=%s",
                   AOTCache, AOTConfiguration);

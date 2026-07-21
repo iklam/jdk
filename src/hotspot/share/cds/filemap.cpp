@@ -246,6 +246,7 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _spec_trap_limit_extra_entries = SpecTrapLimitExtraEntries;
   _max_heap_size = MaxHeapSize;
   _use_optimized_module_handling = CDSConfig::is_using_optimized_module_handling();
+  _aot_class_linking_value = AOTClassLinking;
   _has_aot_linked_classes = CDSConfig::is_dumping_aot_linked_classes();
   _has_full_module_graph = CDSConfig::is_dumping_full_module_graph();
 
@@ -1730,7 +1731,11 @@ bool FileMapInfo::open_as_input() {
 
   if (!open_for_read() || !init_from_file(_fd) || !validate_header()) {
     if (_is_static) {
-      AOTMetaspace::report_loading_error("Loading static archive failed.");
+      if (CDSConfig::new_aot_flags_used()) {
+        AOTMetaspace::report_loading_error("Loading %s failed.", CDSConfig::type_of_archive_being_loaded());
+      } else {
+        AOTMetaspace::report_loading_error("Loading static archive failed.");
+      }
       return false;
     } else {
       AOTMetaspace::report_loading_error("Loading dynamic archive failed.");
@@ -1948,6 +1953,22 @@ bool FileMapHeader::validate() {
     // Only the static archive can contain the full module graph.
     if (!_has_full_module_graph) {
       CDSConfig::stop_using_full_module_graph("archive was created without full module graph");
+    }
+  }
+
+  if (CDSConfig::is_redumping_aot_configuration() || CDSConfig::is_dumping_aot_cache()) {
+    if (_aot_class_linking_value && !AOTClassLinking) {
+      AOTMetaspace::report_loading_error("%s was created with AOTClassLinking enabled. It cannot be used when "
+                                            "AOTClassLinking is disabled.",
+                                            CDSConfig::type_of_archive_being_loaded());
+      return false;
+    }
+
+    if (!_aot_class_linking_value && AOTClassLinking) {
+      AOTMetaspace::report_loading_error("%s was created with AOTClassLinking disabled. It cannot be used when "
+                                            "AOTClassLinking is enabled.",
+                                            CDSConfig::type_of_archive_being_loaded());
+      return false;
     }
   }
 

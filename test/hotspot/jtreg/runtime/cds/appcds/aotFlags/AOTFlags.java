@@ -144,21 +144,9 @@ public class AOTFlags {
             "-Xlog:aot",
             "-cp", appJar);
         out = CDSTestUtils.executeAndLog(pb, "asm");
-        out.shouldContain("AOTCache creation is complete");
-        out.shouldMatch("hello[.]aot");
-        out.shouldHaveExitValue(0);
-
-        //----------------------------------------------------------------------
-        printTestCase("Production Run with AOTCache, which was created with -XX:-AOTClassLinking");
-        pb = ProcessTools.createLimitedTestJavaProcessBuilder(
-            "-XX:AOTCache=" + aotCacheFile,
-            "-Xlog:aot",
-            "-cp", appJar, helloClass);
-        out = CDSTestUtils.executeAndLog(pb, "prod");
-        out.shouldContain("Using AOT-linked classes: false (static archive: no aot-linked classes)");
-        out.shouldContain("Opened AOT cache hello.aot.");
-        out.shouldContain("Hello World");
-        out.shouldHaveExitValue(0);
+        out.shouldNotContain("AOTCache creation is complete");
+        out.shouldContain("AOT configuration file was created with AOTClassLinking enabled. It cannot be used when AOTClassLinking is disabled");
+        out.shouldHaveExitValue(1);
 
         //----------------------------------------------------------------------
         printTestCase("Training run with -XX:-AOTClassLinking, but assembly run with -XX:+AOTClassLinking");
@@ -181,8 +169,32 @@ public class AOTFlags {
             "-Xlog:aot=debug",
             "-cp", appJar);
         out = CDSTestUtils.executeAndLog(pb, "asm");
+        out.shouldNotContain("Writing AOTCache file:");
+        out.shouldContain("AOT configuration file was created with AOTClassLinking disabled. It cannot be used when AOTClassLinking is enabled");
+        out.shouldHaveExitValue(1);
+
+        //----------------------------------------------------------------------
+        printTestCase("Training and assembly runs with -XX:-AOTClassLinking");
+        pb = ProcessTools.createLimitedTestJavaProcessBuilder(
+            "-XX:AOTMode=create",
+            "-XX:-AOTClassLinking",
+            "-XX:AOTConfiguration=" + aotConfigFile,
+            "-XX:AOTCache=" + aotCacheFile,
+            "-Xlog:aot=debug",
+            "-cp", appJar);
+        out = CDSTestUtils.executeAndLog(pb, "asm");
         out.shouldContain("Writing AOTCache file:");
         out.shouldMatch("aot.*hello[.]aot");
+        out.shouldHaveExitValue(0);
+
+        pb = ProcessTools.createLimitedTestJavaProcessBuilder(
+            "-XX:AOTCache=" + aotCacheFile,
+            "-Xlog:aot",
+            "-cp", appJar, helloClass);
+        out = CDSTestUtils.executeAndLog(pb, "prod");
+        out.shouldContain("Using AOT-linked classes: false (static archive: no aot-linked classes)");
+        out.shouldContain("Opened AOT cache hello.aot.");
+        out.shouldContain("Hello World");
         out.shouldHaveExitValue(0);
 
         //----------------------------------------------------------------------
