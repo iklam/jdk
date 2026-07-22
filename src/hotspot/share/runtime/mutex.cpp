@@ -27,7 +27,7 @@
 #include "runtime/interfaceSupport.inline.hpp"
 //NONEED #include "runtime/javaThread.inline.hpp"
 #include "runtime/mutex.hpp"
-#include "runtime/os.inline.hpp"
+/*NEED*/ #include "runtime/os.inline.hpp"
 //NONEED #include "runtime/osThread.hpp"
 //NONEED #include "runtime/safepointMechanism.inline.hpp"
 #include "runtime/semaphore.inline.hpp"

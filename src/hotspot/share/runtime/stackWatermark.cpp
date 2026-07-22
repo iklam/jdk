@@ -27,12 +27,12 @@
 //NONEED #include "runtime/frame.inline.hpp"
 #include "runtime/javaThread.hpp"
 #include "runtime/osThread.hpp"
-#include "runtime/safepoint.hpp"
+//NONEED #include "runtime/safepoint.hpp"
 #include "runtime/stackFrameStream.inline.hpp"
 #include "runtime/stackWatermark.inline.hpp"
-#include "utilities/debug.hpp"
+//NONEED #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
-#include "utilities/macros.hpp"
+//NONEED #include "utilities/macros.hpp"
 #include "utilities/preserveException.hpp"
 
 class StackWatermarkFramesIterator : public CHeapObj<mtThread> {

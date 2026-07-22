@@ -32,7 +32,7 @@
 //NONEED #include "oops/oop.inline.hpp"
 #include "prims/jvmtiThreadState.hpp"
 //NONEED #include "prims/methodHandles.hpp"
-#include "runtime/frame.inline.hpp"
+//NONEED #include "runtime/frame.inline.hpp"
 //NONEED #include "runtime/handles.inline.hpp"
 #include "runtime/monitorChunk.hpp"
 //NONEED #include "runtime/sharedRuntime.hpp"
