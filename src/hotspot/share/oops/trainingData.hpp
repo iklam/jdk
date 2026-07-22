@@ -419,6 +419,8 @@ private:
       return false; // not found
     }
     void replace_or_append(E old_dep, E new_dep) {
+      TrainingDataLocker::assert_can_add();
+      copy_on_write_if_necessary();
       int i = 0;
       for (; i < length(); i++) {
         if (at(i) == old_dep) {
