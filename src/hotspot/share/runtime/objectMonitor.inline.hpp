@@ -29,7 +29,7 @@
 
 #include "classfile/vmSymbols.hpp"
 #include "logging/log.hpp"
-#include "oops/access.inline.hpp"
+//NONEED #include "oops/access.inline.hpp"
 #include "oops/markWord.hpp"
 #include "runtime/atomicAccess.hpp"
 #include "runtime/globals.hpp"

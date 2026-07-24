@@ -31,6 +31,7 @@
 #include "compiler/oopMap.inline.hpp"
 #include "interpreter/oopMapCache.hpp"
 #include "runtime/frame.inline.hpp"
+#include "runtime/handles.inline.hpp"
 #include "runtime/objectMonitor.hpp"
 #include "runtime/stackValue.hpp"
 #include "runtime/synchronizer.hpp"

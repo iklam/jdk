@@ -41,7 +41,7 @@
 /*NEED*/ #include "runtime/vmOperations.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
-#include "utilities/preserveException.hpp"
+/*NEED*/ #include "utilities/preserveException.hpp"
 
 // Wrapper for all entry points to the virtual machine.
 
