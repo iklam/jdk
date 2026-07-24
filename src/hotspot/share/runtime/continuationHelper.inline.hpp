@@ -30,6 +30,7 @@
 #include "code/scopeDesc.hpp"
 #include "compiler/oopMap.inline.hpp"
 #include "interpreter/oopMapCache.hpp"
+#include "memory/resourceArea.hpp"
 #include "runtime/frame.inline.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/objectMonitor.hpp"

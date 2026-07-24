@@ -29,7 +29,7 @@
 
 //NONEED #include "code/codeCache.inline.hpp"
 #include "compiler/oopMap.hpp"
-//NONEED #include "interpreter/interpreter.hpp"
+/*NEED*/ #include "interpreter/interpreter.hpp"
 #include "logging/log.hpp"
 //NONEED #include "oops/instanceStackChunkKlass.inline.hpp"
 #include "oops/method.hpp"
