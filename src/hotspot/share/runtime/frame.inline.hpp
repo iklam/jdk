@@ -27,13 +27,13 @@
 
 #include "runtime/frame.hpp"
 
-//NONEED #include "code/codeBlob.inline.hpp"
+/*NEED*/ #include "code/codeBlob.inline.hpp"
 #include "code/nmethod.inline.hpp"
-//NONEED #include "interpreter/interpreter.hpp"
+/*NEED*/ #include "interpreter/interpreter.hpp"
 #include "oops/method.hpp"
 /*NEED*/ #include "oops/stackChunkOop.inline.hpp"
 #include "runtime/continuation.hpp"
-//NONEED #include "runtime/registerMap.hpp"
+/*NEED*/ #include "runtime/registerMap.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "utilities/macros.hpp"
 #ifdef ZERO
