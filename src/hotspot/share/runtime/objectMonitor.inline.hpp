@@ -34,7 +34,7 @@
 #include "runtime/atomicAccess.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/javaThread.inline.hpp"
-#include "runtime/lockStack.inline.hpp"
+//NONEED #include "runtime/lockStack.inline.hpp"
 #include "runtime/synchronizer.hpp"
 #include "runtime/threadIdentifier.hpp"
 #include "utilities/checkedCast.hpp"
