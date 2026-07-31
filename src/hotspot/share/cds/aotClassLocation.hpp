@@ -218,6 +218,8 @@ public:
     return _runtime_instance;
   }
 
+  static void runtime_dispose();
+
   // Common accessors
   int boot_cp_start_index()          const { return 1; }
   int boot_cp_end_index()            const { return _boot_classpath_end; }

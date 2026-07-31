@@ -1072,6 +1072,16 @@ bool AOTClassLocationConfig::validate(const char* cache_filename, bool has_aot_l
   return success;
 }
 
+void AOTClassLocationConfig::runtime_dispose() {
+  if (_actual_boot_and_app_locations_size > 0) {
+    for (int i = 0; i < _actual_boot_and_app_locations_size; i++) {
+      os::free(_actual_boot_and_app_locations[i]);
+    }
+    os::free(_actual_boot_and_app_locations);
+  }
+  _runtime_instance = nullptr;
+}
+
 void AOTClassLocationConfig::log_locations(const char* cache_filename, bool is_write) const {
   if (log_is_enabled(Info, class, path)) {
     LogStreamHandle(Info, class, path) st;
