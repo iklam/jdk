@@ -31,6 +31,7 @@
 #include "cds/heapShared.hpp"
 #include "ci/ciUtilities.hpp"
 #include "classfile/javaAssertions.hpp"
+#include "classfile/javaClasses.hpp"
 #include "code/aotCodeCache.hpp"
 #include "code/codeCache.hpp"
 #include "gc/shared/barrierSetAssembler.hpp"
@@ -52,6 +53,7 @@
 #include "runtime/stubInfo.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "utilities/copy.hpp"
+#include "utilities/hashTable.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Runtime1.hpp"
 #endif
@@ -2233,28 +2235,47 @@ void AOTCodeAddressTable::set_stubgen_stubs_complete() {
 }
 
 #ifdef PRODUCT
+#define CSTRING_TABLE_SIZE 571 // prime number
 #define INITIAL_STR_CACHE_SIZE 200
 #else
+#define CSTRING_TABLE_SIZE 1949 // prime number
 #define INITIAL_STR_CACHE_SIZE 2000
 #endif
 static const int _c_str_base = _all_max;
 
-static GrowableArray<const char*>* _C_strings_old = nullptr; // Incoming strings
-static GrowableArray<const char*>* _C_strings_new = nullptr; // Cached duplicates
-static GrowableArray<int>* _C_strings_id = nullptr;  // id corresponding to index in _C_strings_new[]
-static GrowableArray<int>* _C_strings_ix = nullptr;  // index in _C_strings_new[] corresponding to id
+struct AOTCStringInfo {
+  const char* _dup;
+  int _id;
+};
 
+inline unsigned int string_hash(const char* const& str) {
+  return java_lang_String::hash_code((const jbyte*)str, checked_cast<int>(strlen(str)));
+}
+
+inline bool string_equals(const char* const& str1, const char* const& str2) {
+  return strcmp(str1, str2) == 0;
+}
+
+// _C_strings and _id_to_C_strings are used only when building the AOT cache.
+using AOTCStringsTable = HashTable<const char*,
+                                   AOTCStringInfo,
+                                   CSTRING_TABLE_SIZE,
+                                   AnyObj::C_HEAP,
+                                   mtCode,
+                                   &string_hash,
+                                   &string_equals>;
+static AOTCStringsTable* _C_strings;
+static GrowableArray<const AOTCStringInfo*>* _id_to_C_strings = nullptr;
+
+// _cached_C_strings and _C_strings_count are used only when loading from an AOT cache.
 static const char** _cached_C_strings = nullptr;
 static int _C_strings_count = 0;
-static int _C_strings_used = 0;
 
 void AOTCodeCache::init_C_strings_caching() {
-  assert(_C_strings_old == nullptr, "Initialize only once");
-  // Allocate arrays in C heap
-  _C_strings_old = new(mtCode) GrowableArray<const char*>(INITIAL_STR_CACHE_SIZE, 0, nullptr, mtCode);
-  _C_strings_new = new(mtCode) GrowableArray<const char*>(INITIAL_STR_CACHE_SIZE, 0, nullptr, mtCode);
-  _C_strings_id  = new(mtCode) GrowableArray<int>(INITIAL_STR_CACHE_SIZE, 0, -1, mtCode);
-  _C_strings_ix  = new(mtCode) GrowableArray<int>(INITIAL_STR_CACHE_SIZE, 0, -1, mtCode);
+  assert(_C_strings == nullptr, "Initialize only once");
+
+  _C_strings = new (mtCode)AOTCStringsTable;
+  _id_to_C_strings = new(mtCode) GrowableArray<const AOTCStringInfo*>(INITIAL_STR_CACHE_SIZE, 0, nullptr, mtCode);
 }
 
 void AOTCodeCache::load_strings() {
@@ -2286,17 +2307,20 @@ void AOTCodeCache::load_strings() {
 }
 
 int AOTCodeCache::store_strings() {
-  if (_C_strings_used > 0) {
-    MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
+  MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
+  int num_strings = _id_to_C_strings->length();
+  if (num_strings > 0) {
     uint offset = _write_position;
     uint length = 0;
-    uint* lengths = (uint *)reserve_bytes(sizeof(uint) * _C_strings_used);
+    uint* lengths = (uint *)reserve_bytes(sizeof(uint) * num_strings);
     if (lengths == nullptr) {
       return -1;
     }
     // Write strings into AOT cache in `id` order.
-    for (int i = 0; i < _C_strings_used; i++) {
-      const char* str = _C_strings_new->at(_C_strings_ix->at(i));
+    for (int i = 0; i < num_strings; i++) {
+      const AOTCStringInfo* info = _id_to_C_strings->at(i);
+      precond(info->_id == i);
+      const char* str = info->_dup;
       log_trace(aot, codecache, stringtable)("store_strings: _C_strings[%d] " INTPTR_FORMAT " '%s'", i, p2i(str), str);
       uint len = (uint)strlen(str) + 1;
       length += len;
@@ -2308,9 +2332,9 @@ int AOTCodeCache::store_strings() {
       }
     }
     log_debug(aot, codecache, exit)("  Wrote %d C strings of total length %d at offset %d to AOT Code Cache",
-                                    _C_strings_used, length, offset);
+                                    num_strings, length, offset);
   }
-  return _C_strings_used;
+  return num_strings;
 }
 
 const char* AOTCodeCache::add_C_string(const char* str) {
@@ -2323,26 +2347,21 @@ const char* AOTCodeCache::add_C_string(const char* str) {
   return str;
 }
 
+// Identical C strings get the same ID
 const char* AOTCodeAddressTable::add_C_string(const char* str) {
-  // Check previous strings address
-  for (int i = 0; i < _C_strings_count; i++) {
-    const char* dup = _C_strings_new->at(i);
-    if (_C_strings_old->at(i) == str) {
-      return dup; // Found previous one - return our duplicate
-    } else if (strcmp(dup, str) == 0) {
-      return dup;
-    }
+  assert_lock_strong(AOTCodeCStrings_lock);
+  AOTCStringInfo* info = _C_strings->get(str);
+  if (info != nullptr) {
+    return info->_dup;
+  } else {
+    AOTCStringInfo new_info;
+    const char* dup = os::strdup(str);
+    new_info._dup = dup;
+    new_info._id = -1; // ID is assigned on first call to id_for_C_string().
+    info = _C_strings->get(str);
+    _C_strings->put_when_absent(dup, new_info);
+    return dup;
   }
-  // Add new one string.
-  // Passed in string can be freed and used space become inaccessible.
-  // Keep original address but duplicate string for future compare.
-  _C_strings_old->at_put_grow(_C_strings_count, str);
-  const char* dup = os::strdup(str);
-  _C_strings_new->at_put_grow(_C_strings_count, dup);
-  _C_strings_id->at_put_grow(_C_strings_count, -1);
-  log_trace(aot, codecache, stringtable)("add_C_string: [%d] " INTPTR_FORMAT " '%s'", _C_strings_count, p2i(dup), dup);
-  _C_strings_count++;
-  return dup;
 }
 
 int AOTCodeAddressTable::id_for_C_string(address str) {
@@ -2351,25 +2370,21 @@ int AOTCodeAddressTable::id_for_C_string(address str) {
     return BAD_ADDRESS_ID;
   }
   MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
-  for (int i = 0; i < _C_strings_count; i++) {
-    if (_C_strings_new->at(i) == (const char*)str) { // found
-      int id = _C_strings_id->at(i);
-      if (id >= 0) {
-        assert(id < _C_strings_used, "%d >= %d", id , _C_strings_used);
-        return id; // Found recorded
-      }
-      // Not found in recorded, add new
-      id = _C_strings_used++;
-      _C_strings_ix->at_put_grow(id, i);
-      _C_strings_id->at_put_grow(i, id);
-      log_trace(aot, codecache, stringtable)("id_for_C_string: _C_strings[%d ==> %d] " INTPTR_FORMAT " '%s'", i, id, p2i(str), str);
-      return id;
-    }
+  AOTCStringInfo* info = _C_strings->get((const char*)str);
+  if (info == nullptr) {
+    return BAD_ADDRESS_ID;
   }
-  return BAD_ADDRESS_ID;
+  if (info->_id < 0) {
+    // ID is not assigned yet.
+    info->_id = _id_to_C_strings->length();
+    _id_to_C_strings->append(info);
+    log_trace(aot, codecache, stringtable)("id_for_C_string: _C_strings[%d] = " INTPTR_FORMAT " '%s'", info->_id, p2i(str), str);
+  }
+  return info->_id;
 }
 
 address AOTCodeAddressTable::address_for_C_string(int idx) {
+  assert(AOTCodeCache::is_on_for_use(), "should be called only when loading from AOT code cache");
   assert((uint)idx < (uint)_C_strings_count, " %d >= %d", idx, _C_strings_count);
   precond(_cached_C_strings != nullptr);
   return (address)_cached_C_strings[idx];
