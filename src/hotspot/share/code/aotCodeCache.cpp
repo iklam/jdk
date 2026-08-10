@@ -1791,7 +1791,7 @@ bool AOTCodeCache::write_asm_remarks(CodeBlob& cb) {
       return false;
     }
     const char* cstr = add_C_string(str);
-    int id = _table->id_for_C_string((address)cstr);
+    int id = _table->id_for_C_string(cstr);
     assert(id != BAD_ADDRESS_ID, "asm remark string '%s' not found in AOTCodeAddressTable", str);
     n = write_bytes(&id, sizeof(int));
     if (n != sizeof(int)) {
@@ -1833,7 +1833,7 @@ bool AOTCodeCache::write_dbg_strings(CodeBlob& cb) {
   bool result = cb.dbg_strings().iterate([&] (const char* str) -> bool {
     log_trace(aot, codecache, stubs)("dbg string=%s", str);
     const char* cstr = add_C_string(str);
-    int id = _table->id_for_C_string((address)cstr);
+    int id = _table->id_for_C_string(cstr);
     assert(id != BAD_ADDRESS_ID, "db string '%s' not found in AOTCodeAddressTable", str);
     uint n = write_bytes(&id, sizeof(int));
     if (n != sizeof(int)) {
@@ -2364,13 +2364,13 @@ const char* AOTCodeAddressTable::add_C_string(const char* str) {
   }
 }
 
-int AOTCodeAddressTable::id_for_C_string(address str) {
+int AOTCodeAddressTable::id_for_C_string(const char* str) {
   assert(AOTCodeCache::is_on_for_dump(), "should be called only during AOT code cache dump");
   if (str == nullptr) {
     return BAD_ADDRESS_ID;
   }
   MutexLocker ml(AOTCodeCStrings_lock, Mutex::_no_safepoint_check_flag);
-  AOTCStringInfo* info = _C_strings->get((const char*)str);
+  AOTCStringInfo* info = _C_strings->get(str);
   if (info == nullptr) {
     return BAD_ADDRESS_ID;
   }
@@ -2443,10 +2443,12 @@ int AOTCodeAddressTable::id_for_address(address addr, RelocIterator reloc, CodeB
       return id;
     }
   }
-  // Seach for C string
-  id = id_for_C_string(addr);
-  if (id != BAD_ADDRESS_ID) {
-    return id + _c_str_base;
+  if (reloc.type() == relocInfo::external_word_type) {
+    // Seach for C string
+    id = id_for_C_string((const char*)addr);
+    if (id != BAD_ADDRESS_ID) {
+      return id + _c_str_base;
+    }
   }
   if (StubRoutines::contains(addr) || CodeCache::find_blob(addr) != nullptr) {
     // Search for a matching stub entry

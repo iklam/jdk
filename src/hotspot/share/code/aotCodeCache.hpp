@@ -170,7 +170,7 @@ public:
   void set_c2_stubs_complete();
   void set_stubgen_stubs_complete();
   const char* add_C_string(const char* str);
-  int  id_for_C_string(address str);
+  int  id_for_C_string(const char* str);
   address address_for_C_string(int idx);
   int  id_for_address(address addr, RelocIterator iter, CodeBlob* code_blob);
   address address_for_id(int id);
