@@ -36,12 +36,9 @@
  * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
  * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
- * @build AOTCodeFlags JavacBenchApp
+ * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 JavacBenchApp
- *                 JavacBenchApp$ClassFile
- *                 JavacBenchApp$FileManager
- *                 JavacBenchApp$SourceFile
+ *                 AOTCodeFlagsTestApp
  * @run driver/timeout=1500 AOTCodeFlags
  */
 /**
@@ -58,12 +55,9 @@
  * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
  * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
- * @build AOTCodeFlags JavacBenchApp
+ * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 JavacBenchApp
- *                 JavacBenchApp$ClassFile
- *                 JavacBenchApp$FileManager
- *                 JavacBenchApp$SourceFile
+ *                 AOTCodeFlagsTestApp
  * @run driver/timeout=1500 AOTCodeFlags Z
  */
 /**
@@ -80,12 +74,9 @@
  * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
  * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
- * @build AOTCodeFlags JavacBenchApp
+ * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 JavacBenchApp
- *                 JavacBenchApp$ClassFile
- *                 JavacBenchApp$FileManager
- *                 JavacBenchApp$SourceFile
+ *                 AOTCodeFlagsTestApp
  * @run driver/timeout=1500 AOTCodeFlags Shenandoah
  */
 /**
@@ -102,12 +93,9 @@
  * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
  * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
- * @build AOTCodeFlags JavacBenchApp
+ * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 JavacBenchApp
- *                 JavacBenchApp$ClassFile
- *                 JavacBenchApp$FileManager
- *                 JavacBenchApp$SourceFile
+ *                 AOTCodeFlagsTestApp
  * @run driver/timeout=1500 AOTCodeFlags Parallel
  */
 
@@ -212,7 +200,7 @@ public class AOTCodeFlags {
 
         @Override
         public String[] appCommandLine(RunMode runMode) {
-            return new String[] { "JavacBenchApp", "1" };
+            return new String[] { "AOTCodeFlagsTestApp" };
         }
 
         @Override
@@ -301,5 +289,27 @@ public class AOTCodeFlags {
                 }
             }
         }
+    }
+}
+
+// Run long enough to trigger C1 and C2 compilations.
+class AOTCodeFlagsTestApp {
+    public static volatile int counter;
+
+    public static void main(String args[]) {
+        long started = System.currentTimeMillis();
+
+        while (System.currentTimeMillis() - started < 150) {
+            outer();
+        }
+    }
+    static void outer() {
+        for (int i = 0; i < 50 * 1000; i++) {
+            inner();
+        }
+    }
+
+    static void inner() {
+        counter++;
     }
 }
