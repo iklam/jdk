@@ -25,6 +25,7 @@
 #ifndef SHARE_CODE_AOTCODECACHE_HPP
 #define SHARE_CODE_AOTCODECACHE_HPP
 
+#include "cds/aotCompressedPointers.hpp"
 #include "compiler/compilerDefinitions.hpp"
 #include "gc/shared/collectedHeap.hpp"
 #include "memory/allocation.hpp"
@@ -451,6 +452,8 @@ enum class DataKind: int {
 struct AOTCodeEntryStats;
 
 class AOTCodeCache : public CHeapObj<mtCode> {
+  using narrowPtr = AOTCompressedPointers::narrowPtr;
+
   friend class AOTMapLogger;
 
 // Classes used to describe AOT code cache.
@@ -789,6 +792,7 @@ public:
 // Concurent AOT code reader
 class AOTCodeReader {
 private:
+  using narrowPtr = AOTCompressedPointers::narrowPtr;
   AOTCodeCache*  _cache;
   AOTCodeEntry*  _entry;
   const char*    _load_buffer; // Loaded cached code buffer
