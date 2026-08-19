@@ -42,7 +42,7 @@
  * during application training run.
  * In following "production" runs this code and data can be loaded into
  * Code Cache skipping its generation.
- * Additionaly special compiled code "preload" is generated with class initialization
+ * Additionally special compiled code "preload" is generated with class initialization
  * barriers which can be called on first Java method invocation.
  */
 
@@ -203,7 +203,7 @@ class AOTCodeAddressHashTable : public HashTable<
   AnyObj::C_HEAP,
   mtCode> {};
 
-// Addresses of stubs, blobs and runtime finctions called from compiled code.
+// Addresses of stubs, blobs and runtime functions called from compiled code.
 class AOTCodeAddressTable : public CHeapObj<mtCode> {
 private:
   AOTCodeAddressHashTable* _hash_table;
@@ -288,7 +288,7 @@ private:
   // Array of addresses owned by stubs. Each stub appends addresses to
   // this array as a block, whether at the end of generation or at the
   // end of restoration from the cache. The first two addresses in
-  // each block are the "start" and "end2 address of the stub. Any
+  // each block are the "start" and "end" address of the stub. Any
   // other visible addresses located within the range [start,end)
   // follow, either extra entries, data addresses or SEGV-protected
   // subrange start, end and handler addresses. In the special case
@@ -379,6 +379,7 @@ public:
   do_var(bool,  UseVectorizedMismatchIntrinsic) \
   do_var(bool,  InlineTypeReturnedAsFields) \
   do_var(bool,  VMContinuations) \
+  do_var(bool,  VerifyOops) \
   do_fun(int,   CompressedKlassPointers_shift,          CompressedKlassPointers::shift()) \
   do_fun(bool,  JavaAssertions_systemClassDefault,      JavaAssertions::systemClassDefault()) \
   do_fun(bool,  JavaAssertions_userClassDefault,        JavaAssertions::userClassDefault()) \
@@ -578,7 +579,6 @@ private:
   AOTCodeEntry* _load_entries;   // Used when reading cache
   uint*         _search_entries; // sorted by ID table [id, index]
   AOTCodeEntry* _store_entries;  // Used when writing cache
-  const char*   _C_strings_buf;  // Loaded buffer for _C_strings[] table
   uint          _store_entries_cnt; // total entries count
 
   uint _compile_id;
@@ -618,6 +618,7 @@ public:
   uint load_size() const { return _load_size; }
   uint write_position() const { return _write_position; }
 
+  static void init_C_strings_caching();
   void load_strings();
   int store_strings();
 
@@ -869,6 +870,9 @@ class AOTRuntimeConstants {
   address _card_table_base;
   uint    _grain_shift;
   address _cset_base;
+  uintptr_t _verify_oop_mask;
+  uintptr_t _verify_oop_bits;
+
   static address _field_addresses_list[];
   static AOTRuntimeConstants _aot_runtime_constants;
   // private constructor for unique singleton
@@ -885,6 +889,8 @@ class AOTRuntimeConstants {
   static address card_table_base_address();
   static address grain_shift_address() { return (address)&_aot_runtime_constants._grain_shift; }
   static address cset_base_address() { return (address)&_aot_runtime_constants._cset_base; }
+  static address verify_oop_mask_address() { return (address)&_aot_runtime_constants._verify_oop_mask; }
+  static address verify_oop_bits_address() { return (address)&_aot_runtime_constants._verify_oop_bits; }
   static address* field_addresses_list() {
     return _field_addresses_list;
   }
@@ -893,6 +899,8 @@ class AOTRuntimeConstants {
   static address card_table_base_address() { return nullptr; }
   static address grain_shift_address()     { return nullptr; }
   static address cset_base_address()       { return nullptr; }
+  static address verify_oop_mask_address() { return nullptr; }
+  static address verify_oop_bits_address() { return nullptr; }
   static address* field_addresses_list()   { return nullptr; }
 #endif
 };

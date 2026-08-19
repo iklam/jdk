@@ -1144,8 +1144,11 @@ void CompileBroker::compile_method_base(const methodHandle& method,
   if (CIPrintRequests) {
     ResourceMark rm;
     stringStream ss;
-    const char* aotn = (compile_reason == CompileTask::Reason_AOTPreload) ? "AP" :
-                       (aot_code_entry != nullptr ? " A" : "  ");
+    bool comp_aot_preload = (compile_reason == CompileTask::Reason_AOTPreload) ||
+                            (compile_reason == CompileTask::Reason_AOTCompileForPreload);
+    bool comp_aot = (compile_reason == CompileTask::Reason_AOTCompile) ||
+                    (aot_code_entry != nullptr);
+    const char* aotn = comp_aot_preload ? "AP" : (comp_aot ? " A" : "  ");
     ss.print("request %16s: %s%d", CompileTask::reason_name(compile_reason), aotn, comp_level);
     if (osr_bci != InvocationEntryBci) {
       ss.print(" osr_bci: %d", osr_bci);
@@ -1155,13 +1158,16 @@ void CompileBroker::compile_method_base(const methodHandle& method,
     tty->print_cr("%s", ss.freeze());
   }
   LogStreamHandle(Debug, aot, codecache, compilation) log;
-  if (log.is_enabled() && AOTCodeCache::is_using_code()) {
+  if (log.is_enabled() && (AOTCodeCache::is_using_code() || AOTCodeCache::is_dumping_code())) {
     ResourceMark rm;
     MethodTrainingData* mtd = MethodTrainingData::have_data() ? MethodTrainingData::find_fast(method) : nullptr;
     MethodCounters* mc = method->method_counters();
     const char* name = method->name_and_sig_as_C_string(true /* use_double_colon */);
-    const char* aotn = (compile_reason == CompileTask::Reason_AOTPreload) ? "AP" :
-                       (aot_code_entry != nullptr ? " A" : "  ");
+    bool comp_aot_preload = (compile_reason == CompileTask::Reason_AOTPreload) ||
+                            (compile_reason == CompileTask::Reason_AOTCompileForPreload);
+    bool comp_aot = (compile_reason == CompileTask::Reason_AOTCompile) ||
+                    (aot_code_entry != nullptr);
+    const char* aotn = comp_aot_preload ? "AP" : (comp_aot ? " A" : "  ");
     const char* osrn = (osr_bci != InvocationEntryBci) ? "% " : "";
     log.print("request %16s: %s%d %s%s", CompileTask::reason_name(compile_reason), aotn, comp_level, osrn, name);
     if (mtd != nullptr) {
@@ -1921,7 +1927,7 @@ void CompileBroker::compiler_thread_loop() {
       // Never compile a method if breakpoints are present in it
       if (method()->number_of_breakpoints() == 0) {
         // Compile the method.
-        if ((UseCompiler || AlwaysCompileLoopMethods) && CompileBroker::should_compile_new_jobs()) {
+        if (UseCompiler && CompileBroker::should_compile_new_jobs()) {
           invoke_compiler_on_method(task);
           thread->start_idle_timer();
         } else {
@@ -2338,7 +2344,7 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
  */
 void CompileBroker::handle_full_code_cache(CodeBlobType code_blob_type) {
   UseInterpreter = true;
-  if (UseCompiler || AlwaysCompileLoopMethods ) {
+  if (UseCompiler) {
     if (xtty != nullptr) {
       stringStream s;
       // Dump code cache state into a buffer before locking the tty,

@@ -317,7 +317,6 @@ void FileMapHeader::populate(FileMapInfo *info, size_t core_region_alignment,
   _type_profile_casts = TypeProfileCasts;
   _spec_trap_limit_extra_entries = SpecTrapLimitExtraEntries;
   _max_heap_size = MaxHeapSize;
-  _use_optimized_module_handling = CDSConfig::is_using_optimized_module_handling();
   _aot_class_linking_value = AOTClassLinking;
   _has_aot_linked_classes = CDSConfig::is_dumping_aot_linked_classes();
   _has_full_module_graph = CDSConfig::is_dumping_full_module_graph();
@@ -402,7 +401,6 @@ void FileMapHeader::print(outputStream* st) {
 
   st->print_cr("- _rw_ptrmap_start_pos:                     %zu", _rw_ptrmap_start_pos);
   st->print_cr("- _ro_ptrmap_start_pos:                     %zu", _ro_ptrmap_start_pos);
-  st->print_cr("- use_optimized_module_handling:            %d", _use_optimized_module_handling);
   st->print_cr("- has_full_module_graph                     %d", _has_full_module_graph);
   st->print_cr("- has_valhalla_patched_classes              %d", _has_valhalla_patched_classes);
   _must_match.print(st);
@@ -414,19 +412,14 @@ bool FileMapInfo::validate_class_location() {
   assert(CDSConfig::is_using_archive(), "runtime only");
 
   AOTClassLocationConfig* config = header()->class_location_config();
-  bool has_extra_module_paths = false;
-  if (!config->validate(full_path(), header()->has_aot_linked_classes(), &has_extra_module_paths)) {
+
+  if (!config->validate(full_path(), header()->has_aot_linked_classes(), header()->has_full_module_graph())) {
     if (PrintSharedArchiveAndExit) {
       AOTMetaspace::set_archive_loading_failed();
       return true;
     } else {
       return false;
     }
-  }
-
-  if (header()->has_full_module_graph() && has_extra_module_paths) {
-    CDSConfig::stop_using_optimized_module_handling();
-    AOTMetaspace::report_loading_error("optimized module handling: disabled because extra module path(s) are specified");
   }
 
   if (CDSConfig::is_dumping_dynamic_archive()) {
@@ -438,13 +431,6 @@ bool FileMapInfo::validate_class_location() {
       CDSConfig::disable_dumping_dynamic_archive();
       aot_log_warning(aot)(
         "Dynamic archiving is disabled because base layer archive has appended boot classpath");
-    }
-    if (config->num_module_paths() > 0) {
-      if (has_extra_module_paths) {
-        CDSConfig::disable_dumping_dynamic_archive();
-        aot_log_warning(aot)(
-          "Dynamic archiving is disabled because base layer archive has a different module path");
-      }
     }
   }
 
@@ -1489,7 +1475,12 @@ bool FileMapInfo::map_aot_code_region(ReservedSpace rs) {
 
     r->set_mapped_from_file(true);
     r->set_mapped_base(mapped_base);
-    relocate_pointers_in_aot_code_region();
+    if (!relocate_pointers_in_aot_code_region()) {
+      r->set_mapped_from_file(false);
+      r->set_mapped_base(nullptr);
+      os::unmap_memory(mapped_base, r->used_aligned());
+      return false;
+    }
     aot_log_info(aot)("Mapped static  region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)",
                   AOTMetaspace::ac, p2i(r->mapped_base()), p2i(r->mapped_end()),
                   shared_region_name[AOTMetaspace::ac]);
@@ -1524,13 +1515,14 @@ public:
   }
 };
 
-void FileMapInfo::relocate_pointers_in_aot_code_region() {
+bool FileMapInfo::relocate_pointers_in_aot_code_region() {
   FileMapRegion* r = region_at(AOTMetaspace::ac);
-  char* bitmap_base = map_bitmap_region();
-
+  if (map_bitmap_region() == nullptr) {
+    return false; // OOM, or CRC check failure
+  }
   BitMapView ac_ptrmap = ptrmap_view(AOTMetaspace::ac);
   if (ac_ptrmap.size() == 0) {
-    return;
+    return true;
   }
 
   address core_regions_requested_base = (address)header()->requested_base_address();
@@ -1541,6 +1533,7 @@ void FileMapInfo::relocate_pointers_in_aot_code_region() {
   CachedCodeRelocator patcher(ac_region_requested_base, ac_region_mapped_base,
                               core_regions_mapped_base - core_regions_requested_base);
   ac_ptrmap.iterate(&patcher);
+  return true;
 }
 
 class SharedDataRelocationTask : public ArchiveWorkerTask {
@@ -1940,6 +1933,13 @@ bool FileMapInfo::validate_aot_class_linking() {
 #endif
   }
 
+  if (CDSConfig::is_dumping_final_static_archive() && header()->aot_class_linking_value() && !CDSConfig::is_dumping_aot_linked_classes()) {
+    ResourceMark rm;
+    const char* msg = err_msg("AOT class linking was enabled in training run but has been disabled%s",
+                              (CDSConfig::is_dumping_full_module_graph() ? "" : " due to incompatible module options"));
+    AOTMetaspace::unrecoverable_writing_error(msg);
+  }
+
   return true;
 }
 
@@ -2122,11 +2122,6 @@ bool FileMapHeader::validate() {
                      _compact_headers          ? "enabled" : "disabled",
                      UseCompactObjectHeaders   ? "enabled" : "disabled");
     return false;
-  }
-
-  if (!_use_optimized_module_handling && !CDSConfig::is_dumping_final_static_archive()) {
-    CDSConfig::stop_using_optimized_module_handling();
-    aot_log_info(aot)("optimized module handling: disabled because archive was created without optimized module handling");
   }
 
   if (is_static()) {

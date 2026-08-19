@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2025, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -33,8 +33,6 @@
  * @requires vm.compiler1.enabled & vm.compiler2.enabled
  * @comment Both C1 and C2 JIT compilers are required because the test verifies
  *          compiler's runtime blobs generation.
- * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
- * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
@@ -52,8 +50,6 @@
  * @requires vm.compiler1.enabled & vm.compiler2.enabled
  * @comment Both C1 and C2 JIT compilers are required because the test verifies
  *          compiler's runtime blobs generation.
- * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
- * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
@@ -71,8 +67,6 @@
  * @requires vm.compiler1.enabled & vm.compiler2.enabled
  * @comment Both C1 and C2 JIT compilers are required because the test verifies
  *          compiler's runtime blobs generation.
- * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
- * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
@@ -90,8 +84,6 @@
  * @requires vm.compiler1.enabled & vm.compiler2.enabled
  * @comment Both C1 and C2 JIT compilers are required because the test verifies
  *          compiler's runtime blobs generation.
- * @requires vm.opt.VerifyOops == null | vm.opt.VerifyOops == false
- * @comment VerifyOops flag switch off AOT code generation. Skip it.
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar

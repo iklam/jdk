@@ -1046,7 +1046,7 @@ void ciEnv::make_code_usable(JavaThread* thread, ciMethod* target, bool preload,
   methodHandle method(thread, target->get_Method());
 
   if (entry_bci == InvocationEntryBci) {
-    if (TieredCompilation) {
+    if (TieredCompilation || is_aot_compile()) {
       // If there is an old version we're done with it
       nmethod* old = method->code();
       if (TraceMethodReplacement && old != nullptr) {
@@ -1173,8 +1173,8 @@ nmethod* ciEnv::register_aot_method(JavaThread* thread,
     // The CodeCache is full.
     record_codecache_full();
   }
-  return nm;
   // safepoints are allowed again
+  return nm;
 }
 #endif
 
@@ -1290,17 +1290,12 @@ void ciEnv::register_method(ciMethod* target,
           int inline_size = ctd->inline_instructions_size();
           aot_code_entry->set_inline_instructions_size(inline_size);
           if (for_preload) {
-            // To have reference from method to AOT preload code
-            // during assembly phase.
-            MethodCounters* mc = method->get_method_counters(thread);
-            assert(mc != nullptr, "CompileBroker should create MethodCounters if it is missing");
-            mc->set_aot_preload_code_entry(aot_code_entry);
             // Set it only for printing purpose, otherwise it is unused
             // during assembly phase.
             nm->set_preloaded(true);
           }
         }
-      } else // No need to make AOT code usable during assembly phase
+      }
 #endif
       make_code_usable(THREAD, target, /* preload */ false, entry_bci, /* aot_code_entry */ nullptr, nm);
     }
