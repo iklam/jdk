@@ -573,7 +573,6 @@ void CDSConfig::check_aotmode_record() {
   if (FLAG_IS_DEFAULT(AOTCache)) {
     UseSharedSpaces = false;
     RequireSharedSpaces = false;
-    _is_using_optimized_module_handling = false;
     _is_using_full_module_graph = false;
   } else {
     if (!FLAG_IS_DEFAULT(AOTMode)) {
