@@ -62,7 +62,7 @@ class CompileTask : public CHeapObj<mtCompiler> {
       Reason_Tiered,           // Tiered-policy
       Reason_Replay,           // ciReplay
       Reason_Whitebox,         // Whitebox API
-      Reason_MustBeCompiled,   // Used for -Xcomp or AlwaysCompileLoopMethods (see CompilationPolicy::must_be_compiled())
+      Reason_MustBeCompiled,   // Used for -Xcomp (see CompilationPolicy::must_be_compiled())
       Reason_AOTLoad,          // load AOT code
       Reason_AOTPreload,       // pre-load AOT code
       Reason_AOTCompile,
@@ -79,12 +79,12 @@ class CompileTask : public CHeapObj<mtCompiler> {
       "replay",
       "whitebox",
       "must_be_compiled",
-      "bootstrap",
       "aot_load",
       "aot_preload",
       "aot_compile",
       "aot_compile_for_preload",
     };
+    STATIC_ASSERT(ARRAY_SIZE(reason_names) == Reason_Count);
     return reason_names[compile_reason];
   }
 
