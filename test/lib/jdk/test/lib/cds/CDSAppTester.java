@@ -25,6 +25,7 @@ package jdk.test.lib.cds;
 
 import java.io.File;
 import jdk.test.lib.cds.CDSTestUtils;
+import jdk.test.lib.Platform;
 import jdk.test.lib.process.ProcessTools;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.StringArrayUtils;
@@ -237,8 +238,13 @@ abstract public class CDSAppTester {
         // In one-step workflow ASSEMBLY phase is not executed separately.
         // Therefore AOTCompatibleOopCompression needs to be passed to the TRAINING phase,
         // so that it can be propagated to the ASSEMBLY phase.
-        if (runMode == RunMode.TRAINING || runMode == RunMode.ASSEMBLY) {
+        if (isAOTWorkflow() && isDumping(runMode)) {
           cmdLine = StringArrayUtils.concat(cmdLine, "-XX:+UnlockDiagnosticVMOptions", "-XX:+AOTCompatibleOopCompression");
+          if (Platform.isDebugBuild()) {
+            // Always assert when AOT test code references new unknown external address.
+            // AOTAssertOnUnknownExternalAddress is debug flag not available in product VM.
+            cmdLine = StringArrayUtils.concat(cmdLine, "-XX:+AOTAssertOnUnknownExternalAddress");
+          }
         }
         return cmdLine;
     }
@@ -542,7 +548,7 @@ abstract public class CDSAppTester {
     }
 
     // See JEP 483; stop at the assembly run; do not execute production run
-    public void runAOTAssemblyWorkflow() throws Exception {
+    public void runAOTTrainingAndAssemblyWorkflow() throws Exception {
         this.workflow = Workflow.AOT;
         recordAOTConfiguration();
         createAOTCache();

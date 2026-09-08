@@ -411,11 +411,11 @@
                                                                             \
   product(double, AOTCodeInvokeBase, 100.0, DIAGNOSTIC,                     \
           "AOT code invocation base limit")                                 \
-          range(1.0, DBL_MAX)                                               \
+          range(1.0, 10000.0)                                               \
                                                                             \
   product(double, AOTCodeInvokeScale, 1.0, DIAGNOSTIC,                      \
           "scale AOT code invocation limit")                                \
-          range(0.001, DBL_MAX)                                             \
+          range(0.001, 1000.0)                                              \
                                                                             \
   product(bool, UseAOTCodeCounters, true, DIAGNOSTIC,                       \
           "Use AOT code counter to trigger JIT compilation")                \
@@ -426,6 +426,11 @@
   product(bool, AOTPreloadBlocking, false, DIAGNOSTIC,                      \
           "Preload code is processed with blocking. Startup would not "     \
           "proceed until all preloaded code is done loading.")              \
+                                                                            \
+  develop(bool, AOTAssertOnUnknownExternalAddress, false,                   \
+          "Assert when external address is missing from the AOT Code "      \
+          "external address table. By default (false) AOT compilation "     \
+          "will be skipped for method which references such address.")      \
                                                                             \
 
 // end of COMPILER_FLAGS

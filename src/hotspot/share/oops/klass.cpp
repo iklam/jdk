@@ -23,6 +23,7 @@
  */
 
 #include "cds/cdsConfig.hpp"
+#include "cds/cppVtables.hpp"
 #include "cds/heapShared.inline.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderData.inline.hpp"
@@ -841,6 +842,7 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   assert(is_klass(), "ensure C++ vtable is restored");
   assert(in_aot_cache(), "must be set");
   assert(secondary_supers()->length() >= (int)population_count(_secondary_supers_bitmap), "must be");
+  JFR_ONLY(Jfr::on_restoration(this, THREAD);)
   if (log_is_enabled(Trace, aot, unshareable)) {
     ResourceMark rm(THREAD);
     oop class_loader = loader_data->class_loader();
@@ -858,8 +860,6 @@ void Klass::restore_unshareable_info(ClassLoaderData* loader_data, Handle protec
   // Add to class loader list first before creating the mirror
   // (same order as class file parsing)
   loader_data->add_class(this);
-
-  JFR_ONLY(Jfr::on_restoration(this, THREAD);)
 
   Handle loader(THREAD, loader_data->class_loader());
   ModuleEntry* module_entry = nullptr;
@@ -1075,23 +1075,23 @@ void Klass::validate_array_description(const ArrayDescription& ad) {
     assert(ad._layout_kind == LayoutKind::REFERENCE, "Cannot support flattening");
     assert(ad._kind == KlassKind::RefArrayKlassKind, "Must be a reference array");
   } else {
-    assert(is_inline_klass(), "Must be");
-    InlineKlass* ik = InlineKlass::cast(this);
+    assert(is_value_klass(), "Must be");
+    ValueKlass* vk = ValueKlass::cast(this);
     switch(ad._layout_kind) {
       case LayoutKind::BUFFERED:
         fatal("Invalid layout for an array");
         break;
       case LayoutKind::NULL_FREE_ATOMIC_FLAT:
-        assert(ik->has_null_free_atomic_layout(), "Sanity check");
+        assert(vk->has_null_free_atomic_layout(), "Sanity check");
         break;
       case LayoutKind::NULL_FREE_NON_ATOMIC_FLAT:
-        assert(ik->has_null_free_non_atomic_layout(), "Sanity check");
+        assert(vk->has_null_free_non_atomic_layout(), "Sanity check");
         break;
       case LayoutKind::NULLABLE_ATOMIC_FLAT:
-        assert(ik->has_nullable_atomic_layout(), "Sanity check");
+        assert(vk->has_nullable_atomic_layout(), "Sanity check");
         break;
       case LayoutKind::NULLABLE_NON_ATOMIC_FLAT:
-        assert(ik->has_nullable_non_atomic_layout(), "Sanity check)");
+        assert(vk->has_nullable_non_atomic_layout(), "Sanity check)");
         break;
       case LayoutKind::REFERENCE:
         break;
@@ -1114,6 +1114,23 @@ bool Klass::is_valid(Klass* k) {
   if (!Symbol::is_valid(k->name())) return false;
   return ClassLoaderDataGraph::is_valid(k->class_loader_data());
 }
+
+#if INCLUDE_CDS
+// Check that this pointer is valid by checking that the vtbl pointer matches
+bool Klass::is_valid_aot_klass(const Klass* k) {
+  if (k == nullptr) {
+    return false;
+  } else if (!is_aligned(k, sizeof(MetaWord))) {
+    // Quick sanity check on pointer.
+    return false;
+  } else if (!os::is_readable_range(k, k + 1)) {
+    return false;
+  } else if (!k->in_aot_cache()) {
+    return false;
+  }
+  return CppVtables::is_valid_shared_klass(k);
+}
+#endif
 
 Method* Klass::method_at_vtable(int index)  {
 #ifndef PRODUCT

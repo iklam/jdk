@@ -106,8 +106,8 @@ public:
 #define CDS_MUST_MATCH_FLAGS_DO(f) \
   f(UseArrayFlattening) \
   f(UseFieldFlattening) \
-  f(InlineTypePassFieldsAsArgs) \
-  f(InlineTypeReturnedAsFields) \
+  f(ValueTypePassFieldsAsArgs) \
+  f(ValueTypeReturnedAsFields) \
   f(UseNullFreeNonAtomicValueFlattening) \
   f(UseNullFreeAtomicValueFlattening) \
   f(UseNullableAtomicValueFlattening) \
@@ -433,6 +433,7 @@ public:
   bool  read_region(int i, char* base, size_t size, bool do_commit);
   char* map_bitmap_region();
   bool  map_aot_code_region(ReservedSpace rs);
+  void  unmap_aot_code_region();
   char* map_forwarding_region();
   void  unmap_region(int i);
   void  close();
