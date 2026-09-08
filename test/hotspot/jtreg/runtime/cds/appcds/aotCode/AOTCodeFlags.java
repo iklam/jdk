@@ -36,7 +36,7 @@
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 AOTCodeFlagsTestApp
+ *                 AOTCodeSimpleTestApp
  * @run driver/timeout=1500 AOTCodeFlags
  */
 /**
@@ -53,7 +53,7 @@
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 AOTCodeFlagsTestApp
+ *                 AOTCodeSimpleTestApp
  * @run driver/timeout=1500 AOTCodeFlags Z
  */
 /**
@@ -70,7 +70,7 @@
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 AOTCodeFlagsTestApp
+ *                 AOTCodeSimpleTestApp
  * @run driver/timeout=1500 AOTCodeFlags Shenandoah
  */
 /**
@@ -87,7 +87,7 @@
  * @library /test/lib /test/setup_aot
  * @build AOTCodeFlags
  * @run driver jdk.test.lib.helpers.ClassFileInstaller -jar app.jar
- *                 AOTCodeFlagsTestApp
+ *                 AOTCodeSimpleTestApp
  * @run driver/timeout=1500 AOTCodeFlags Parallel
  */
 
@@ -98,6 +98,7 @@ import jdk.test.lib.cds.CDSAppTester;
 import jdk.test.lib.process.OutputAnalyzer;
 
 public class AOTCodeFlags {
+    private static String appName = AOTCodeSimpleTestApp.class.getName();
     private static String gcName = null;
     public static void main(String... args) throws Exception {
         Tester t = new Tester(args.length == 0 ? null : args[0]);
@@ -177,6 +178,10 @@ public class AOTCodeFlags {
                                 "-Xlog:aot+codecache+exit=debug",
                                 "-Xlog:aot+codecache+nmethod=info",
                                 "-Xlog:aot+codecache+stubs=debug"));
+
+            // Ensure compilations are finished before the JVM exits.
+            args.add("-Xbatch");
+
             switch (runMode) {
             case RunMode.ASSEMBLY:
                 args.addAll(getVMArgsForTestMode(aMode));
@@ -192,7 +197,7 @@ public class AOTCodeFlags {
 
         @Override
         public String[] appCommandLine(RunMode runMode) {
-            return new String[] { "AOTCodeFlagsTestApp" };
+            return new String[] { appName };
         }
 
         @Override
@@ -281,27 +286,5 @@ public class AOTCodeFlags {
                 }
             }
         }
-    }
-}
-
-// Run long enough to trigger C1 and C2 compilations.
-class AOTCodeFlagsTestApp {
-    public static volatile int counter;
-
-    public static void main(String args[]) {
-        long started = System.currentTimeMillis();
-
-        while (System.currentTimeMillis() - started < 150) {
-            outer();
-        }
-    }
-    static void outer() {
-        for (int i = 0; i < 50 * 1000; i++) {
-            inner();
-        }
-    }
-
-    static void inner() {
-        counter++;
     }
 }

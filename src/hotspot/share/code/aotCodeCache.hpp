@@ -176,9 +176,10 @@ public:
   bool is_loaded()    const { return _loaded; }
   void set_loaded()         { _loaded = true; }
 
-  bool not_entrant()  const { return _not_entrant; }
-  void set_not_entrant()    { _not_entrant = true; }
-  void set_entrant()        { _not_entrant = false; }
+  // Use atomic access to _not_entrant field.
+  bool not_entrant() const;
+  void set_not_entrant();
+  bool try_set_not_entrant();
 
   bool load_fail()  const { return _load_fail; }
   void set_load_fail()    { _load_fail = true; }
@@ -242,7 +243,7 @@ public:
   const char* add_C_string(const char* str);
   int  id_for_C_string(address str);
   address address_for_C_string(int idx);
-  int  id_for_address(address addr, RelocIterator iter, CodeBlob* code_blob);
+  int  id_for_address(address addr, RelocIterator iter, CodeBlob* code_blob, bool assert_for_unknown_address);
   address address_for_id(int id);
 };
 
@@ -377,9 +378,10 @@ public:
   do_var(bool,  UseSHA512Intrinsics) \
   do_var(bool,  UseIntPolyIntrinsics) \
   do_var(bool,  UseVectorizedMismatchIntrinsic) \
-  do_var(bool,  InlineTypeReturnedAsFields) \
+  do_var(bool,  ValueTypeReturnedAsFields) \
   do_var(bool,  VMContinuations) \
   do_var(bool,  VerifyOops) \
+  do_var(bool,  CountCompiledCalls) \
   do_fun(int,   CompressedKlassPointers_shift,          CompressedKlassPointers::shift()) \
   do_fun(bool,  JavaAssertions_systemClassDefault,      JavaAssertions::systemClassDefault()) \
   do_fun(bool,  JavaAssertions_userClassDefault,        JavaAssertions::userClassDefault()) \
@@ -427,11 +429,26 @@ public:
 #define AOTCODECACHE_CONFIGS_X86_DO(do_var, do_fun)
 #endif
 
+#if defined(RISCV64) && !defined(ZERO)
+#define AOTCODECACHE_CONFIGS_RISCV_DO(do_var, do_fun) \
+  do_var(intx,  BlockZeroingLowLimit)                   /* zero blocks stub */ \
+  do_var(bool,  UseBlockZeroing)                        /* zero blocks stub and nmethods */ \
+  do_var(bool,  UseConservativeFence)                   /* fence encoding in stubs and nmethods */ \
+  do_var(bool,  UseCtxFencei)                           /* method entry barrier stub */ \
+  do_var(bool,  UseSecondarySupersCache)                /* secondary supers cache in nmethods */ \
+  do_var(bool,  UseZabha)                               /* narrow cmpxchg selection in nmethods */ \
+  do_fun(int,   RVZicbozBlockSize,                      (int)VM_Version::zicboz_block_size.value()) \
+  // END
+#else
+#define AOTCODECACHE_CONFIGS_RISCV_DO(do_var, do_fun)
+#endif
+
 #define AOTCODECACHE_CONFIGS_DO(do_var, do_fun) \
   AOTCODECACHE_CONFIGS_GENERIC_DO(do_var, do_fun) \
   AOTCODECACHE_CONFIGS_COMPILER2_DO(do_var, do_fun) \
   AOTCODECACHE_CONFIGS_AARCH64_DO(do_var, do_fun) \
   AOTCODECACHE_CONFIGS_X86_DO(do_var, do_fun) \
+  AOTCODECACHE_CONFIGS_RISCV_DO(do_var, do_fun) \
   // END
 
 #define AOTCODECACHE_DECLARE_VAR(type, name) type _saved_ ## name;
@@ -472,14 +489,12 @@ protected:
     bool _useUnalignedLoadStores;
 #endif
 
-#if defined(AARCH64) && !defined(ZERO)
+#if (defined(AARCH64) || defined(RISCV64)) && !defined(ZERO)
     bool _avoidUnalignedAccesses;
 #endif
 
-    uint _cpu_features_offset; // offset in the cache where cpu features are stored
   public:
-    void record(uint cpu_features_offset);
-    bool verify_cpu_features(AOTCodeCache* cache) const;
+    void record();
     bool verify(AOTCodeCache* cache) const;
   };
 
@@ -491,13 +506,15 @@ protected:
     };
     uint   _version;         // AOT code version (should match when reading code cache)
     uint   _cache_size;      // cache size in bytes
-    uint   _strings_count;   // number of recorded C strings
-    uint   _strings_offset;  // offset to recorded C strings
+    uint   _cpu_features_size;
+    uint   _cpu_features_offset;   // offset in the cache where cpu features are stored
+    uint   _preload_entries_count; // entries for pre-loading code
+    uint   _preload_entries_offset;
     uint   _entries_count;   // number of recorded entries
     uint   _entries_offset;  // offset of AOTCodeEntry array describing entries
     uint   _search_table_offset; // offset of table for looking up an AOTCodeEntry
-    uint   _preload_entries_count; // entries for pre-loading code
-    uint   _preload_entries_offset;
+    uint   _strings_count;   // number of recorded C strings
+    uint   _strings_offset;  // offset to recorded C strings
     uint   _adapters_count;
     uint   _shared_blobs_count;
     uint   _stubgen_blobs_count;
@@ -505,39 +522,49 @@ protected:
     uint   _C2_blobs_count;
     Config _config; // must be the last element as there is trailing data stored immediately after Config
 
+    bool contains(uint offset, uint size) const {
+      return offset <= _cache_size && size <= (_cache_size - offset);
+    }
+
   public:
     void init(uint cache_size,
-              uint strings_count,       uint strings_offset,
-              uint entries_count,       uint entries_offset, uint search_table_offset,
+              uint cpu_features_size,     uint cpu_features_offset,
               uint preload_entries_count, uint preload_entries_offset,
-              uint adapters_count,      uint shared_blobs_count,
-              uint stubgen_blobs_count, uint C1_blobs_count,
-              uint C2_blobs_count,      uint cpu_features_offset) {
+              uint entries_count,         uint entries_offset,
+              uint search_table_offset,
+              uint strings_count,         uint strings_offset,
+              uint adapters_count,        uint shared_blobs_count,
+              uint stubgen_blobs_count,   uint C1_blobs_count,
+              uint C2_blobs_count) {
       _version        = AOT_CODE_VERSION;
       _cache_size     = cache_size;
-      _strings_count  = strings_count;
-      _strings_offset = strings_offset;
+      _cpu_features_size   = cpu_features_size;
+      _cpu_features_offset = cpu_features_offset;
+      _preload_entries_count  = preload_entries_count;
+      _preload_entries_offset = preload_entries_offset;
       _entries_count  = entries_count;
       _entries_offset = entries_offset;
       _search_table_offset = search_table_offset;
-      _preload_entries_count  = preload_entries_count;
-      _preload_entries_offset = preload_entries_offset;
+      _strings_count  = strings_count;
+      _strings_offset = strings_offset;
       _adapters_count = adapters_count;
-      _shared_blobs_count = shared_blobs_count;
+      _shared_blobs_count  = shared_blobs_count;
       _stubgen_blobs_count = stubgen_blobs_count;
       _C1_blobs_count = C1_blobs_count;
       _C2_blobs_count = C2_blobs_count;
-      _config.record(cpu_features_offset);
+      _config.record();
     }
 
     uint cache_size()     const { return _cache_size; }
-    uint strings_count()  const { return _strings_count; }
-    uint strings_offset() const { return _strings_offset; }
-    uint entries_count()  const { return _entries_count; }
-    uint entries_offset() const { return _entries_offset; }
-    uint search_table_offset() const { return _search_table_offset; }
+    uint cpu_features_size()   const { return _cpu_features_size; }
+    uint cpu_features_offset() const { return _cpu_features_offset; }
     uint preload_entries_count()  const { return _preload_entries_count; }
     uint preload_entries_offset() const { return _preload_entries_offset; }
+    uint entries_count()  const { return _entries_count; }
+    uint entries_offset() const { return _entries_offset; }
+    uint strings_count()  const { return _strings_count; }
+    uint strings_offset() const { return _strings_offset; }
+    uint search_table_offset() const { return _search_table_offset; }
     uint adapters_count() const { return _adapters_count; }
     uint stubgen_blobs_count()   const { return _stubgen_blobs_count; }
     uint shared_blobs_count()    const { return _shared_blobs_count; }
@@ -550,8 +577,19 @@ protected:
                                          - _C1_blobs_count
                                          - _C2_blobs_count
                                          - _adapters_count; }
-    bool verify(uint load_size)  const;
+    bool verify(const char* load_buffer, uint load_size)  const;
+    bool verify_cpu_features(AOTCodeCache* cache) const;
+    size_t verify_section(uint offset,
+                          uint count,
+                          size_t unit_size,
+                          size_t low_limit,
+                          const char* section_name) const;
     bool verify_config(AOTCodeCache* cache) const { // Called after Universe initialized
+      // check CPU features before checking flags that may be
+      // auto-configured in response to them
+      if (!verify_cpu_features(cache)) {
+        return false;
+      }
       return _config.verify(cache);
     }
   };
@@ -586,6 +624,8 @@ private:
   uint compile_id() const { return _compile_id; }
   uint comp_level() const { return _comp_level; }
 
+  ReservedSpace _reserved_space; // Reserved space to map AOT code cache
+
   static AOTCodeCache* open_for_use();
   static AOTCodeCache* open_for_dump();
 
@@ -594,7 +634,11 @@ private:
   bool align_write_int();
   bool align_write_bytes(uint alignment);
   address reserve_bytes(uint nbytes);
-  uint write_bytes(const void* buffer, uint nbytes);
+  bool write_bytes(const void* buffer, uint nbytes);
+  bool write_int(const int val);
+  bool write_kind(DataKind kind) {
+    return write_int(static_cast<int>(kind));
+  }
   const char* addr(uint offset) const { return _load_buffer + offset; }
   static AOTCodeAddressTable* addr_table() {
     return is_on() && (cache()->_table != nullptr) ? cache()->_table : nullptr;
@@ -605,6 +649,9 @@ private:
   bool lookup_failed()   const { return _lookup_failed; }
 
   void add_stub_entry(EntryId entry_id, address entry) NOT_CDS_RETURN;
+
+  ~AOTCodeCache();
+
 public:
   AOTCodeCache(bool is_dumping, bool is_using);
 
@@ -619,7 +666,7 @@ public:
   uint write_position() const { return _write_position; }
 
   static void init_C_strings_caching();
-  void load_strings();
+  bool load_strings();
   int store_strings();
 
   static void set_shared_stubs_complete() NOT_CDS_RETURN;
@@ -642,10 +689,13 @@ public:
   }
   void preload_aot_code(TRAPS);
 
+  void set_load_entries();
+  bool verify_nmethod_entry(AOTCodeEntry* entry, uint id, uint low_bound, uint high_bound);
   AOTCodeEntry* find_entry(AOTCodeEntry::Kind kind, uint id, uint comp_level = 0);
+  AOTCodeEntry* search_entry(AOTCodeEntry::Kind kind, uint id, uint comp_level);
   void invalidate_entry(AOTCodeEntry* entry);
 
-  void store_cpu_features(char*& buffer, uint buffer_size);
+  char* store_cpu_features(char* buffer, uint buffer_size);
 
   bool finish_write();
 
@@ -654,9 +704,10 @@ public:
   bool write_klass(Klass* klass);
   bool write_method(Method* method);
 
-  bool write_relocations(CodeBlob& code_blob, RelocIterator& iter,
-                         GrowableArray<Handle>* oop_list = nullptr,
-                         GrowableArray<Metadata*>* metadata_list = nullptr);
+  bool write_id_for_relocations(CodeBlob& code_blob, RelocIterator& iter,
+                                bool assert_for_unknown_external_address,
+                                GrowableArray<Handle>* oop_list = nullptr,
+                                GrowableArray<Metadata*>* metadata_list = nullptr);
 
   bool write_oop_map_set(CodeBlob& cb);
   bool write_nmethod_reloc_immediates(GrowableArray<Handle>& oop_list, GrowableArray<Metadata*>& metadata_list);
@@ -669,8 +720,9 @@ public:
   bool write_stub_data(CodeBlob& blob, AOTStubData *stub_data);
 
 #ifndef PRODUCT
-  bool write_asm_remarks(AsmRemarks& asm_remarks, bool use_string_table);
-  bool write_dbg_strings(DbgStrings& dbg_strings, bool use_string_table);
+  bool write_asm_remarks(AsmRemarks& asm_remarks, GrowableArray<const char*>& remarks, GrowableArray<uint>& remarks_len, uint* size);
+  bool write_dbg_strings(DbgStrings& dbg_strings, GrowableArray<const char*>& strings, GrowableArray<uint>&strings_len, uint* size);
+  bool write_asm_rem_and_dbg_str(AsmRemarks& asm_remarks, DbgStrings& dbg_strings, uint entry_position);
 #endif // PRODUCT
 
 private:
@@ -690,39 +742,27 @@ private:
   AOTCodeEntry* write_nmethod(nmethod* nm, bool for_preload);
 
 public:
-  // save and restore API for non-enumerable code blobs
-  static bool store_code_blob(CodeBlob& blob,
-                              AOTCodeEntry::Kind entry_kind,
-                              uint id,
-                              const char* name) NOT_CDS_RETURN_(false);
+  // save and restore API for adapters
+  static bool store_adapter(CodeBlob& blob, uint id, const char* name) NOT_CDS_RETURN_(false);
 
-  static CodeBlob* load_code_blob(AOTCodeEntry::Kind kind,
-                                  uint id, const char* name) NOT_CDS_RETURN_(nullptr);
+  static CodeBlob* load_adapter(uint id, const char* name) NOT_CDS_RETURN_(nullptr);
 
-  static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level) NOT_CDS_RETURN_(false);
-  static AOTCodeEntry* store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload) NOT_CDS_RETURN_(nullptr);
-
-  // save and restore API for enumerable code blobs
-
-  // API for single-stub blobs
-  static bool store_code_blob(CodeBlob& blob,
-                              AOTCodeEntry::Kind entry_kind,
+  // save and restore for single-stub blobs
+  static bool store_code_blob(CodeBlob& blob, AOTCodeEntry::Kind entry_kind,
                               BlobId id) NOT_CDS_RETURN_(false);
 
-  static CodeBlob* load_code_blob(AOTCodeEntry::Kind kind,
-                                  BlobId id) NOT_CDS_RETURN_(nullptr);
+  static CodeBlob* load_code_blob(AOTCodeEntry::Kind kind, BlobId id) NOT_CDS_RETURN_(nullptr);
 
-  // API for multi-stub blobs -- for use by class StubGenerator.
+  // save and restore for multi-stub blobs - for use by class StubGenerator
+  static bool store_multi_stub_blob(CodeBlob& blob, BlobId id, AOTStubData* stub_data,
+                                    CodeBuffer *code_buffer) NOT_CDS_RETURN_(false);
 
-  static bool store_code_blob(CodeBlob& blob,
-                              AOTCodeEntry::Kind kind,
-                              BlobId id,
-                              AOTStubData* stub_data,
-                              CodeBuffer *code_buffer) NOT_CDS_RETURN_(false);
+  static CodeBlob* load_multi_stub_blob(BlobId id, AOTStubData* stub_data) NOT_CDS_RETURN_(nullptr);
 
-  static CodeBlob* load_code_blob(AOTCodeEntry::Kind kind,
-                                  BlobId id,
-                                  AOTStubData* stub_data) NOT_CDS_RETURN_(nullptr);
+  // save and restore API nmethods
+  static AOTCodeEntry* store_nmethod(nmethod* nm, AbstractCompiler* compiler, bool for_preload) NOT_CDS_RETURN_(nullptr);
+
+  static bool load_nmethod(ciEnv* env, ciMethod* target, int entry_bci, AbstractCompiler* compiler, CompLevel comp_level) NOT_CDS_RETURN_(false);
 
   static void publish_external_addresses(GrowableArray<address>& addresses) NOT_CDS_RETURN;
   // publish all entries for a code blob in code cache address table
@@ -780,6 +820,7 @@ public:
   static bool maybe_dumping_code() NOT_CDS_RETURN_(false);
 
   static void invalidate(AOTCodeEntry* entry) NOT_CDS_RETURN;
+  static bool skip_aot_code(uint comp_level) NOT_CDS_RETURN_(true);
   static AOTCodeEntry* find_code_entry(const methodHandle& method, uint comp_level) NOT_CDS_RETURN_(nullptr);
   static void preload_code(JavaThread* thread) NOT_CDS_RETURN;
 
@@ -796,14 +837,25 @@ private:
   using narrowPtr = AOTCompressedPointers::narrowPtr;
   AOTCodeCache*  _cache;
   AOTCodeEntry*  _entry;
-  const char*    _load_buffer; // Loaded cached code buffer
-  uint  _read_position;        // Position in _load_buffer
+  address        _entry_buffer; // AOT code buffer for this entry
+  uint  _read_position;         // Position in _entry_buffer
+  uint  _read_limit;            // for bound checks
   uint  read_position() const { return _read_position; }
-  void  set_read_position(uint pos);
-  uint  align_read_int();
 
   // convenience method to convert offset in AOTCodeEntry data to its address
-  const char* addr(uint offset) const { return _load_buffer + offset; }
+  address addr(uint offset) const {
+    assert(offset <= _read_limit, "%u > %u ", offset, _read_limit);
+    return _entry_buffer + offset;
+  }
+  address position_addr() const { return addr(_read_position); }
+  bool get_set_read_position(address* pos, uint nbytes);
+  bool update_read_position(uint nbytes);
+  bool align_read_position(uint alignment);
+  bool read_int(int* val);
+  bool read_kind(DataKind* kind) {
+    return read_int(reinterpret_cast<int*>(kind));
+  }
+
 
   uint _compile_id;
   uint _comp_level;
@@ -819,10 +871,38 @@ private:
   AOTStubData*        _stub_data;
 
   const char*         _name;
-  address             _reloc_data;
   int                 _reloc_count;
+  address             _reloc_data;
   ImmutableOopMapSet* _oop_maps;
   address             _immutable_data;
+
+  int                 _cached_stub_data_count;
+  uint*               _cached_stub_data; // uint[] array
+
+  int                 _id_for_reloc_count;
+  uint*               _id_for_reloc;
+
+#ifndef PRODUCT
+  struct AsmRemData {
+    uint offset;     // remark's offset in code
+    uint str_offset; // string's offset in code's entry
+    uint str_len;    // string's len for bound check
+  };
+
+  struct DbgStrData {
+    uint str_offset; // string's offset in code's entry
+    uint str_len;    // string's len for bound check
+  };
+
+  int                 _asm_remarks_count;
+  AsmRemData*         _asm_remarks_data;
+  const char**        _asm_remarks_strings;
+
+  int                 _dbg_strings_count;
+  DbgStrData*         _dbg_strings_data;
+  const char**        _dbg_strings;
+#endif
+
   GrowableArray<Handle>*    _oop_list;
   GrowableArray<Metadata*>* _metadata_list;
   GrowableArray<Handle>*    _reloc_imm_oop_list;
@@ -830,8 +910,6 @@ private:
 
   const char* _failure;  // Failed to lookup for info (skip only this code load)
   void set_lookup_failed(const char* failure) { _failure = failure; }
-  bool lookup_failed() const { return _failure != nullptr; }
-  const char* lookup_failure() const { return _failure; }
 
   Klass* read_klass(JavaThread* thread);
   Method* read_method();
@@ -844,13 +922,14 @@ private:
   ImmutableOopMapSet* read_oop_map_set();
   void read_stub_data(CodeBlob* code_blob, AOTStubData *stub_data);
 
-  void fix_relocations(CodeBlob* code_blob, RelocIterator& iter,
-                       GrowableArray<Handle>* oop_list = nullptr,
-                       GrowableArray<Metadata*>* metadata_list = nullptr) NOT_CDS_RETURN;
+  void restore_relocations(CodeBlob* code_blob, RelocIterator& iter,
+                           GrowableArray<Handle>* oop_list = nullptr,
+                           GrowableArray<Metadata*>* metadata_list = nullptr);
 
 #ifndef PRODUCT
-  void read_asm_remarks(AsmRemarks& asm_remarks, bool use_string_table) NOT_CDS_RETURN;
-  void read_dbg_strings(DbgStrings& dbg_strings, bool use_string_table) NOT_CDS_RETURN;
+  void restore_asm_remarks(AsmRemarks& asm_remarks);
+  void restore_dbg_strings(DbgStrings& dbg_strings);
+  bool read_asm_rem_and_dbg_str();
 #endif // PRODUCT
 
 public:
@@ -861,6 +940,9 @@ public:
   CodeBlob* compile_code_blob(const char* name, AOTCodeEntry::Kind entry_kind, int id, AOTStubData* stub_data = nullptr);
 
   void restore(CodeBlob* code_blob);
+
+  bool lookup_failed() const { return _failure != nullptr; }
+  const char* lookup_failure() const { return _failure; }
 };
 
 // code cache internal runtime constants area used by AOT code

@@ -149,7 +149,7 @@ void CompilationPolicy::compile_if_required(const methodHandle& m, TRAPS) {
     return;
   }
 
-  if (must_be_compiled(m)) {
+  if (must_be_compiled(m) && !CompileBroker::compilation_is_in_queue(m)) {
     // This path is unusual, mostly used by the '-Xcomp' stress test mode.
     CompLevel level = initial_compile_level(m);
     CompileTask::CompileReason reason = CompileTask::Reason_MustBeCompiled;
@@ -164,6 +164,7 @@ void CompilationPolicy::compile_if_required(const methodHandle& m, TRAPS) {
         if (ctd != nullptr && (ctd->init_deps_left_acquire() == 0)) {
           AOTCodeEntry* aot_code_entry = find_aot_code_entry(m, level, reason);
           if (aot_code_entry != nullptr) {
+            // This is blocked compilaion - return here after it is finished
             CompileBroker::compile_method(m, InvocationEntryBci, level, 0, aot_code_entry, reason, THREAD);
           } // Request normal JIT compilation too for -Xcomp
         }
@@ -959,7 +960,7 @@ void CompilationPolicy::compile(const methodHandle& mh, int bci, CompLevel level
     if (TrainingData::have_data() && (bci == InvocationEntryBci)) {
       MethodTrainingData* mtd = MethodTrainingData::find_fast(mh);
       if (mtd != nullptr) {
-        CompileTrainingData* ctd = mtd->last_toplevel_compile(level);
+        CompileTrainingData* ctd = mtd->compile_data_for_aot_code(level);
         if (ctd != nullptr && (ctd->init_deps_left_acquire() == 0)) {
           AOTCodeEntry* aot_code_entry = find_aot_code_entry(mh, level, reason);
           if (aot_code_entry != nullptr) {

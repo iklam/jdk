@@ -422,18 +422,6 @@ bool FileMapInfo::validate_class_location() {
     }
   }
 
-  if (CDSConfig::is_dumping_dynamic_archive()) {
-    // Only support dynamic dumping with the usage of the default CDS archive
-    // or a simple base archive.
-    // If the base layer archive contains additional path component besides
-    // the runtime image and the -cp, dynamic dumping is disabled.
-    if (config->num_boot_classpaths() > 0) {
-      CDSConfig::disable_dumping_dynamic_archive();
-      aot_log_warning(aot)(
-        "Dynamic archiving is disabled because base layer archive has appended boot classpath");
-    }
-  }
-
 #if INCLUDE_JVMTI
   if (_classpath_entries_for_jvmti != nullptr) {
     os::free(_classpath_entries_for_jvmti);
@@ -1469,7 +1457,6 @@ bool FileMapInfo::map_aot_code_region(ReservedSpace rs) {
 
     if (VerifySharedSpaces && !r->check_region_crc(mapped_base)) {
       aot_log_error(aot)("region %d CRC error", AOTMetaspace::ac);
-      os::unmap_memory(mapped_base, r->used_aligned());
       return false;
     }
 
@@ -1478,14 +1465,19 @@ bool FileMapInfo::map_aot_code_region(ReservedSpace rs) {
     if (!relocate_pointers_in_aot_code_region()) {
       r->set_mapped_from_file(false);
       r->set_mapped_base(nullptr);
-      os::unmap_memory(mapped_base, r->used_aligned());
       return false;
     }
+    r->set_in_reserved_space(true);
     aot_log_info(aot)("Mapped static  region #%d at base " INTPTR_FORMAT " top " INTPTR_FORMAT " (%s)",
                   AOTMetaspace::ac, p2i(r->mapped_base()), p2i(r->mapped_end()),
                   shared_region_name[AOTMetaspace::ac]);
     return true;
   }
+}
+
+void FileMapInfo::unmap_aot_code_region() {
+  unmap_region(AOTMetaspace::ac);
+  return;
 }
 
 class CachedCodeRelocator: public BitMapClosure {
