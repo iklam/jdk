@@ -134,7 +134,7 @@ bool AOTCacheAccess::map_aot_code_region(ReservedSpace rs) {
 }
 
 void AOTCacheAccess::unmap_aot_code_region() {
-  FileMapInfo* static_mapinfo = FileMapInfo::current_info();
+  FileMapInfo* static_mapinfo = FileMapInfo::static_input_archive();
   assert(UseSharedSpaces && static_mapinfo != nullptr, "must be");
   return static_mapinfo->unmap_aot_code_region();
 }
