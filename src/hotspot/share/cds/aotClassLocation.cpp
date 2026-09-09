@@ -994,6 +994,42 @@ bool AOTClassLocationConfig::need_lcp_match_helper(int start, int end, ClassLoca
   return true;
 }
 
+// These are the paths specified at runtime, which may be different than the paths recorded
+// in the archive (due to lcp rules)
+static GrowableArrayCHeap<const char*, mtClassShared> runtime_paths;
+
+static void copy_or_check_runtime_paths(int& n, ClassLocationStream& css) {
+  for (css.start(); css.has_next(); ) {
+    const char* path = css.get_next();
+    if (runtime_paths.length() <= n) {
+      precond(runtime_paths.length() == n);
+      runtime_paths.append(os::strdup_check_oom(path));
+    } else {
+      // AllClassLocationStreams may be constructed multiple times (for validating
+      // static and dynamic archives), but it should always generate the same
+      // set of paths.
+      assert(strcmp(runtime_paths.at(n), path) == 0, "AllClassLocationStreams should not change");
+    }
+    n++;
+  }
+}
+
+static void copy_runtime_paths(AllClassLocationStreams& all_css) {
+  if (runtime_paths.length() == 0) {
+    // First time.
+    runtime_paths.append(os::strdup_check_oom(""));
+  }
+  int n = 1;
+  copy_or_check_runtime_paths(n, all_css.boot_cp());
+  copy_or_check_runtime_paths(n, all_css.app_cp());
+  copy_or_check_runtime_paths(n, all_css.module_path());
+
+  // Debug only
+  for (int i = 0; i < runtime_paths.length(); i++) {
+    tty->print_cr("runtime_paths [%d] = %s", i, runtime_paths.at(i));
+  }
+}
+
 bool AOTClassLocationConfig::validate_helper(const char* cache_filename, bool has_aot_linked_classes, bool has_full_module_graph) const {
   ResourceMark rm;
   AllClassLocationStreams all_css;
@@ -1010,6 +1046,9 @@ bool AOTClassLocationConfig::validate_helper(const char* cache_filename, bool ha
 
   bool status = check_module_paths(has_aot_linked_classes, has_full_module_graph, all_css.module_path());
   log_info(class, path)("Archived module path validation: %s", status ? "passed" : "failed");
+  if (status == true) {
+    copy_runtime_paths(all_css);
+  }
   return status;
 }
 
