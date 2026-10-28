@@ -369,14 +369,30 @@ void CompileTrainingData::notice_jit_observation(ciEnv* env, ciBaseObject* what)
   }
 }
 
+static intx first_stack = 0x0;
+static intx last_stack = 0x0;
 void KlassTrainingData::prepare(Visitor& visitor) {
   if (visitor.is_visited(this)) {
     return;
   }
   visitor.visit(this);
+  {
+    ResourceMark rm;
+    long long stack = (long long)&rm;
+    long long depth = (first_stack == 0x0) ? 0 : first_stack - stack;
+    long long delta = (last_stack == 0x0) ? 0 : last_stack - stack;
+    log_info(aot, training, stats)("  KlassTrainingData::prepare [stack %p (%8lld = %8lld)] @%p %s",
+                                   (void*)stack, delta, depth, this,
+                                   (_holder != nullptr ? _holder->external_name() : "no klass"));
+    if (first_stack == 0x0) {
+      first_stack = stack;
+    }
+    last_stack = stack;
+  }
+
   for (int i = 0; i < comp_dep_count(); i++) {
     CompileTrainingData* ctd = comp_dep(i);
-    ctd->prepare(visitor);
+    visitor.visit_later(ctd);;
   }
   _comp_deps.prepare();
 }
@@ -434,7 +450,21 @@ void MethodTrainingData::prepare(Visitor& visitor) {
     return;
   }
   visitor.visit(this);
-  klass()->prepare(visitor);
+  {
+    ResourceMark rm;
+    long long stack = (long long)&rm;
+    long long depth = (first_stack == 0x0) ? 0 : first_stack - stack;
+    long long delta = (last_stack == 0x0) ? 0 : last_stack - stack;
+    log_info(aot, training, stats)(" MethodTrainingData::prepare [stack %p (%8lld = %8lld)] @%p %s",
+                                   (void*)stack, delta, depth, this,
+                                   (has_holder() ? _holder->external_name() : "no holder"));
+    if (first_stack == 0x0) {
+      first_stack = stack;
+    }
+    last_stack = stack;
+  }
+
+  visitor.visit_later(klass());
   if (has_holder()) {
     _final_counters = holder()->method_counters();
     _final_profile  = holder()->method_data();
@@ -446,7 +476,7 @@ void MethodTrainingData::prepare(Visitor& visitor) {
     CompileTrainingData* ctd = _iterations[CURRENT]._last_toplevel_compiles[i];
     assert(_iterations[NEXT]._last_toplevel_compiles[i] == nullptr, "");
     if (ctd != nullptr) {
-      ctd->prepare(visitor);
+      visitor.visit_later( ctd);
     }
   }
 }
@@ -456,10 +486,22 @@ void CompileTrainingData::prepare(Visitor& visitor) {
     return;
   }
   visitor.visit(this);
-  method()->prepare(visitor);
+  {
+    Visitor* p = &visitor;
+    long long stack = (long long)&p;
+    long long depth = (first_stack == 0x0) ? 0 : first_stack - stack;
+    long long delta = (last_stack == 0x0) ? 0 : last_stack - stack;
+    log_info(aot, training, stats)("CompileTrainingData::prepare [stack %p (%8lld = %8lld)] @%p",
+                                   (void*)stack, delta, depth, this);
+    if (first_stack == 0x0) {
+      first_stack = stack;
+    }
+    last_stack = stack;
+  }
+  visitor.visit_later(method());
   _init_deps.prepare();
   for (int i = 0; i < _init_deps.length(); i++) {
-    _init_deps.at(i)->prepare(visitor);
+    visitor.visit_later(_init_deps.at(i));
    }
   _ci_records.prepare(visitor);
 }
@@ -556,6 +598,13 @@ void KlassTrainingData::notice_fully_initialized() {
   holder()->set_has_init_deps_processed();
 }
 
+void TrainingData::Visitor::finish_preparing() {
+  while (_pending_visit_list.length() > 0) {
+    TrainingData* td = _pending_visit_list.pop();
+    td->prepare(*this);
+  }
+}
+
 void TrainingData::init_dumptime_table(TRAPS) {
   if (assembling_data() && !need_data()) {
     _dumptime_training_data_dictionary = new DumptimeTrainingDataDictionary();
@@ -572,12 +621,15 @@ void TrainingData::init_dumptime_table(TRAPS) {
     });
     _dumptime_training_data_dictionary = new DumptimeTrainingDataDictionary();
     Visitor prepare_visitor(training_data_set()->size());
+    int n = 0;
     training_data_set()->iterate([&](TrainingData* td) {
+      log_info(aot, training, stats)("TrainingData::init_dumptime_table() step %d", n++);
       td->prepare(prepare_visitor);
       if (!td->is_CompileTrainingData()) {
         _dumptime_training_data_dictionary->append(td);
       }
     });
+    prepare_visitor.finish_preparing();
     TrainingDataLocker::snapshot();
   }
 

@@ -233,15 +233,21 @@ public:
   // other TD object that are sometimes circular).
   class Visitor {
     ResizeableHashTable<TrainingData*, bool> _visited;
+    GrowableArray<TrainingData*> _pending_visit_list;
   public:
-    Visitor(unsigned size) : _visited(size, 0x3fffffff) { }
+    Visitor(unsigned size) : _visited(size, 0x3fffffff),  _pending_visit_list() { }
     bool is_visited(TrainingData* td) {
       return _visited.contains(td);
     }
     void visit(TrainingData* td) {
       bool created;
       _visited.put_if_absent(td, &created);
+      assert(created, "must be");
     }
+    void visit_later(TrainingData* td) {
+      _pending_visit_list.append(td);
+    }
+    void finish_preparing();
   };
 
   typedef OffsetCompactHashtable<const TrainingData::Key*, TrainingData*, TrainingData::Key::equals> TrainingDataDictionary;

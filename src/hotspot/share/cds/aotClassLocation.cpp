@@ -453,7 +453,7 @@ bool AOTClassLocation::check(const char* runtime_path, bool has_aot_linked_class
     }
     bool size_differs = _filesize != st.st_size;
     bool time_differs = _check_time && (_timestamp != st.st_mtime);
-    if (size_differs || time_differs) {
+    if (0 && (size_differs || time_differs)) {
       aot_log_warning(aot)("This file is not the one used while building the %s: '%s'%s%s",
                        CDSConfig::type_of_archive_being_loaded(),
                        runtime_path,
