@@ -764,7 +764,7 @@ bool FileMapInfo::init_from_file(int fd) {
 
   char expected_ident[JVM_IDENT_MAX];
   get_header_version(expected_ident);
-  if (strncmp(actual_ident, expected_ident, JVM_IDENT_MAX-1) != 0 && 0) {
+  if (strncmp(actual_ident, expected_ident, JVM_IDENT_MAX-1) != 0) {
     aot_log_info(aot)("_jvm_ident expected: %s", expected_ident);
     aot_log_info(aot)("             actual: %s", actual_ident);
     aot_log_warning(aot)("The %s was created by a different"

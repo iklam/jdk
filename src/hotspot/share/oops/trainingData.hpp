@@ -236,6 +236,9 @@ public:
     GrowableArray<TrainingData*> _pending_visit_list;
   public:
     Visitor(unsigned size) : _visited(size, 0x3fffffff),  _pending_visit_list() { }
+    ~Visitor() {
+      assert(_pending_visit_list.length() == 0, "need to call one of the xxx_finish() functions");
+    }
     bool is_visited(TrainingData* td) {
       return _visited.contains(td);
     }
@@ -248,6 +251,8 @@ public:
       _pending_visit_list.append(td);
     }
     void finish_preparing();
+    void finish_merging();
+    void finish_cleanup();
   };
 
   typedef OffsetCompactHashtable<const TrainingData::Key*, TrainingData*, TrainingData::Key::equals> TrainingDataDictionary;
